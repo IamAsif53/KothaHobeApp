@@ -1,12 +1,13 @@
 {
-  "versionCode": 1,
-  "versionName": "1.0.0",
-  "downloadUrl": "https://github.com/USER/Kotha-Hobe/releases/download/v1.0.0/app-release.apk",
-  "sha256": "",
+  "versionCode": 3,
+  "versionName": "1.0.2",
+  "downloadUrl": "http://localhost:5000/releases/app-debug.apk",
+  "sha256": "852e83d9dedf26d370a87d4b31a966417148f1c32336d9d9933aa16dd29897ff",
   "releaseNotes": [
-    "Initial production-quality mobile release of Kotha Hobe",
-    "Fast, private 1-to-1 real-time messaging",
-    "Integrated automated Android in-app update engine"
+    "Release v1.0.2 (Build 3)",
+    "✨ Added release badge & in-app APK auto-updater",
+    "Enhanced real-time connection & message delivery",
+    "UI polish & stability improvements"
   ],
   "mandatory": false
 }

@@ -73,12 +73,13 @@ function main() {
   const manifestData = {
     versionCode: newVersionCode,
     versionName: newVersionName,
-    downloadUrl: `https://github.com/USER/Kotha-Hobe/releases/download/v${newVersionName}/app-release.apk`,
+    downloadUrl: `http://localhost:5000/releases/app-debug.apk`,
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      'Feature updates & bug fixes',
-      'Real-time communication improvements'
+      "✨ Added release badge & in-app APK auto-updater",
+      "Enhanced real-time connection & message delivery",
+      "UI polish & stability improvements"
     ],
     mandatory: false
   };

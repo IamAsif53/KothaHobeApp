@@ -125,7 +125,7 @@ public class AppUpdatePlugin extends Plugin {
 
                     if (fileLength > 0) {
                         int progress = (int) (total * 100 / fileLength);
-                        if (progress > lastProgress + 2 || progress === 100) {
+                        if (progress > lastProgress + 2 || progress == 100) {
                             lastProgress = progress;
                             JSObject progressObj = new JSObject();
                             progressObj.put("progress", progress);

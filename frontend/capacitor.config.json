@@ -1,0 +1,19 @@
+{
+  "appId": "com.kothahobe.chat",
+  "appName": "Kotha Hobe",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b141a"
+    }
+  }
+}

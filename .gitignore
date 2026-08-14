@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Dist Outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.local
+.env.production
+.env.development
+*.pem
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# Android Build Artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+android/.navigation/
+android/app/libs/*.jar
+android/.idea/
+android/app/release/
+
+# IDE & OS Files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+scratch/
+tmp/

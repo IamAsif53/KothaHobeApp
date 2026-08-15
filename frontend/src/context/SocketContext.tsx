@@ -40,13 +40,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL ||
       (window.location.origin.includes('localhost') || window.location.origin.includes('file')
-        ? 'https://5ecdb0261dcb19.lhr.life'
+        ? 'https://52d6d908bbf4b3.lhr.life'
         : window.location.origin);
 
     const newSocket = io(socketUrl, {
       auth: { token },
+      extraHeaders: {
+        'Bypass-Tunnel-Reminder': 'true',
+      },
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: Infinity,
+      reconnection: true,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });

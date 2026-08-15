@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://5ecdb0261dcb19.lhr.life';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://52d6d908bbf4b3.lhr.life';
 
 export async function apiFetch<T>(
   endpoint: string,
@@ -8,6 +8,7 @@ export async function apiFetch<T>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Bypass-Tunnel-Reminder': 'true',
     ...(options.headers as Record<string, string>),
   };
 

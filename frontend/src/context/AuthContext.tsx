@@ -19,13 +19,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<IUser | null>(null);
+  const [user, setUser] = useState<IUser | null>(() => {
+    try {
+      const cached = localStorage.getItem('kotha_hobe_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState<string | null>(localStorage.getItem('kotha_hobe_token'));
   const [loading, setLoading] = useState<boolean>(true);
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
-  // Auto-login on app open
+  // Auto-login & sync on app open
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('kotha_hobe_token');
@@ -34,13 +41,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await fetchMe();
           if (res.success && res.user) {
             setUser(res.user);
+            localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
             setToken(storedToken);
-          } else {
+          }
+        } catch (error: any) {
+          console.warn('[AuthContext] Background sync notice:', error?.message);
+          // If token is explicitly unauthorized (401), log out. Otherwise keep cached session!
+          if (error?.message?.includes('401') || error?.message?.includes('unauthorized')) {
             logout();
           }
-        } catch (error) {
-          console.warn('[AuthContext] Session expired or server unavailable');
-          logout();
         }
       }
       setLoading(false);
@@ -101,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (res.success && res.token) {
         localStorage.setItem('kotha_hobe_token', res.token);
+        localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
         setToken(res.token);
         setUser(res.user);
         return { success: true, isNewUser: res.isNewUser };
@@ -117,6 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await updateProfileApi(displayName, avatarUrl);
       if (res.success && res.user) {
         setUser(res.user);
+        localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
         return true;
       }
       return false;
@@ -127,6 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     localStorage.removeItem('kotha_hobe_token');
+    localStorage.removeItem('kotha_hobe_user');
     setToken(null);
     setUser(null);
     setConfirmationResult(null);

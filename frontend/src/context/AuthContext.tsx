@@ -61,34 +61,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sendOtp = async (phone: string, recaptchaContainerId: string): Promise<boolean> => {
     setPhoneNumber(phone);
     try {
-      // Clear previous verifier if any
-      if ((window as any).recaptchaVerifier) {
-        try {
-          (window as any).recaptchaVerifier.clear();
-        } catch (e) {}
-        (window as any).recaptchaVerifier = null;
-      }
+      let recaptchaVerifier = (window as any).recaptchaVerifier;
 
-      // Setup RecaptchaVerifier for Firebase Phone Auth
-      const recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-        size: 'invisible',
-        callback: () => {
-          console.log('[Firebase Auth] Recaptcha verified');
-        },
-        'expired-callback': () => {
-          console.warn('[Firebase Auth] Recaptcha expired');
-        },
-      });
-      (window as any).recaptchaVerifier = recaptchaVerifier;
+      if (!recaptchaVerifier) {
+        const container = document.getElementById(recaptchaContainerId);
+        if (container) {
+          container.innerHTML = '';
+        }
+
+        recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+          size: 'invisible',
+          callback: () => {
+            console.log('[Firebase Auth] Recaptcha verified');
+          },
+          'expired-callback': () => {
+            console.warn('[Firebase Auth] Recaptcha expired');
+          },
+        });
+        (window as any).recaptchaVerifier = recaptchaVerifier;
+      }
 
       const confirmation = await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
       setConfirmationResult(confirmation);
       return true;
     } catch (error: any) {
       console.error('[Firebase Auth] signInWithPhoneNumber error:', error);
+
+      // Clean up verifier & DOM on error so subsequent attempts start fresh
+      try {
+        if ((window as any).recaptchaVerifier) {
+          (window as any).recaptchaVerifier.clear();
+          (window as any).recaptchaVerifier = null;
+        }
+        const container = document.getElementById(recaptchaContainerId);
+        if (container) {
+          container.innerHTML = '';
+        }
+      } catch (cleanupErr) {}
+
       let errorMsg = error?.message || 'Failed to send verification SMS';
       if (error?.code === 'auth/invalid-phone-number') {
         errorMsg = 'Invalid phone number format. Please include proper country code.';
+      } else if (error?.code === 'auth/operation-not-allowed') {
+        errorMsg = 'Phone authentication is not enabled or region is blocked in Firebase Console.';
       } else if (error?.code === 'auth/quota-exceeded') {
         errorMsg = 'Daily SMS quota exceeded. Please try again later.';
       } else if (error?.code === 'auth/too-many-requests') {

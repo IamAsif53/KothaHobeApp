@@ -1,12 +1,12 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.6",
+  "versionCode": 8,
+  "versionName": "1.0.7",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "2d5ff95169d5cbc0f1da9a60ab31832d811939db5355f0733bfd807f5dd09a21",
+  "sha256": "17469935d439e4480472c8136b894a5cd2bb9a9267760164be04147ce481ef17",
   "releaseNotes": [
-    "Release v1.0.6 (Build 7)",
-    "📱 Live Google Firebase Phone Auth SMS OTP verification enabled",
-    "🔒 Secure verification and anti-abuse reCAPTCHA integration",
+    "Release v1.0.7 (Build 8)",
+    "🛡️ Clean reCAPTCHA lifecycle & error recovery",
+    "📱 Live Google Firebase SMS OTP delivery & verification",
     "🗄️ Real-time account sync with MongoDB Atlas Cloud Database",
     "⚡ Instant search & live 1-to-1 messaging"
   ],

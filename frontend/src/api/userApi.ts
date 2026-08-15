@@ -3,7 +3,8 @@ import { IUser } from '../types';
 
 export interface UserResponse {
   success: boolean;
-  user: IUser;
+  user?: IUser | null;
+  message?: string;
 }
 
 export async function fetchMe(): Promise<UserResponse> {

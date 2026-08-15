@@ -71,18 +71,24 @@ export const searchUserByPhone = async (req: AuthenticatedRequest, res: Response
     }
 
     const normalized = normalizePhoneNumber(phone);
+    const suffix = normalized.slice(-10); // Match last 10 digits e.g. 1813635343
 
-    // Find registered user
-    const foundUser = await User.findOne({ phoneNumber: normalized });
+    // Find registered user by exact E.164 format or suffix pattern
+    const foundUser = await User.findOne({
+      $or: [
+        { phoneNumber: normalized },
+        { phoneNumber: { $regex: suffix + '$' } }
+      ]
+    });
 
     if (!foundUser) {
-      res.status(444).json({ success: false, message: 'No account found for this number' });
+      res.status(200).json({ success: true, user: null, message: 'No account found for this number' });
       return;
     }
 
     // Do not allow messaging yourself
     if (req.user && foundUser._id.toString() === req.user._id.toString()) {
-      res.status(400).json({ success: false, message: 'You cannot search or message your own number' });
+      res.status(200).json({ success: false, user: null, message: 'You cannot message your own number' });
       return;
     }
 
@@ -99,6 +105,7 @@ export const searchUserByPhone = async (req: AuthenticatedRequest, res: Response
       },
     });
   } catch (error) {
+    console.error('[User Search] Error:', error);
     res.status(500).json({ success: false, message: 'Failed to search user' });
   }
 };

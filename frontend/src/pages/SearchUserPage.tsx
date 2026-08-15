@@ -35,9 +35,12 @@ export const SearchUserPage: React.FC = () => {
         setSearchResult(res.user);
       } else {
         setNotFound(true);
+        if (res.message && res.message.includes('own number')) {
+          setError(res.message);
+        }
       }
     } catch (err: any) {
-      if (err?.message?.includes('No account found')) {
+      if (err?.message?.includes('No account found') || err?.message?.includes('not found')) {
         setNotFound(true);
       } else {
         setError(err?.message || 'Search failed. Please try again.');

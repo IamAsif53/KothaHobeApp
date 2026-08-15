@@ -27,7 +27,20 @@ export const authenticateToken = async (
       return;
     }
 
-    const user = await User.findById(decoded.userId);
+    let user = await User.findById(decoded.userId);
+    if (!user && decoded.phoneNumber) {
+      user = await User.findOne({ phoneNumber: decoded.phoneNumber });
+      if (!user) {
+        user = await User.create({
+          phoneNumber: decoded.phoneNumber,
+          displayName: `User ${decoded.phoneNumber.slice(-4)}`,
+          phoneVerified: true,
+          isOnline: true,
+          lastSeen: new Date(),
+        });
+      }
+    }
+
     if (!user) {
       res.status(401).json({ success: false, message: 'User not found' });
       return;

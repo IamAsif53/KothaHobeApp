@@ -4,7 +4,7 @@ import { searchUserByPhoneApi } from '../api/userApi';
 import { getOrCreateConversationApi } from '../api/conversationApi';
 import { IUser } from '../types';
 import { Avatar } from '../components/common/Avatar';
-import { formatPhoneDisplay } from '../utils/phoneFormatter';
+import { formatPhoneDisplay, formatE164 } from '../utils/phoneFormatter';
 import { Search, ArrowLeft, MessageSquare, UserX, AlertCircle } from 'lucide-react';
 
 export const SearchUserPage: React.FC = () => {
@@ -27,7 +27,7 @@ export const SearchUserPage: React.FC = () => {
     setNotFound(false);
     setError('');
 
-    const fullPhone = countryCode + phoneDigits.replace(/[^\d]/g, '').replace(/^0+/, '');
+    const fullPhone = formatE164(phoneDigits, countryCode);
 
     try {
       const res = await searchUserByPhoneApi(fullPhone);

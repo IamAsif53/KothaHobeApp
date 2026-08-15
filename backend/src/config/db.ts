@@ -5,13 +5,15 @@ let mongoMemoryServer: any = null;
 
 export const connectDB = async (): Promise<void> => {
   try {
-    // Attempt standard connection
+    // Attempt connection to MongoDB Atlas
     await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 2000,
+      serverSelectionTimeoutMS: 10000,
     });
-    console.log(`[Database] Connected to MongoDB at: ${ENV.MONGODB_URI}`);
+    const maskedUri = ENV.MONGODB_URI.replace(/:([^:@]+)@/, ':****@');
+    console.log(`[Database] Connected to MongoDB Atlas at: ${maskedUri}`);
   } catch (error) {
-    console.warn('[Database] Local MongoDB not reachable. Spawning embedded MongoDB instance...');
+    console.warn('[Database] MongoDB Atlas connection error:', (error as Error).message);
+    console.warn('[Database] Spawning embedded MongoDB instance fallback...');
     try {
       const { MongoMemoryServer } = await import('mongodb-memory-server');
       mongoMemoryServer = await MongoMemoryServer.create();

@@ -1,13 +1,13 @@
 {
-  "versionCode": 4,
-  "versionName": "1.0.3",
+  "versionCode": 5,
+  "versionName": "1.0.4",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "eb03409bb4db30dccb92b8aab64ba32e2da1ff8a8c2cf31d176e1548add29a5c",
+  "sha256": "8187241a169cae800c7858a407ceeb4f1da3360bd46cc969778c86005a8eff87",
   "releaseNotes": [
-    "Release v1.0.3 (Build 4)",
-    "✨ Dynamic version display & auto-updater synchronization",
-    "✨ Real-time Settings status & up-to-date indicator",
-    "Enhanced real-time connection & message delivery",
+    "Release v1.0.4 (Build 5)",
+    "🗄️ Connected persistent MongoDB Atlas Cloud Database",
+    "🔍 Enhanced phone search & normalization across all international formats",
+    "✨ Real-time cross-device user discovery & instant messaging",
     "UI polish & stability improvements"
   ],
   "mandatory": false

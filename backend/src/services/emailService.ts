@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
+import https from 'https';
 import { ENV } from '../config/env';
 
 export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolean> {
@@ -43,7 +44,87 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
     </html>
   `;
 
-  // 1. If Gmail SMTP credentials are provided, use Nodemailer (sends to ANY email address worldwide)
+  // 1. Brevo SMTP (Sends to ANY email address in the world)
+  if (ENV.BREVO_SMTP_LOGIN && ENV.BREVO_SMTP_PASSWORD) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: 'smtp-relay.brevo.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: ENV.BREVO_SMTP_LOGIN,
+          pass: ENV.BREVO_SMTP_PASSWORD,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: `"Kotha Hobe" <${ENV.BREVO_SMTP_LOGIN}>`,
+        to: toEmail,
+        subject: `Your Kotha Hobe Verification Code: ${otp}`,
+        html: htmlContent,
+      });
+
+      console.log(`[EmailService] OTP email sent via Brevo SMTP to ${toEmail}. Message ID:`, info.messageId);
+      return true;
+    } catch (err: any) {
+      console.error('[EmailService] Brevo SMTP error:', err?.message);
+    }
+  }
+
+  // 2. Brevo REST API (xkeysib-...)
+  if (ENV.BREVO_API_KEY) {
+    try {
+      const success = await new Promise<boolean>((resolve) => {
+        const postData = JSON.stringify({
+          sender: { name: 'Kotha Hobe', email: ENV.BREVO_SMTP_LOGIN || 'no-reply@kothahobe.app' },
+          to: [{ email: toEmail }],
+          subject: `Your Kotha Hobe Verification Code: ${otp}`,
+          htmlContent: htmlContent,
+        });
+
+        const req = https.request(
+          {
+            hostname: 'api.brevo.com',
+            port: 443,
+            path: '/v3/smtp/email',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'api-key': ENV.BREVO_API_KEY,
+              'Content-Length': Buffer.byteLength(postData),
+            },
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (chunk) => (data += chunk));
+            res.on('end', () => {
+              if (res.statusCode === 201 || res.statusCode === 200) {
+                console.log(`[EmailService] OTP sent via Brevo API to ${toEmail}.`);
+                resolve(true);
+              } else {
+                console.error('[EmailService] Brevo API error response:', data);
+                resolve(false);
+              }
+            });
+          }
+        );
+
+        req.on('error', (err) => {
+          console.error('[EmailService] Brevo API request failed:', err.message);
+          resolve(false);
+        });
+
+        req.write(postData);
+        req.end();
+      });
+
+      if (success) return true;
+    } catch (err: any) {
+      console.error('[EmailService] Brevo API error:', err?.message);
+    }
+  }
+
+  // 3. Gmail SMTP
   if (ENV.GMAIL_USER && ENV.GMAIL_APP_PASSWORD) {
     try {
       const transporter = nodemailer.createTransport({
@@ -68,7 +149,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
     }
   }
 
-  // 2. Otherwise use Resend API
+  // 4. Resend API
   if (ENV.RESEND_API_KEY) {
     try {
       const resend = new Resend(ENV.RESEND_API_KEY);
@@ -92,6 +173,6 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
     }
   }
 
-  console.warn('[EmailService] No email service configured (Resend or Gmail SMTP).');
+  console.warn('[EmailService] No email delivery provider is configured.');
   return false;
 }

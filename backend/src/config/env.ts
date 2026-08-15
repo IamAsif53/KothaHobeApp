@@ -14,5 +14,8 @@ export const ENV = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   GMAIL_USER: process.env.GMAIL_USER || '',
   GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD || '',
+  BREVO_API_KEY: process.env.BREVO_API_KEY || '',
+  BREVO_SMTP_LOGIN: process.env.BREVO_SMTP_LOGIN || '',
+  BREVO_SMTP_PASSWORD: process.env.BREVO_SMTP_PASSWORD || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
 };

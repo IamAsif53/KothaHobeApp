@@ -19,3 +19,5 @@ services:
         value: kothahobe-315c6
       - key: RESEND_API_KEY
         sync: false
+      - key: BREVO_API_KEY
+        sync: false

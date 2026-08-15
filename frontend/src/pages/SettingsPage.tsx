@@ -5,13 +5,32 @@ import { Avatar } from '../components/common/Avatar';
 import { formatPhoneDisplay } from '../utils/phoneFormatter';
 import { LogOut, User, Bell, Lock, Smartphone, Info, ChevronRight, ShieldCheck } from 'lucide-react';
 
+import { checkLatestRelease } from '../services/appUpdateService';
+
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [checkingUpdate, setCheckingUpdate] = React.useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const latest = await checkLatestRelease();
+      if (latest) {
+        window.dispatchEvent(new CustomEvent('TRIGGER_CHECK_UPDATE', { detail: latest }));
+      } else {
+        alert('Could not reach release server. Please try again.');
+      }
+    } catch (err) {
+      alert('Error checking update');
+    } finally {
+      setCheckingUpdate(false);
+    }
   };
 
   return (
@@ -73,17 +92,22 @@ export const SettingsPage: React.FC = () => {
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
           </div>
 
-          <div className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors bg-brand-500/10 border-l-4 border-brand-400">
-            <Smartphone className="w-5 h-5 text-brand-400" />
+          <div
+            onClick={handleCheckUpdate}
+            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/10 active:scale-[0.99] cursor-pointer transition-all bg-brand-500/10 border-l-4 border-brand-400"
+          >
+            <Smartphone className={`w-5 h-5 text-brand-400 ${checkingUpdate ? 'animate-spin' : ''}`} />
             <div className="flex-1">
               <div className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Release v1.0.1</span>
                 <span className="text-[10px] bg-brand-500 text-white px-2 py-0.5 rounded-full uppercase font-bold">New</span>
               </div>
-              <div className="text-xs text-chat-textMuted">In-App APK Auto-Updater Active</div>
+              <div className="text-xs text-brand-300 font-medium">
+                {checkingUpdate ? 'Checking server for update...' : 'Tap to Install Update Now'}
+              </div>
             </div>
-            <span className="text-[10px] font-mono bg-brand-500/20 text-brand-400 px-2 py-0.5 rounded-md font-semibold">
-              Ready
+            <span className="text-xs font-semibold bg-brand-500 text-white px-2.5 py-1 rounded-lg shadow-sm hover:bg-brand-600 transition-colors">
+              {checkingUpdate ? 'Checking...' : 'Update'}
             </span>
           </div>
 

@@ -19,17 +19,12 @@ const io = new SocketIOServer(server, {
 // Setup Socket.IO real-time handlers
 setupSocketIO(io);
 
-// Connect Database and Start Server
-const startServer = async () => {
-  await connectDB();
-
-  server.listen(ENV.PORT, () => {
-    console.log(`=================================`);
-    console.log(`🚀 Kotha Hobe Server Running`);
-    console.log(`📡 Port: ${ENV.PORT}`);
-    console.log(`🔗 Health: http://localhost:${ENV.PORT}/api/health`);
-    console.log(`=================================`);
-  });
-};
-
-startServer();
+// Start Server immediately, then connect DB
+server.listen(ENV.PORT, () => {
+  console.log(`=================================`);
+  console.log(`🚀 Kotha Hobe Server Running`);
+  console.log(`📡 Port: ${ENV.PORT}`);
+  console.log(`🔗 Health: http://localhost:${ENV.PORT}/api/health`);
+  console.log(`=================================`);
+  connectDB();
+});

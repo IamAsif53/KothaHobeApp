@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://5ecdb0261dcb19.lhr.life';
 
 export async function apiFetch<T>(
   endpoint: string,

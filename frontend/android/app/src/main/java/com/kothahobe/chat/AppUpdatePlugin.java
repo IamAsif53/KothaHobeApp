@@ -98,8 +98,9 @@ public class AppUpdatePlugin extends Plugin {
                 URL url = new URL(downloadUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(30000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(20000);
+                conn.setReadTimeout(45000);
                 conn.connect();
 
                 int responseCode = conn.getResponseCode();

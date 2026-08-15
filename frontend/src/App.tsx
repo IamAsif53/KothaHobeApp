@@ -57,6 +57,25 @@ export const AppContent: React.FC = () => {
     };
 
     checkForUpdates();
+
+    const handleManualUpdateTrigger = async (e: Event) => {
+      const customEvent = e as CustomEvent<ReleaseManifest | undefined>;
+      if (customEvent.detail) {
+        setUpdateManifest(customEvent.detail);
+        return;
+      }
+      const version = await getCurrentAppVersion();
+      setCurrentVersion(version);
+      const latest = await checkLatestRelease();
+      if (latest) {
+        setUpdateManifest(latest);
+      }
+    };
+
+    window.addEventListener('TRIGGER_CHECK_UPDATE', handleManualUpdateTrigger);
+    return () => {
+      window.removeEventListener('TRIGGER_CHECK_UPDATE', handleManualUpdateTrigger);
+    };
   }, []);
 
   return (

@@ -37,7 +37,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || window.location.origin;
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      (window.location.origin.includes('localhost') || window.location.origin.includes('file')
+        ? 'https://5ecdb0261dcb19.lhr.life'
+        : window.location.origin);
 
     const newSocket = io(socketUrl, {
       auth: { token },

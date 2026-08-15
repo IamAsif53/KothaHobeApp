@@ -1,8 +1,8 @@
 {
   "versionCode": 3,
   "versionName": "1.0.2",
-  "downloadUrl": "http://localhost:5000/releases/app-debug.apk",
-  "sha256": "852e83d9dedf26d370a87d4b31a966417148f1c32336d9d9933aa16dd29897ff",
+  "downloadUrl": "https://5ecdb0261dcb19.lhr.life/releases/app-debug.apk",
+  "sha256": "94ceb1a5730e2c07bbe9e68b90073c15e1328820af038171df55614ae19edf2a",
   "releaseNotes": [
     "Release v1.0.2 (Build 3)",
     "✨ Added release badge & in-app APK auto-updater",

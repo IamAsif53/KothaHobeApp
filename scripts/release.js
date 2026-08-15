@@ -69,7 +69,7 @@ function main() {
   const sha256 = computeSha256(apkPath);
   console.log(`\n✅ Generated APK SHA-256 Checksum:\n${sha256}`);
 
-  // 5. Update update/latest.json
+  // 5. Update update/latest.json and backend/public
   const manifestData = {
     versionCode: newVersionCode,
     versionName: newVersionName,
@@ -86,6 +86,15 @@ function main() {
 
   fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2) + '\n');
   console.log(`\n✅ Updated release manifest at: ${manifestPath}`);
+
+  // Copy to backend/public/releases and backend/public/update for cloud hosting
+  const backendPublicReleases = path.join(rootDir, 'backend', 'public', 'releases');
+  const backendPublicUpdate = path.join(rootDir, 'backend', 'public', 'update');
+  fs.mkdirSync(backendPublicReleases, { recursive: true });
+  fs.mkdirSync(backendPublicUpdate, { recursive: true });
+  fs.copyFileSync(apkPath, path.join(backendPublicReleases, 'app-debug.apk'));
+  fs.writeFileSync(path.join(backendPublicUpdate, 'latest.json'), JSON.stringify(manifestData, null, 2) + '\n');
+  console.log(`✅ Copied APK & manifest to backend/public for Render static hosting.`);
 
   console.log('\n==================================================');
   console.log('🎉 Release Build Complete!');

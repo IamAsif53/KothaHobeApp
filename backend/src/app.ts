@@ -7,6 +7,8 @@ import userRoutes from './routes/userRoutes';
 import conversationRoutes from './routes/conversationRoutes';
 import messageRoutes from './routes/messageRoutes';
 
+import fs from 'fs';
+
 const app = express();
 
 // Security and middleware
@@ -24,7 +26,48 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve update manifest and APK releases statically
+// Explicit Update Manifest Endpoint (Disable aggressive CDN caching)
+app.get('/update/latest.json', (req: Request, res: Response, next: NextFunction) => {
+  const possiblePaths = [
+    path.resolve(__dirname, '../public/update/latest.json'),
+    path.resolve(__dirname, '../../update/latest.json'),
+  ];
+
+  for (const manifestPath of possiblePaths) {
+    if (fs.existsSync(manifestPath)) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.sendFile(manifestPath);
+    }
+  }
+  next();
+});
+
+// Explicit APK Releases Endpoint (MIME type for Android package installer)
+app.get('/releases/:filename', (req: Request, res: Response, next: NextFunction) => {
+  const filename = typeof req.params.filename === 'string' ? req.params.filename : 'app-debug.apk';
+  const possiblePaths = [
+    path.resolve(__dirname, '../public/releases', filename),
+    path.resolve(__dirname, '../../frontend/android/app/build/outputs/apk/debug', filename),
+    path.resolve(__dirname, '../public/releases/app-debug.apk'),
+  ];
+
+  for (const filePath of possiblePaths) {
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Accept-Ranges', 'bytes');
+      return res.sendFile(filePath);
+    }
+  }
+  next();
+});
+
+// Static fallbacks
+app.use('/update', express.static(path.resolve(__dirname, '../public/update')));
+app.use('/releases', express.static(path.resolve(__dirname, '../public/releases')));
 app.use('/update', express.static(path.resolve(__dirname, '../../update')));
 app.use('/releases', express.static(path.resolve(__dirname, '../../frontend/android/app/build/outputs/apk/debug')));
 

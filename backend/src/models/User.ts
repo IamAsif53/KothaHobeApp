@@ -1,8 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUser extends Document {
-  phoneNumber: string;
-  phoneVerified: boolean;
+  email?: string;
+  emailVerified?: boolean;
+  phoneNumber?: string;
+  phoneVerified?: boolean;
   displayName: string;
   avatarUrl?: string;
   isOnline: boolean;
@@ -13,10 +15,21 @@ export interface IUser extends Document {
 
 const UserSchema: Schema = new Schema(
   {
+    email: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+      lowercase: true,
+      trim: true,
+    },
+    emailVerified: {
+      type: Boolean,
+      default: true,
+    },
     phoneNumber: {
       type: String,
-      required: true,
-      unique: true,
+      sparse: true,
       index: true,
       trim: true,
     },

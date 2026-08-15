@@ -28,7 +28,18 @@ export const authenticateToken = async (
     }
 
     let user = await User.findById(decoded.userId);
-    if (!user && decoded.phoneNumber) {
+    if (!user && decoded.email) {
+      user = await User.findOne({ email: decoded.email.toLowerCase() });
+      if (!user) {
+        user = await User.create({
+          email: decoded.email.toLowerCase(),
+          displayName: decoded.email.split('@')[0],
+          emailVerified: true,
+          isOnline: true,
+          lastSeen: new Date(),
+        });
+      }
+    } else if (!user && decoded.phoneNumber) {
       user = await User.findOne({ phoneNumber: decoded.phoneNumber });
       if (!user) {
         user = await User.create({

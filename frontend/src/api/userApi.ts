@@ -21,3 +21,7 @@ export async function updateProfileApi(displayName: string, avatarUrl?: string):
 export async function searchUserByPhoneApi(phone: string): Promise<UserResponse> {
   return apiFetch<UserResponse>(`/users/search?phone=${encodeURIComponent(phone)}`);
 }
+
+export async function searchUserApi(query: string): Promise<UserResponse> {
+  return apiFetch<UserResponse>(`/users/search?query=${encodeURIComponent(query)}`);
+}

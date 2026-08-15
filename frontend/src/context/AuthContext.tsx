@@ -1,16 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { IUser } from '../types';
 import { fetchMe, updateProfileApi } from '../api/userApi';
-import { loginWithFirebaseToken } from '../api/authApi';
-import { auth, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from '../config/firebase';
+import { sendEmailOtpApi, verifyEmailOtpApi } from '../api/authApi';
 
 interface AuthContextType {
   user: IUser | null;
   token: string | null;
   loading: boolean;
-  phoneNumber: string;
-  setPhoneNumber: (phone: string) => void;
-  sendOtp: (phone: string, recaptchaContainerId: string) => Promise<boolean>;
+  email: string;
+  setEmail: (email: string) => void;
+  sendOtp: (email: string) => Promise<boolean>;
   verifyOtp: (code: string) => Promise<{ success: boolean; isNewUser?: boolean; error?: string }>;
   updateProfile: (displayName: string, avatarUrl?: string) => Promise<boolean>;
   logout: () => void;
@@ -29,8 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [token, setToken] = useState<string | null>(localStorage.getItem('kotha_hobe_token'));
   const [loading, setLoading] = useState<boolean>(true);
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [email, setEmail] = useState<string>(() => localStorage.getItem('kotha_hobe_pending_email') || '');
 
   // Auto-login & sync on app open
   useEffect(() => {
@@ -46,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (error: any) {
           console.warn('[AuthContext] Background sync notice:', error?.message);
-          // If token is explicitly unauthorized (401), log out. Otherwise keep cached session!
           if (error?.message?.includes('401') || error?.message?.includes('unauthorized')) {
             logout();
           }
@@ -58,93 +55,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const sendOtp = async (phone: string, recaptchaContainerId: string): Promise<boolean> => {
-    setPhoneNumber(phone);
+  const sendOtp = async (targetEmail: string): Promise<boolean> => {
+    const cleanEmail = targetEmail.toLowerCase().trim();
+    setEmail(cleanEmail);
+    localStorage.setItem('kotha_hobe_pending_email', cleanEmail);
     try {
-      let recaptchaVerifier = (window as any).recaptchaVerifier;
-
-      if (!recaptchaVerifier) {
-        const container = document.getElementById(recaptchaContainerId);
-        if (container) {
-          container.innerHTML = '';
-        }
-
-        recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-          size: 'invisible',
-          callback: () => {
-            console.log('[Firebase Auth] Recaptcha verified');
-          },
-          'expired-callback': () => {
-            console.warn('[Firebase Auth] Recaptcha expired');
-          },
-        });
-        (window as any).recaptchaVerifier = recaptchaVerifier;
+      const res = await sendEmailOtpApi(cleanEmail);
+      if (res.success) {
+        return true;
       }
-
-      const confirmation = await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
-      setConfirmationResult(confirmation);
-      return true;
+      throw new Error(res.message || 'Failed to send OTP email');
     } catch (error: any) {
-      console.error('[Firebase Auth] signInWithPhoneNumber error:', error);
-
-      // Clean up verifier & DOM on error so subsequent attempts start fresh
-      try {
-        if ((window as any).recaptchaVerifier) {
-          (window as any).recaptchaVerifier.clear();
-          (window as any).recaptchaVerifier = null;
-        }
-        const container = document.getElementById(recaptchaContainerId);
-        if (container) {
-          container.innerHTML = '';
-        }
-      } catch (cleanupErr) {}
-
-      let errorMsg = error?.message || 'Failed to send verification SMS';
-      if (error?.code === 'auth/invalid-phone-number') {
-        errorMsg = 'Invalid phone number format. Please include proper country code.';
-      } else if (error?.code === 'auth/operation-not-allowed') {
-        errorMsg = 'Phone authentication is not enabled or region is blocked in Firebase Console.';
-      } else if (error?.code === 'auth/quota-exceeded') {
-        errorMsg = 'Daily SMS quota exceeded. Please try again later.';
-      } else if (error?.code === 'auth/too-many-requests') {
-        errorMsg = 'Too many requests. Please wait a few moments and try again.';
-      } else if (error?.code === 'auth/captcha-check-failed') {
-        errorMsg = 'Security verification failed. Please try again.';
-      }
-      throw new Error(errorMsg);
+      console.error('[AuthContext] sendOtp error:', error);
+      throw new Error(error?.message || 'Failed to send verification code. Please check your email address.');
     }
   };
 
   const verifyOtp = async (code: string): Promise<{ success: boolean; isNewUser?: boolean; error?: string }> => {
     try {
-      if (!confirmationResult) {
-        return { success: false, error: 'Verification session expired. Please request a new code.' };
+      const targetEmail = email || localStorage.getItem('kotha_hobe_pending_email') || '';
+      if (!targetEmail) {
+        return { success: false, error: 'Email address not found. Please go back and enter your email.' };
       }
 
-      const result = await confirmationResult.confirm(code);
-      const firebaseIdToken = await result.user.getIdToken();
-
-      // Login or register user in Node.js backend & MongoDB Atlas
-      const res = await loginWithFirebaseToken(phoneNumber, firebaseIdToken);
+      const res = await verifyEmailOtpApi(targetEmail, code.trim());
 
       if (res.success && res.token && res.user) {
         localStorage.setItem('kotha_hobe_token', res.token);
         localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
+        localStorage.removeItem('kotha_hobe_pending_email');
         setToken(res.token);
         setUser(res.user);
         return { success: true, isNewUser: res.isNewUser };
       } else {
-        return { success: false, error: res.message || 'Authentication failed' };
+        return { success: false, error: res.message || 'Invalid or expired OTP code' };
       }
     } catch (error: any) {
-      console.error('[Firebase Auth] verifyOtp error:', error);
-      let errMsg = 'Invalid verification code. Please check your SMS and try again.';
-      if (error?.code === 'auth/invalid-verification-code') {
-        errMsg = 'Incorrect 6-digit code. Please enter the code from your SMS.';
-      } else if (error?.code === 'auth/code-expired') {
-        errMsg = 'Verification code has expired. Please request a new code.';
-      }
-      return { success: false, error: errMsg };
+      console.error('[AuthContext] verifyOtp error:', error);
+      return { success: false, error: error?.message || 'Invalid verification code. Please check your inbox.' };
     }
   };
 
@@ -165,9 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('kotha_hobe_token');
     localStorage.removeItem('kotha_hobe_user');
+    localStorage.removeItem('kotha_hobe_pending_email');
     setToken(null);
     setUser(null);
-    setConfirmationResult(null);
   };
 
   return (
@@ -176,8 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         loading,
-        phoneNumber,
-        setPhoneNumber,
+        email,
+        setEmail,
         sendOtp,
         verifyOtp,
         updateProfile,

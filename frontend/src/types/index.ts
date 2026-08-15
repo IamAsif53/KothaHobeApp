@@ -1,6 +1,7 @@
 export interface IUser {
   _id: string;
-  phoneNumber: string;
+  email?: string;
+  phoneNumber?: string;
   displayName: string;
   avatarUrl?: string;
   isOnline: boolean;

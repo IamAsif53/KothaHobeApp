@@ -3,7 +3,8 @@ import { ENV } from '../config/env';
 
 export interface TokenPayload {
   userId: string;
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
 }
 
 export function generateToken(payload: TokenPayload): string {

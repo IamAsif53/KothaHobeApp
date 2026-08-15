@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { formatPhoneDisplay } from '../utils/phoneFormatter';
-import { ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, RefreshCw, Mail } from 'lucide-react';
 
 export const OtpPage: React.FC = () => {
   const [code, setCode] = useState(['', '', '', '', '', '']);
@@ -10,15 +9,15 @@ export const OtpPage: React.FC = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(30);
 
-  const { phoneNumber, verifyOtp, sendOtp } = useAuth();
+  const { email, verifyOtp, sendOtp } = useAuth();
   const navigate = useNavigate();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (!phoneNumber) {
+    if (!email) {
       navigate('/login', { replace: true });
     }
-  }, [phoneNumber, navigate]);
+  }, [email, navigate]);
 
   // Resend timer countdown
   useEffect(() => {
@@ -75,19 +74,23 @@ export const OtpPage: React.FC = () => {
         navigate('/chats', { replace: true });
       }
     } else {
-      setError(res.error || 'Invalid verification code. Please check and try again.');
+      setError(res.error || 'Invalid verification code. Please check your email.');
     }
   };
 
   const handleResend = async () => {
     if (resendCooldown > 0) return;
     setError('');
-    const success = await sendOtp(phoneNumber, 'recaptcha-container');
-    if (success) {
-      setResendCooldown(30);
-      setCode(['', '', '', '', '', '']);
-    } else {
-      setError('Failed to resend code. Please try again.');
+    try {
+      const success = await sendOtp(email);
+      if (success) {
+        setResendCooldown(30);
+        setCode(['', '', '', '', '', '']);
+      } else {
+        setError('Failed to resend code. Please try again.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resend code.');
     }
   };
 
@@ -99,16 +102,16 @@ export const OtpPage: React.FC = () => {
           className="flex items-center gap-2 text-chat-textMuted hover:text-white transition-colors mb-6 text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Change Number</span>
+          <span>Change Email</span>
         </button>
 
         <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
-          <ShieldCheck className="w-7 h-7 text-brand-400" />
+          <Mail className="w-7 h-7 text-brand-400" />
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Enter verification code</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">Check your Gmail Inbox</h1>
         <p className="text-chat-textMuted text-sm leading-relaxed mb-6">
-          Code sent to <strong className="text-white font-mono">{formatPhoneDisplay(phoneNumber)}</strong>
+          We sent a 6-digit code to <strong className="text-white font-mono">{email}</strong>
         </p>
 
         {/* 6 Digit OTP inputs */}
@@ -135,22 +138,6 @@ export const OtpPage: React.FC = () => {
           </div>
         )}
 
-        {/* Testing code hint */}
-        <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-chat-textMuted leading-normal mb-6">
-          💡 <strong className="text-white">Testing Code:</strong> Type any 6 digits e.g.{' '}
-          <button
-            type="button"
-            onClick={() => {
-              const testCode = ['1', '2', '3', '4', '5', '6'];
-              setCode(testCode);
-              handleVerify('123456');
-            }}
-            className="text-brand-400 font-mono underline font-bold"
-          >
-            123456
-          </button>
-        </div>
-
         <button
           onClick={() => handleVerify()}
           disabled={isVerifying || code.some((d) => !d)}
@@ -159,7 +146,7 @@ export const OtpPage: React.FC = () => {
           {isVerifying ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <span>Verify</span>
+            <span>Verify & Enter</span>
           )}
         </button>
       </div>

@@ -11,5 +11,8 @@ export const ENV = {
   JWT_SECRET: process.env.JWT_SECRET || 'kotha_hobe_super_secret_jwt_key_2026_production',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'kothahobe-315c6',
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  GMAIL_USER: process.env.GMAIL_USER || '',
+  GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
 };

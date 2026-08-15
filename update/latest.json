@@ -1,14 +1,14 @@
 {
-  "versionCode": 8,
-  "versionName": "1.0.7",
+  "versionCode": 9,
+  "versionName": "1.0.8",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "17469935d439e4480472c8136b894a5cd2bb9a9267760164be04147ce481ef17",
+  "sha256": "1cac3752c50d04b16ba3a16b0b43f39190455fc31b5a17802ff556545d94b946",
   "releaseNotes": [
-    "Release v1.0.7 (Build 8)",
-    "🛡️ Clean reCAPTCHA lifecycle & error recovery",
-    "📱 Live Google Firebase SMS OTP delivery & verification",
-    "🗄️ Real-time account sync with MongoDB Atlas Cloud Database",
-    "⚡ Instant search & live 1-to-1 messaging"
+    "Release v1.0.8 (Build 9)",
+    "📧 100% Genuine Gmail & Real Email OTP verification",
+    "⚡ Instant 6-digit verification code delivered directly to your inbox",
+    "🔍 Find friends instantly by their Gmail/Email address",
+    "💬 Private real-time messaging & instant synchronization"
   ],
   "mandatory": false
 }

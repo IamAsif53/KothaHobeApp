@@ -73,7 +73,7 @@ function main() {
   const manifestData = {
     versionCode: newVersionCode,
     versionName: newVersionName,
-    downloadUrl: `https://52d6d908bbf4b3.lhr.life/releases/app-debug.apk`,
+    downloadUrl: `https://kotha-hobe-api.onrender.com/releases/app-debug.apk`,
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,

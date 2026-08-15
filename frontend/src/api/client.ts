@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://52d6d908bbf4b3.lhr.life';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://kotha-hobe-api.onrender.com';
 
 export async function apiFetch<T>(
   endpoint: string,

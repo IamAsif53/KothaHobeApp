@@ -40,7 +40,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL ||
       (window.location.origin.includes('localhost') || window.location.origin.includes('file')
-        ? 'https://52d6d908bbf4b3.lhr.life'
+        ? 'https://kotha-hobe-api.onrender.com'
         : window.location.origin);
 
     const newSocket = io(socketUrl, {

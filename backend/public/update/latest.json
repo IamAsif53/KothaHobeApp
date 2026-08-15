@@ -1,13 +1,14 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.5",
+  "versionCode": 7,
+  "versionName": "1.0.6",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "04b66cafb42e1556e5ccd2c021e41ee6a1004dea8721c128ae394f8f8570aeaa",
+  "sha256": "2d5ff95169d5cbc0f1da9a60ab31832d811939db5355f0733bfd807f5dd09a21",
   "releaseNotes": [
-    "Release v1.0.5 (Build 6)",
-    "✨ Auto-synced active user sessions with persistent MongoDB Atlas",
-    "🔍 Instant cross-device phone search & suffix matching",
-    "🚀 Enhanced error recovery and live chat stability"
+    "Release v1.0.6 (Build 7)",
+    "📱 Live Google Firebase Phone Auth SMS OTP verification enabled",
+    "🔒 Secure verification and anti-abuse reCAPTCHA integration",
+    "🗄️ Real-time account sync with MongoDB Atlas Cloud Database",
+    "⚡ Instant search & live 1-to-1 messaging"
   ],
   "mandatory": false
 }

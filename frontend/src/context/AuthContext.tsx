@@ -61,64 +61,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sendOtp = async (phone: string, recaptchaContainerId: string): Promise<boolean> => {
     setPhoneNumber(phone);
     try {
-      // Setup RecaptchaVerifier for Firebase Phone Auth
-      let recaptchaVerifier = (window as any).recaptchaVerifier;
-      if (!recaptchaVerifier) {
-        recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-          size: 'invisible',
-          callback: () => {
-            console.log('[Firebase Auth] Recaptcha solved');
-          },
-        });
-        (window as any).recaptchaVerifier = recaptchaVerifier;
+      // Clear previous verifier if any
+      if ((window as any).recaptchaVerifier) {
+        try {
+          (window as any).recaptchaVerifier.clear();
+        } catch (e) {}
+        (window as any).recaptchaVerifier = null;
       }
+
+      // Setup RecaptchaVerifier for Firebase Phone Auth
+      const recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+        size: 'invisible',
+        callback: () => {
+          console.log('[Firebase Auth] Recaptcha verified');
+        },
+        'expired-callback': () => {
+          console.warn('[Firebase Auth] Recaptcha expired');
+        },
+      });
+      (window as any).recaptchaVerifier = recaptchaVerifier;
 
       const confirmation = await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
       setConfirmationResult(confirmation);
       return true;
     } catch (error: any) {
-      console.warn('[Firebase Auth] signInWithPhoneNumber warning/fallback:', error?.message);
-      // Fallback for development/testing environments without live SMS config
-      setConfirmationResult({
-        confirm: async (code: string) => {
-          // Standard test codes or production fallback
-          if (code.length === 6) {
-            return {
-              user: {
-                getIdToken: async () => 'demo_firebase_token_' + Date.now(),
-              },
-            } as any;
-          }
-          throw new Error('Invalid verification code');
-        },
-      } as any);
-      return true;
+      console.error('[Firebase Auth] signInWithPhoneNumber error:', error);
+      let errorMsg = error?.message || 'Failed to send verification SMS';
+      if (error?.code === 'auth/invalid-phone-number') {
+        errorMsg = 'Invalid phone number format. Please include proper country code.';
+      } else if (error?.code === 'auth/quota-exceeded') {
+        errorMsg = 'Daily SMS quota exceeded. Please try again later.';
+      } else if (error?.code === 'auth/too-many-requests') {
+        errorMsg = 'Too many requests. Please wait a few moments and try again.';
+      } else if (error?.code === 'auth/captcha-check-failed') {
+        errorMsg = 'Security verification failed. Please try again.';
+      }
+      throw new Error(errorMsg);
     }
   };
 
   const verifyOtp = async (code: string): Promise<{ success: boolean; isNewUser?: boolean; error?: string }> => {
     try {
-      let firebaseIdToken: string | undefined;
-
-      if (confirmationResult) {
-        const result = await confirmationResult.confirm(code);
-        firebaseIdToken = await result.user.getIdToken();
+      if (!confirmationResult) {
+        return { success: false, error: 'Verification session expired. Please request a new code.' };
       }
 
-      // Login or register user in Node.js backend
+      const result = await confirmationResult.confirm(code);
+      const firebaseIdToken = await result.user.getIdToken();
+
+      // Login or register user in Node.js backend & MongoDB Atlas
       const res = await loginWithFirebaseToken(phoneNumber, firebaseIdToken);
 
-      if (res.success && res.token) {
+      if (res.success && res.token && res.user) {
         localStorage.setItem('kotha_hobe_token', res.token);
         localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
         setToken(res.token);
         setUser(res.user);
         return { success: true, isNewUser: res.isNewUser };
       } else {
-        return { success: false, error: 'Authentication failed' };
+        return { success: false, error: res.message || 'Authentication failed' };
       }
     } catch (error: any) {
-      return { success: false, error: error?.message || 'Invalid or expired OTP code' };
+      console.error('[Firebase Auth] verifyOtp error:', error);
+      let errMsg = 'Invalid verification code. Please check your SMS and try again.';
+      if (error?.code === 'auth/invalid-verification-code') {
+        errMsg = 'Incorrect 6-digit code. Please enter the code from your SMS.';
+      } else if (error?.code === 'auth/code-expired') {
+        errMsg = 'Verification code has expired. Please request a new code.';
+      }
+      return { success: false, error: errMsg };
     }
   };
 

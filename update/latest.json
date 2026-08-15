@@ -1,11 +1,12 @@
 {
-  "versionCode": 3,
-  "versionName": "1.0.2",
+  "versionCode": 4,
+  "versionName": "1.0.3",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "e0dcd65c50a2666100debb4b70b756f1094dedad38d1584681e08bc415f285d6",
+  "sha256": "eb03409bb4db30dccb92b8aab64ba32e2da1ff8a8c2cf31d176e1548add29a5c",
   "releaseNotes": [
-    "Release v1.0.2 (Build 3)",
-    "✨ Added release badge & in-app APK auto-updater",
+    "Release v1.0.3 (Build 4)",
+    "✨ Dynamic version display & auto-updater synchronization",
+    "✨ Real-time Settings status & up-to-date indicator",
     "Enhanced real-time connection & message delivery",
     "UI polish & stability improvements"
   ],

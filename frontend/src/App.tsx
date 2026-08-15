@@ -9,6 +9,7 @@ import {
   getCurrentAppVersion,
   ReleaseManifest,
 } from './services/appUpdateService';
+import { CURRENT_VERSION } from './config/version';
 
 import { SplashPage } from './pages/SplashPage';
 import { LoginPage } from './pages/LoginPage';
@@ -40,10 +41,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 export const AppContent: React.FC = () => {
   const [updateManifest, setUpdateManifest] = useState<ReleaseManifest | null>(null);
-  const [currentVersion, setCurrentVersion] = useState<{ versionName: string; versionCode: number }>({
-    versionName: '1.0.0',
-    versionCode: 1,
-  });
+  const [currentVersion, setCurrentVersion] = useState<{ versionName: string; versionCode: number }>(CURRENT_VERSION);
 
   useEffect(() => {
     const checkForUpdates = async () => {

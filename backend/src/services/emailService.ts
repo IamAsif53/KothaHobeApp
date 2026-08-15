@@ -46,7 +46,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
     try {
       const success = await new Promise<boolean>((resolve) => {
         const postData = JSON.stringify({
-          sender: { name: 'Kotha Hobe', email: 'jiaulasif4877@gmail.com' },
+          sender: { name: 'Kotha Hobe', email: ENV.BREVO_SENDER_EMAIL || 'u2104053@student.cuet.ac.bd' },
           to: [{ email: toEmail }],
           subject: `${otp} is your Kotha Hobe verification code`,
           htmlContent: htmlContent,

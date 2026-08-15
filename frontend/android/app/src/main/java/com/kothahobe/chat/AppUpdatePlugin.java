@@ -85,12 +85,12 @@ public class AppUpdatePlugin extends Plugin {
         new Thread(() -> {
             try {
                 Context context = getContext();
-                File cacheDir = context.getExternalCacheDir();
-                if (cacheDir == null) {
-                    cacheDir = context.getCacheDir();
+                File outputDir = context.getExternalCacheDir();
+                if (outputDir == null) {
+                    outputDir = context.getCacheDir();
                 }
 
-                File apkFile = new File(cacheDir, fileName);
+                File apkFile = new File(outputDir, fileName);
                 if (apkFile.exists()) {
                     apkFile.delete();
                 }
@@ -139,6 +139,9 @@ public class AppUpdatePlugin extends Plugin {
                 output.close();
                 input.close();
 
+                // Make file world readable for package installer
+                apkFile.setReadable(true, false);
+
                 // Verify SHA-256 if provided
                 if (expectedSha256 != null && !expectedSha256.trim().isEmpty()) {
                     byte[] hashBytes = digest.digest();
@@ -174,8 +177,19 @@ public class AppUpdatePlugin extends Plugin {
                 intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-                context.startActivity(intent);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        try {
+                            getActivity().startActivity(intent);
+                        } catch (Exception ex) {
+                            context.startActivity(intent);
+                        }
+                    });
+                } else {
+                    context.startActivity(intent);
+                }
 
                 JSObject res = new JSObject();
                 res.put("success", true);

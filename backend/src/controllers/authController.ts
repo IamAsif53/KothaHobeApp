@@ -4,6 +4,7 @@ import { EmailOtp } from '../models/EmailOtp';
 import { sendOtpEmail } from '../services/emailService';
 import { generateToken } from '../utils/jwt';
 import { normalizePhoneNumber, isValidE164Phone } from '../utils/phoneUtils';
+import { adminAuth } from '../config/firebaseAdmin';
 
 export const firebaseLogin = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -20,13 +21,34 @@ export const firebaseLogin = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Check if user exists in database
-    let user = await User.findOne({ phoneNumber: normalizedPhone });
+    let verifiedFirebaseUid: string | undefined;
+
+    // Verify Firebase ID Token if provided
+    if (firebaseIdToken) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(firebaseIdToken);
+        verifiedFirebaseUid = decoded.uid;
+        console.log(`[Auth] Firebase ID Token verified successfully for UID: ${decoded.uid}`);
+      } catch (tokenError: any) {
+        console.warn('[Auth] Firebase ID Token verification failed:', tokenError?.message);
+        res.status(401).json({ success: false, message: 'Invalid or expired Firebase authentication token' });
+        return;
+      }
+    }
+
+    // Atomic find-or-create user in MongoDB Atlas
+    let user = await User.findOne(
+      verifiedFirebaseUid
+        ? { $or: [{ firebaseUid: verifiedFirebaseUid }, { phoneNumber: normalizedPhone }] }
+        : { phoneNumber: normalizedPhone }
+    );
+
     let isNewUser = false;
 
     if (!user) {
       isNewUser = true;
       user = await User.create({
+        firebaseUid: verifiedFirebaseUid,
         phoneNumber: normalizedPhone,
         displayName: displayName || `User ${normalizedPhone.slice(-4)}`,
         phoneVerified: true,
@@ -34,13 +56,16 @@ export const firebaseLogin = async (req: Request, res: Response): Promise<void> 
         lastSeen: new Date(),
       });
     } else {
+      if (verifiedFirebaseUid && !user.firebaseUid) {
+        user.firebaseUid = verifiedFirebaseUid;
+      }
       user.phoneVerified = true;
       user.isOnline = true;
       user.lastSeen = new Date();
       await user.save();
     }
 
-    // Generate app JWT session token
+    // Generate app JWT session token for Socket.IO and authenticated API endpoints
     const token = generateToken({
       userId: user._id.toString(),
       phoneNumber: user.phoneNumber,

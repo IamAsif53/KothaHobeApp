@@ -62,8 +62,6 @@ const UserSchema: Schema = new Schema(
     },
     phoneNumber: {
       type: String,
-      sparse: true,
-      index: true,
       trim: true,
     },
     phoneVerified: {
@@ -72,8 +70,6 @@ const UserSchema: Schema = new Schema(
     },
     firebaseUid: {
       type: String,
-      sparse: true,
-      index: true,
     },
   },
   {

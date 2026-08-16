@@ -1,16 +1,15 @@
 {
-  "versionCode": 12,
-  "versionName": "1.0.11",
+  "versionCode": 13,
+  "versionName": "1.0.12",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "26873f6fcace97ecfb8d386105aa24c5f80715acd6be39c76257ead0a5c7201d",
+  "sha256": "5f8a6132f7e8d4029f6f1e7517be0a14c7c7a822bb9d571aced266cda5fb0d5c",
   "releaseNotes": [
-    "Release v1.0.11 (Build 12)",
-    "📧 Universal Email + Real OTP verification (Brevo REST)",
-    "🔒 SHA-256 encrypted OTP storage with 5-minute expiry & brute-force protection",
-    "🛡️ Unique @username validation and enforcement",
-    "🔍 Find friends instantly by exact username",
-    "📱 Persistent authentication session across app restarts",
-    "💬 High-speed 1-to-1 real-time messaging engine"
+    "Release v1.0.12 (Build 13)",
+    "🚀 Fixed verification failure caused by legacy database index constraint",
+    "📧 Instant Email OTP login enabled for all users",
+    "🔒 Secure SHA-256 OTP validation with 5-attempt limit",
+    "🛡️ Unique username profile creation & username search",
+    "📱 Persistent session across app restarts"
   ],
   "mandatory": false
 }

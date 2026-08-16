@@ -32,7 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('kotha_hobe_token'));
   const [loading, setLoading] = useState<boolean>(true);
   const [phoneNumber, setPhoneNumber] = useState<string>(() => localStorage.getItem('kotha_hobe_pending_phone') || '');
-  
+
   // Native verification ID ref (for @capacitor-firebase/authentication)
   const nativeVerificationIdRef = useRef<string>(localStorage.getItem('kotha_hobe_native_vid') || '');
   // Web confirmation result (for Firebase Web SDK fallback)
@@ -63,59 +63,115 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  // Setup native listeners for Capacitor Android
-  useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      const setupListeners = async () => {
-        try {
-          await FirebaseAuthentication.removeAllListeners();
-
-          await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
-            console.log('[Native FirebaseAuth] Phone code sent. VerificationId:', event.verificationId);
-            nativeVerificationIdRef.current = event.verificationId;
-            localStorage.setItem('kotha_hobe_native_vid', event.verificationId);
-          });
-
-          await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
-            console.warn('[Native FirebaseAuth] Phone verification failed:', event.message);
-          });
-
-          await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
-            console.log('[Native FirebaseAuth] Instant auto-verification completed:', event);
-          });
-        } catch (err) {
-          console.warn('[Native FirebaseAuth] Listeners setup notice:', err);
-        }
-      };
-
-      setupListeners();
-    }
-  }, []);
-
   const sendOtp = async (phone: string, recaptchaContainerId = 'recaptcha-container'): Promise<boolean> => {
     setPhoneNumber(phone);
     localStorage.setItem('kotha_hobe_pending_phone', phone);
+    console.log('[FirebaseAuth] === SEND OTP START ===');
+    console.log('[FirebaseAuth] Normalized E.164 phone number:', phone);
 
     if (Capacitor.isNativePlatform()) {
-      // 📱 NATIVE ANDROID: Uses Play Integrity & Native SMS verification
-      try {
-        console.log('[Native FirebaseAuth] Requesting native SMS verification for:', phone);
-        await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber: phone });
-        return true;
-      } catch (error: any) {
-        console.error('[Native FirebaseAuth] signInWithPhoneNumber error:', error);
-        let errorMsg = error?.message || 'Failed to send verification SMS';
-        if (errorMsg.includes('invalid-phone-number')) {
-          errorMsg = 'Invalid phone number format. Please check your country code.';
-        } else if (errorMsg.includes('quota-exceeded')) {
-          errorMsg = 'Daily SMS limit reached. Please try again later.';
-        } else if (errorMsg.includes('too-many-requests')) {
-          errorMsg = 'Too many attempts. Please wait a moment and try again.';
+      // 📱 NATIVE ANDROID: Uses native PhoneAuthProvider with strict event listener synchronization
+      return new Promise(async (resolve, reject) => {
+        let isSettled = false;
+        let timeoutTimer: any = null;
+
+        // Clean up listeners and timeout
+        const cleanup = async () => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+          try {
+            await FirebaseAuthentication.removeAllListeners();
+          } catch (e) {}
+        };
+
+        try {
+          await FirebaseAuthentication.removeAllListeners();
+
+          // 1. Success Event: SMS code dispatched by Google Firebase
+          await FirebaseAuthentication.addListener('phoneCodeSent', async (event) => {
+            console.log('[FirebaseAuth] [SUCCESS] phoneCodeSent event received');
+            console.log('[FirebaseAuth] Verification ID received:', event.verificationId ? 'YES (Valid ID)' : 'MISSING');
+            
+            if (isSettled) return;
+            isSettled = true;
+            await cleanup();
+
+            nativeVerificationIdRef.current = event.verificationId;
+            localStorage.setItem('kotha_hobe_native_vid', event.verificationId);
+            resolve(true);
+          });
+
+          // 2. Instant Verification Event (on supported devices with instant auto-retrieval)
+          await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
+            console.log('[FirebaseAuth] [INSTANT] phoneVerificationCompleted event received:', event);
+            if (isSettled) return;
+            isSettled = true;
+            await cleanup();
+
+            try {
+              const tokenResult = await FirebaseAuthentication.getIdToken({ forceRefresh: true });
+              if (tokenResult?.token) {
+                const res = await loginWithFirebaseToken(phone, tokenResult.token);
+                if (res.success && res.token && res.user) {
+                  localStorage.setItem('kotha_hobe_token', res.token);
+                  localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
+                  setToken(res.token);
+                  setUser(res.user);
+                }
+              }
+            } catch (instantErr) {
+              console.warn('[FirebaseAuth] Instant login handle notice:', instantErr);
+            }
+            resolve(true);
+          });
+
+          // 3. Failure Event: Capture exact Firebase exception from native layer
+          await FirebaseAuthentication.addListener('phoneVerificationFailed', async (event) => {
+            console.error('[FirebaseAuth] [FAILED] phoneVerificationFailed event received:', event);
+            console.error('[FirebaseAuth] Exact Firebase error message:', event?.message);
+
+            if (isSettled) return;
+            isSettled = true;
+            await cleanup();
+
+            const rawMsg = event?.message || 'Verification failed';
+            let friendlyMsg = rawMsg;
+
+            if (rawMsg.includes('quota') || rawMsg.includes('TOO_MANY_REQUESTS') || rawMsg.includes('39') || rawMsg.includes('17010')) {
+              friendlyMsg = 'Firebase SMS limit reached for today. Please wait or use test credentials.';
+            } else if (rawMsg.includes('invalid-phone-number') || rawMsg.includes('INVALID_PHONE_NUMBER') || rawMsg.includes('17042')) {
+              friendlyMsg = 'Invalid phone number format. Please ensure your Bangladeshi number is 11 digits.';
+            } else if (rawMsg.includes('Play Integrity') || rawMsg.includes('SafetyNet') || rawMsg.includes('app-not-authorized') || rawMsg.includes('17028')) {
+              friendlyMsg = 'Device security check failed (Play Integrity / SHA mismatch). Please verify Play Services.';
+            } else if (rawMsg.includes('blocked') || rawMsg.includes('BILLING_NOT_ENABLED')) {
+              friendlyMsg = 'SMS dispatch is restricted in this region or project billing is required.';
+            }
+
+            reject(new Error(friendlyMsg));
+          });
+
+          // 4. Timeout fallback (30 seconds)
+          timeoutTimer = setTimeout(async () => {
+            if (!isSettled) {
+              isSettled = true;
+              await cleanup();
+              console.error('[FirebaseAuth] Verification request timed out after 30 seconds');
+              reject(new Error('Verification request timed out. Please check your internet connection and try again.'));
+            }
+          }, 30000);
+
+          console.log('[FirebaseAuth] Invoking native signInWithPhoneNumber...');
+          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber: phone });
+        } catch (callErr: any) {
+          console.error('[FirebaseAuth] Native signInWithPhoneNumber method call error:', callErr);
+          if (!isSettled) {
+            isSettled = true;
+            await cleanup();
+            reject(new Error(callErr?.message || 'Failed to start phone verification'));
+          }
         }
-        throw new Error(errorMsg);
-      }
+      });
     } else {
-      // 🌐 WEB / DEV FALLBACK: Uses Firebase Web SDK with invisible reCAPTCHA
+      // 🌐 WEB / DEV FALLBACK: Uses Firebase Web SDK
       try {
         let recaptchaVerifier = (window as any).recaptchaVerifier;
 
@@ -139,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const confirmation = await signInWithPhoneNumber(auth, phone, recaptchaVerifier);
         setConfirmationResult(confirmation);
+        console.log('[Web FirebaseAuth] Web confirmation result received');
         return true;
       } catch (error: any) {
         console.error('[Web FirebaseAuth] signInWithPhoneNumber error:', error);
@@ -154,6 +211,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errorMsg = 'Invalid phone number format.';
         } else if (error?.code === 'auth/too-many-requests') {
           errorMsg = 'Too many attempts. Please try again in a few moments.';
+        } else if (error?.code === 'auth/quota-exceeded') {
+          errorMsg = 'SMS quota exceeded for today.';
         }
         throw new Error(errorMsg);
       }
@@ -164,25 +223,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const activePhone = phoneNumber || localStorage.getItem('kotha_hobe_pending_phone') || '';
     let firebaseIdToken = '';
 
+    console.log('[FirebaseAuth] === VERIFY OTP START ===');
+
     try {
       if (Capacitor.isNativePlatform()) {
-        // 📱 NATIVE ANDROID: Confirm verification code via native plugin
         const verificationId = nativeVerificationIdRef.current || localStorage.getItem('kotha_hobe_native_vid') || '';
         
         if (!verificationId) {
+          console.error('[FirebaseAuth] Missing verificationId for confirmation');
           return { success: false, error: 'Verification session expired. Please request a new code.' };
         }
 
-        console.log('[Native FirebaseAuth] Confirming verification code...');
+        console.log('[FirebaseAuth] Confirming verification code with native plugin...');
         await FirebaseAuthentication.confirmVerificationCode({
           verificationId,
           verificationCode: code.trim(),
         });
 
+        console.log('[FirebaseAuth] Code confirmed. Fetching fresh Firebase ID Token...');
         const tokenResult = await FirebaseAuthentication.getIdToken({ forceRefresh: true });
         firebaseIdToken = tokenResult.token;
+        console.log('[FirebaseAuth] Firebase ID Token obtained successfully');
       } else {
-        // 🌐 WEB / DEV FALLBACK: Confirm via Firebase Web SDK
         if (!confirmationResult) {
           return { success: false, error: 'Verification session expired. Please request a new code.' };
         }
@@ -195,10 +257,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Could not obtain security token from Firebase.' };
       }
 
-      // Securely authenticate with Node.js backend using verified Firebase ID Token
+      console.log('[FirebaseAuth] Authenticating session with backend server...');
       const res = await loginWithFirebaseToken(activePhone, firebaseIdToken);
 
       if (res.success && res.token && res.user) {
+        console.log('[FirebaseAuth] Backend login successful. Session established.');
         localStorage.setItem('kotha_hobe_token', res.token);
         localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
         localStorage.removeItem('kotha_hobe_pending_phone');

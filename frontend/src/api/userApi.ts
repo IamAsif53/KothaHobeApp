@@ -11,15 +11,19 @@ export async function fetchMe(): Promise<UserResponse> {
   return apiFetch<UserResponse>('/users/me');
 }
 
-export async function updateProfileApi(displayName: string, avatarUrl?: string): Promise<UserResponse> {
+export async function updateProfileApi(
+  username: string,
+  displayName: string,
+  avatarUrl?: string
+): Promise<UserResponse> {
   return apiFetch<UserResponse>('/users/profile', {
     method: 'PUT',
-    body: JSON.stringify({ displayName, avatarUrl }),
+    body: JSON.stringify({ username, displayName, avatarUrl }),
   });
 }
 
-export async function searchUserByPhoneApi(phone: string): Promise<UserResponse> {
-  return apiFetch<UserResponse>(`/users/search?phone=${encodeURIComponent(phone)}`);
+export async function searchUserByUsernameApi(username: string): Promise<UserResponse> {
+  return apiFetch<UserResponse>(`/users/search?username=${encodeURIComponent(username)}`);
 }
 
 export async function searchUserApi(query: string): Promise<UserResponse> {

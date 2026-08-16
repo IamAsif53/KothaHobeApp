@@ -1,172 +1,214 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { formatPhoneDisplay } from '../utils/phoneFormatter';
-import { ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, RotateCw } from 'lucide-react';
+
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [localPart, domain] = email.split('@');
+  if (localPart.length <= 2) {
+    return `${localPart}***@${domain}`;
+  }
+  const start = localPart.slice(0, 1);
+  const end = localPart.slice(-1);
+  return `${start}***${end}@${domain}`;
+}
 
 export const OtpPage: React.FC = () => {
-  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const { email, verifyOtp, sendOtp } = useAuth();
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [countdown, setCountdown] = useState(60);
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(30);
+  const [isResending, setIsResending] = useState(false);
 
-  const { phoneNumber, verifyOtp, sendOtp } = useAuth();
-  const navigate = useNavigate();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const navigate = useNavigate();
 
+  // Redirect if no email in session
   useEffect(() => {
-    if (!phoneNumber) {
+    const activeEmail = email || localStorage.getItem('kotha_hobe_pending_email');
+    if (!activeEmail) {
       navigate('/login', { replace: true });
     }
-  }, [phoneNumber, navigate]);
+  }, [email, navigate]);
 
-  // Resend timer countdown
+  // Resend countdown timer
   useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setInterval(() => {
-        setResendCooldown((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
+    if (countdown <= 0) return;
+    const timer = setInterval(() => setCountdown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  const handleDigitChange = (index: number, val: string) => {
+    const cleaned = val.replace(/[^\d]/g, '');
+    if (!cleaned) {
+      const copy = [...otpDigits];
+      copy[index] = '';
+      setOtpDigits(copy);
+      return;
     }
-  }, [resendCooldown]);
 
-  const handleChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return;
-
-    const newCode = [...code];
-    newCode[index] = value.slice(-1);
-    setCode(newCode);
+    // Single digit input
+    const char = cleaned.slice(-1);
+    const copy = [...otpDigits];
+    copy[index] = char;
+    setOtpDigits(copy);
     setError('');
 
-    // Auto-focus next input
-    if (value && index < 5) {
+    // Advance to next input
+    if (index < 5) {
       inputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto submit when 6 digits filled
-    if (newCode.every((digit) => digit !== '') && index === 5) {
-      handleVerify(newCode.join(''));
     }
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !code[index] && index > 0) {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
-  const handleVerify = async (fullCode?: string) => {
-    const otpCode = fullCode || code.join('');
-    if (otpCode.length < 6) {
-      setError('Please enter the complete 6-digit SMS verification code.');
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/[^\d]/g, '').slice(0, 6);
+    if (!pasted) return;
+
+    const copy = [...otpDigits];
+    for (let i = 0; i < 6; i++) {
+      copy[i] = pasted[i] || '';
+    }
+    setOtpDigits(copy);
+    setError('');
+
+    const nextIndex = Math.min(pasted.length, 5);
+    inputRefs.current[nextIndex]?.focus();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fullOtp = otpDigits.join('');
+    if (fullOtp.length !== 6) {
+      setError('Please enter the full 6-digit code');
       return;
     }
 
     setIsVerifying(true);
     setError('');
 
-    const res = await verifyOtp(otpCode);
-    setIsVerifying(false);
-
-    if (res.success) {
-      if (res.isNewUser) {
-        navigate('/profile-setup', { replace: true });
+    try {
+      const result = await verifyOtp(fullOtp);
+      if (result.success) {
+        if (result.hasProfile) {
+          navigate('/chats', { replace: true });
+        } else {
+          navigate('/profile-setup', { replace: true });
+        }
       } else {
-        navigate('/chats', { replace: true });
+        setError(result.error || 'Invalid verification code');
       }
-    } else {
-      setError(res.error || 'Invalid verification code. Please check your SMS.');
+    } catch (err: any) {
+      setError(err?.message || 'Verification failed');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   const handleResend = async () => {
-    if (resendCooldown > 0) return;
+    if (countdown > 0 || isResending) return;
+    const targetEmail = email || localStorage.getItem('kotha_hobe_pending_email') || '';
+    if (!targetEmail) return;
+
+    setIsResending(true);
     setError('');
+
     try {
-      const success = await sendOtp(phoneNumber, 'recaptcha-container');
-      if (success) {
-        setResendCooldown(30);
-        setCode(['', '', '', '', '', '']);
-      } else {
-        setError('Failed to resend code. Please try again.');
-      }
+      await sendOtp(targetEmail);
+      setCountdown(60);
+      setOtpDigits(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     } catch (err: any) {
-      setError(err?.message || 'Failed to resend code.');
+      setError(err?.message || 'Failed to resend code');
+    } finally {
+      setIsResending(false);
     }
   };
 
+  const targetEmail = email || localStorage.getItem('kotha_hobe_pending_email') || '';
+
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
-      {/* Invisible reCAPTCHA container for Firebase */}
-      <div id="recaptcha-container"></div>
-
-      <div>
+      <div className="pt-4">
         <button
           onClick={() => navigate('/login')}
-          className="flex items-center gap-2 text-chat-textMuted hover:text-white transition-colors mb-6 text-sm"
+          className="inline-flex items-center gap-2 text-xs font-medium text-chat-textMuted hover:text-white mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Change Number</span>
+          <span>Change Email</span>
         </button>
 
         <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
           <ShieldCheck className="w-7 h-7 text-brand-400" />
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Enter SMS Code</h1>
-        <p className="text-chat-textMuted text-sm leading-relaxed mb-6">
-          Verification code sent to <strong className="text-white font-mono">{formatPhoneDisplay(phoneNumber)}</strong>
+        <h1 className="text-2xl font-bold text-white mb-2">Enter Verification Code</h1>
+        <p className="text-chat-textMuted text-sm leading-relaxed mb-8">
+          Verification code sent to <strong className="text-white">{maskEmail(targetEmail)}</strong>
         </p>
 
-        {/* 6 Digit OTP inputs */}
-        <div className="flex justify-between gap-2 mb-6">
-          {code.map((digit, idx) => (
-            <input
-              key={idx}
-              ref={(el) => {
-                inputRefs.current[idx] = el;
-              }}
-              type="tel"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleChange(idx, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(idx, e)}
-              className="w-12 h-14 bg-chat-card border border-white/10 text-white font-bold text-xl text-center rounded-xl focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
-            />
-          ))}
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium mb-4">
-            {error}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex justify-between gap-2" onPaste={handlePaste}>
+            {otpDigits.map((digit, idx) => (
+              <input
+                key={idx}
+                ref={(el) => {
+                  inputRefs.current[idx] = el;
+                }}
+                type="tel"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleDigitChange(idx, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(idx, e)}
+                autoFocus={idx === 0}
+                className="w-12 h-14 bg-chat-card border border-white/10 text-white rounded-xl text-center text-xl font-bold font-mono focus:outline-none focus:border-brand-500 transition-colors"
+              />
+            ))}
           </div>
-        )}
 
-        <button
-          onClick={() => handleVerify()}
-          disabled={isVerifying || code.some((d) => !d)}
-          className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-500/20"
-        >
-          {isVerifying ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <span>Verify & Continue</span>
+          {error && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+              {error}
+            </div>
           )}
-        </button>
-      </div>
 
-      <div className="flex flex-col items-center gap-2 py-4">
-        <button
-          type="button"
-          onClick={handleResend}
-          disabled={resendCooldown > 0}
-          className="flex items-center gap-2 text-sm text-brand-400 disabled:text-chat-textMuted transition-colors font-medium"
-        >
-          <RefreshCw className={`w-4 h-4 ${resendCooldown > 0 ? '' : 'animate-spin-once'}`} />
-          <span>
-            {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
-          </span>
-        </button>
+          <button
+            type="submit"
+            disabled={isVerifying || otpDigits.join('').length !== 6}
+            className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-500/20"
+          >
+            {isVerifying ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span>Verify & Continue</span>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center">
+          {countdown > 0 ? (
+            <p className="text-xs text-chat-textMuted">
+              Resend code in <strong className="text-white font-mono">{countdown}s</strong>
+            </p>
+          ) : (
+            <button
+              onClick={handleResend}
+              disabled={isResending}
+              className="inline-flex items-center gap-1.5 text-xs text-brand-400 font-semibold hover:text-brand-300 transition-colors"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isResending ? 'animate-spin' : ''}`} />
+              <span>Resend code</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

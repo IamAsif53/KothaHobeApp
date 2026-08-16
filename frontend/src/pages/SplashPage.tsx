@@ -11,7 +11,7 @@ export const SplashPage: React.FC = () => {
     if (!loading) {
       const timer = setTimeout(() => {
         if (user) {
-          if (!user.displayName || user.displayName.startsWith('User ')) {
+          if (!user.username || !user.displayName || user.displayName.startsWith('User ')) {
             navigate('/profile-setup', { replace: true });
           } else {
             navigate('/chats', { replace: true });
@@ -19,7 +19,7 @@ export const SplashPage: React.FC = () => {
         } else {
           navigate('/login', { replace: true });
         }
-      }, 1200);
+      }, 1000);
 
       return () => clearTimeout(timer);
     }

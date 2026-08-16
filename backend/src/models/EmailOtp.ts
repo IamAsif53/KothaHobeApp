@@ -2,7 +2,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IEmailOtp extends Document {
   email: string;
-  otp: string;
+  otpHash: string;
+  attempts: number;
   expiresAt: Date;
   createdAt: Date;
 }
@@ -15,9 +16,13 @@ const EmailOtpSchema: Schema = new Schema({
     trim: true,
     index: true,
   },
-  otp: {
+  otpHash: {
     type: String,
     required: true,
+  },
+  attempts: {
+    type: Number,
+    default: 0,
   },
   expiresAt: {
     type: Date,

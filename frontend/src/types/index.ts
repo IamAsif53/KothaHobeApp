@@ -1,11 +1,13 @@
 export interface IUser {
   _id: string;
   email?: string;
-  phoneNumber?: string;
+  username?: string;
+  usernameNormalized?: string;
   displayName: string;
   avatarUrl?: string;
   isOnline: boolean;
   lastSeen: string;
+  phoneNumber?: string;
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';

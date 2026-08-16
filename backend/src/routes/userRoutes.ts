@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMe, updateProfile, searchUserByPhone } from '../controllers/userController';
+import { getMe, updateProfile, searchUser } from '../controllers/userController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { searchRateLimiter } from '../middleware/rateLimiter';
 
@@ -9,6 +9,6 @@ router.use(authenticateToken);
 
 router.get('/me', getMe);
 router.put('/profile', updateProfile);
-router.get('/search', searchRateLimiter, searchUserByPhone);
+router.get('/search', searchRateLimiter, searchUser);
 
 export default router;

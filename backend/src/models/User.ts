@@ -1,28 +1,23 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUser extends Document {
-  firebaseUid?: string;
-  email?: string;
-  emailVerified?: boolean;
-  phoneNumber?: string;
-  phoneVerified?: boolean;
+  email: string;
+  emailVerified: boolean;
+  username?: string;
+  usernameNormalized?: string;
   displayName: string;
   avatarUrl?: string;
   isOnline: boolean;
   lastSeen: Date;
+  phoneNumber?: string;
+  phoneVerified?: boolean;
+  firebaseUid?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const UserSchema: Schema = new Schema(
   {
-    firebaseUid: {
-      type: String,
-      unique: true,
-      sparse: true,
-      index: true,
-      trim: true,
-    },
     email: {
       type: String,
       unique: true,
@@ -35,16 +30,17 @@ const UserSchema: Schema = new Schema(
       type: Boolean,
       default: true,
     },
-    phoneNumber: {
+    username: {
+      type: String,
+      trim: true,
+    },
+    usernameNormalized: {
       type: String,
       unique: true,
       sparse: true,
       index: true,
+      lowercase: true,
       trim: true,
-    },
-    phoneVerified: {
-      type: Boolean,
-      default: true,
     },
     displayName: {
       type: String,
@@ -64,12 +60,25 @@ const UserSchema: Schema = new Schema(
       type: Date,
       default: Date.now,
     },
+    phoneNumber: {
+      type: String,
+      sparse: true,
+      index: true,
+      trim: true,
+    },
+    phoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    firebaseUid: {
+      type: String,
+      sparse: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
-
-// Optimize queries by phoneNumber (indexed via schema definition)
 
 export const User = mongoose.model<IUser>('User', UserSchema);

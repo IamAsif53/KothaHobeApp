@@ -1,7 +1,18 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { User } from '../models/User';
-import { normalizePhoneNumber } from '../utils/phoneUtils';
+
+const RESERVED_USERNAMES = new Set([
+  'admin',
+  'administrator',
+  'support',
+  'help',
+  'system',
+  'kothahobe',
+  'kotha_hobe',
+  'official',
+  'root',
+]);
 
 export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -14,7 +25,8 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
       user: {
         _id: req.user._id,
         email: req.user.email || '',
-        phoneNumber: req.user.phoneNumber || '',
+        username: req.user.username || '',
+        usernameNormalized: req.user.usernameNormalized || '',
         displayName: req.user.displayName,
         avatarUrl: req.user.avatarUrl || '',
         isOnline: req.user.isOnline,
@@ -33,12 +45,69 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { displayName, avatarUrl } = req.body;
+    const { username, displayName, avatarUrl } = req.body;
 
-    if (displayName && typeof displayName === 'string') {
-      req.user.displayName = displayName.trim();
+    // 1. Validate & Update Username (if provided)
+    if (username !== undefined && typeof username === 'string') {
+      const trimmedUser = username.trim();
+      const normalized = trimmedUser.toLowerCase();
+
+      if (trimmedUser.length < 3 || trimmedUser.length > 30) {
+        res.status(400).json({
+          success: false,
+          message: 'Username must be between 3 and 30 characters long.',
+        });
+        return;
+      }
+
+      if (!/^[a-zA-Z0-9_]+$/.test(trimmedUser)) {
+        res.status(400).json({
+          success: false,
+          message: 'Username can only contain letters, numbers, and underscores (no spaces or symbols).',
+        });
+        return;
+      }
+
+      if (RESERVED_USERNAMES.has(normalized)) {
+        res.status(400).json({
+          success: false,
+          message: 'This username is reserved. Please choose another username.',
+        });
+        return;
+      }
+
+      // Check for collision with other users
+      const existing = await User.findOne({
+        _id: { $ne: req.user._id },
+        usernameNormalized: normalized,
+      });
+
+      if (existing) {
+        res.status(400).json({
+          success: false,
+          message: 'A user with this username already exists. Please choose another username.',
+        });
+        return;
+      }
+
+      req.user.username = trimmedUser;
+      req.user.usernameNormalized = normalized;
     }
 
+    // 2. Validate & Update Display Name (if provided)
+    if (displayName !== undefined && typeof displayName === 'string') {
+      const trimmedName = displayName.trim();
+      if (trimmedName.length < 2 || trimmedName.length > 50) {
+        res.status(400).json({
+          success: false,
+          message: 'Display Name must be between 2 and 50 characters.',
+        });
+        return;
+      }
+      req.user.displayName = trimmedName;
+    }
+
+    // 3. Avatar update
     if (typeof avatarUrl === 'string') {
       req.user.avatarUrl = avatarUrl;
     }
@@ -51,50 +120,54 @@ export const updateProfile = async (req: AuthenticatedRequest, res: Response): P
       user: {
         _id: req.user._id,
         email: req.user.email || '',
-        phoneNumber: req.user.phoneNumber || '',
+        username: req.user.username || '',
+        usernameNormalized: req.user.usernameNormalized || '',
         displayName: req.user.displayName,
         avatarUrl: req.user.avatarUrl || '',
         isOnline: req.user.isOnline,
         lastSeen: req.user.lastSeen,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      res.status(400).json({
+        success: false,
+        message: 'A user with this username already exists. Please choose another username.',
+      });
+      return;
+    }
+    console.error('[User] updateProfile error:', error);
     res.status(500).json({ success: false, message: 'Failed to update profile' });
   }
 };
 
 export const searchUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { query, email, phone } = req.query;
-    const searchTerm = ((query || email || phone || '') as string).trim();
+    const { query, username } = req.query;
+    let searchTerm = ((query || username || '') as string).trim();
 
     if (!searchTerm) {
-      res.status(400).json({ success: false, message: 'Search query is required' });
+      res.status(400).json({ success: false, message: 'Search username is required' });
       return;
     }
 
-    let foundUser = null;
+    // Strip leading '@' if entered
+    if (searchTerm.startsWith('@')) {
+      searchTerm = searchTerm.slice(1).trim();
+    }
 
-    // 1. If it looks like an email or contains @
-    if (searchTerm.includes('@')) {
-      const normalizedEmail = searchTerm.toLowerCase().trim();
-      foundUser = await User.findOne({ email: normalizedEmail });
-    } else {
-      // 2. Search by exact email or phone or displayName
-      const normalizedPhone = normalizePhoneNumber(searchTerm);
-      const suffix = normalizedPhone ? normalizedPhone.slice(-10) : '';
+    const normalizedSearch = searchTerm.toLowerCase();
 
-      foundUser = await User.findOne({
-        $or: [
-          { email: searchTerm.toLowerCase() },
-          ...(normalizedPhone ? [{ phoneNumber: normalizedPhone }, { phoneNumber: { $regex: suffix + '$' } }] : []),
-          { displayName: { $regex: new RegExp(`^${searchTerm}$`, 'i') } },
-        ],
-      });
+    // Primary search: Exact normalized username
+    let foundUser = await User.findOne({ usernameNormalized: normalizedSearch });
+
+    // Fallback: If user searched by exact email
+    if (!foundUser && searchTerm.includes('@')) {
+      foundUser = await User.findOne({ email: normalizedSearch });
     }
 
     if (!foundUser) {
-      res.status(200).json({ success: true, user: null, message: 'No account found with this email' });
+      res.status(200).json({ success: true, user: null, message: 'No user found with this username' });
       return;
     }
 
@@ -104,12 +177,12 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    // Return sanitized public user data (never expose email or private tokens)
     res.status(200).json({
       success: true,
       user: {
         _id: foundUser._id,
-        email: foundUser.email || '',
-        phoneNumber: foundUser.phoneNumber || '',
+        username: foundUser.username || '',
         displayName: foundUser.displayName,
         avatarUrl: foundUser.avatarUrl || '',
         isOnline: foundUser.isOnline,
@@ -121,5 +194,3 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
     res.status(500).json({ success: false, message: 'Failed to search user' });
   }
 };
-
-export const searchUserByPhone = searchUser;

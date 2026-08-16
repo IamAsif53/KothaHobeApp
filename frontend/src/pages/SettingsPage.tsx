@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Avatar } from '../components/common/Avatar';
-import { formatPhoneDisplay } from '../utils/phoneFormatter';
 import {
   LogOut,
   User,
@@ -52,8 +51,8 @@ export const SettingsPage: React.FC = () => {
     };
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login', { replace: true });
   };
 
@@ -95,15 +94,20 @@ export const SettingsPage: React.FC = () => {
         >
           <Avatar
             src={user?.avatarUrl}
-            name={user?.displayName || 'User'}
+            name={user?.displayName || user?.username || 'User'}
             isOnline={user?.isOnline}
             size="lg"
           />
 
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-bold text-white truncate">{user?.displayName}</h2>
+            {user?.username && (
+              <p className="text-xs font-mono text-brand-400 truncate">
+                @{user.username}
+              </p>
+            )}
             <p className="text-xs font-mono text-chat-textMuted truncate">
-              {formatPhoneDisplay(user?.phoneNumber || '')}
+              {user?.email || ''}
             </p>
           </div>
 
@@ -125,7 +129,7 @@ export const SettingsPage: React.FC = () => {
             <Bell className="w-5 h-5 text-sky-400" />
             <div className="flex-1">
               <div className="text-sm font-semibold text-white">Notifications</div>
-              <div className="text-xs text-chat-textMuted">In-app sound & push alerts</div>
+              <div className="text-xs text-chat-textMuted">In-app sound & alerts</div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
           </div>
@@ -208,7 +212,7 @@ export const SettingsPage: React.FC = () => {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-white">About Kotha Hobe</div>
               <div className="text-xs text-chat-textMuted font-mono">
-                v{appVersion.versionName} (Build {appVersion.versionCode}) • Mobile First Real-Time
+                v{appVersion.versionName} (Build {appVersion.versionCode}) • Real-Time Messaging
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { ENV } from '../config/env';
 
 export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolean> {
+  const subject = 'Your Kotha Hobe Verification Code';
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -15,21 +16,21 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
               <table width="100%" style="max-width: 460px; background-color: #111b21; border-radius: 16px; border: 1px solid #202c33; overflow: hidden; padding: 32px 24px; text-align: center;">
                 <tr>
                   <td align="center">
-                    <div style="display: inline-block; width: 48px; height: 48px; background-color: rgba(0, 168, 132, 0.15); border-radius: 12px; line-height: 48px; margin-bottom: 16px;">
-                      <span style="font-size: 24px;">💬</span>
+                    <div style="display: inline-block; width: 52px; height: 52px; background-color: rgba(0, 168, 132, 0.15); border-radius: 14px; line-height: 52px; margin-bottom: 16px;">
+                      <span style="font-size: 26px;">💬</span>
                     </div>
                     <h1 style="color: #ffffff; font-size: 22px; font-weight: 700; margin: 0 0 8px 0;">Kotha Hobe • কথা হবে</h1>
-                    <p style="color: #8696a0; font-size: 14px; margin: 0 0 24px 0;">Your login verification code is:</p>
+                    <p style="color: #8696a0; font-size: 14px; margin: 0 0 24px 0;">Your verification code is:</p>
                     
                     <div style="background-color: #202c33; border: 1px solid #00a884; border-radius: 12px; padding: 18px 0; margin-bottom: 24px;">
                       <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #00a884; font-family: monospace;">${otp}</span>
                     </div>
                     
                     <p style="color: #8696a0; font-size: 13px; line-height: 1.5; margin: 0 0 8px 0;">
-                      Enter this 6-digit code in the Kotha Hobe app to log in. Valid for <strong>5 minutes</strong>.
+                      This code expires in <strong>5 minutes</strong>.
                     </p>
                     <p style="color: #667781; font-size: 11px; margin: 0;">
-                      If you did not request this code, you can safely ignore this email.
+                      If you did not request this code, ignore this email.
                     </p>
                   </td>
                 </tr>
@@ -41,14 +42,17 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
     </html>
   `;
 
-  // 1. Primary High-Priority Provider: Brevo REST API
+  // 1. Primary High-Priority Provider: Brevo Transactional REST API
   if (ENV.BREVO_API_KEY) {
     try {
       const success = await new Promise<boolean>((resolve) => {
         const postData = JSON.stringify({
-          sender: { name: 'Kotha Hobe', email: ENV.BREVO_SENDER_EMAIL || 'u2104053@student.cuet.ac.bd' },
+          sender: {
+            name: ENV.BREVO_SENDER_NAME || 'Kotha Hobe',
+            email: ENV.BREVO_SENDER_EMAIL || 'u2104053@student.cuet.ac.bd',
+          },
           to: [{ email: toEmail }],
-          subject: `${otp} is your Kotha Hobe verification code`,
+          subject: subject,
           htmlContent: htmlContent,
         });
 
@@ -69,10 +73,10 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
             res.on('data', (chunk) => (data += chunk));
             res.on('end', () => {
               if (res.statusCode === 201 || res.statusCode === 200) {
-                console.log(`[EmailService] OTP ${otp} sent successfully via Brevo API to ${toEmail}.`);
+                console.log(`[EmailService] OTP email dispatched via Brevo REST API to ${toEmail}.`);
                 resolve(true);
               } else {
-                console.error('[EmailService] Brevo API error response:', data);
+                console.error('[EmailService] Brevo API error response status:', res.statusCode);
                 resolve(false);
               }
             });
@@ -80,7 +84,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
         );
 
         req.on('error', (err) => {
-          console.error('[EmailService] Brevo API request failed:', err.message);
+          console.error('[EmailService] Brevo request connection error:', err.message);
           resolve(false);
         });
 
@@ -90,7 +94,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
 
       if (success) return true;
     } catch (err: any) {
-      console.error('[EmailService] Brevo API exception:', err?.message);
+      console.error('[EmailService] Brevo exception occurred');
     }
   }
 
@@ -105,17 +109,17 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
         },
       });
 
-      const info = await transporter.sendMail({
-        from: `"Kotha Hobe" <${ENV.GMAIL_USER}>`,
+      await transporter.sendMail({
+        from: `"${ENV.BREVO_SENDER_NAME || 'Kotha Hobe'}" <${ENV.GMAIL_USER}>`,
         to: toEmail,
-        subject: `${otp} is your Kotha Hobe verification code`,
+        subject: subject,
         html: htmlContent,
       });
 
-      console.log(`[EmailService] OTP sent via Gmail SMTP to ${toEmail}. Message ID:`, info.messageId);
+      console.log(`[EmailService] OTP email dispatched via Gmail SMTP to ${toEmail}.`);
       return true;
     } catch (err: any) {
-      console.error('[EmailService] Gmail SMTP error:', err?.message);
+      console.error('[EmailService] Gmail SMTP fallback error');
     }
   }
 
@@ -123,20 +127,20 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
   if (ENV.RESEND_API_KEY) {
     try {
       const resend = new Resend(ENV.RESEND_API_KEY);
-      const { data, error } = await resend.emails.send({
+      const { error } = await resend.emails.send({
         from: 'Kotha Hobe <onboarding@resend.dev>',
         to: [toEmail],
-        subject: `${otp} is your Kotha Hobe verification code`,
+        subject: subject,
         html: htmlContent,
       });
 
       if (!error) {
-        console.log(`[EmailService] OTP sent via Resend to ${toEmail}. Message ID:`, data?.id);
+        console.log(`[EmailService] OTP email dispatched via Resend to ${toEmail}.`);
         return true;
       }
     } catch (err: any) {}
   }
 
-  console.warn('[EmailService] No active email delivery provider could send the email.');
+  console.warn('[EmailService] No email provider succeeded.');
   return false;
 }

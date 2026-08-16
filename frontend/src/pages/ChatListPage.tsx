@@ -12,7 +12,6 @@ export const ChatListPage: React.FC = () => {
   const [conversations, setConversations] = useState<IConversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
@@ -28,7 +27,6 @@ export const ChatListPage: React.FC = () => {
       console.warn('[ChatList] Failed to load conversations');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -69,9 +67,10 @@ export const ChatListPage: React.FC = () => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const nameMatch = conv.recipient?.displayName?.toLowerCase().includes(q);
-    const phoneMatch = conv.recipient?.phoneNumber?.includes(q);
+    const userMatch = conv.recipient?.username?.toLowerCase().includes(q);
+    const emailMatch = conv.recipient?.email?.toLowerCase().includes(q);
     const msgMatch = conv.lastMessage?.text?.toLowerCase().includes(q);
-    return nameMatch || phoneMatch || msgMatch;
+    return nameMatch || userMatch || emailMatch || msgMatch;
   });
 
   const renderStatusCheck = (status?: string) => {
@@ -107,7 +106,7 @@ export const ChatListPage: React.FC = () => {
           <button
             onClick={() => navigate('/search')}
             className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-chat-textMuted hover:text-white transition-colors"
-            title="Search User by Phone"
+            title="Search User by Username"
           >
             <UserPlus className="w-5 h-5" />
           </button>
@@ -146,8 +145,8 @@ export const ChatListPage: React.FC = () => {
             </h3>
             <p className="text-xs text-chat-textMuted mb-6 max-w-xs leading-relaxed">
               {searchQuery
-                ? 'Try searching with a different term or phone number.'
-                : 'Find someone by phone number to start chatting right away.'}
+                ? 'Try searching with a different username.'
+                : 'Find someone by username to start chatting right away.'}
             </p>
             {!searchQuery && (
               <button
@@ -168,7 +167,7 @@ export const ChatListPage: React.FC = () => {
             >
               <Avatar
                 src={conv.recipient?.avatarUrl}
-                name={conv.recipient?.displayName || 'User'}
+                name={conv.recipient?.displayName || conv.recipient?.username || 'User'}
                 isOnline={conv.recipient?.isOnline}
                 size="md"
               />
@@ -176,7 +175,7 @@ export const ChatListPage: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-baseline mb-1">
                   <h2 className="text-sm font-semibold text-white truncate">
-                    {conv.recipient?.displayName || 'User'}
+                    {conv.recipient?.displayName || conv.recipient?.username || 'User'}
                   </h2>
                   {conv.lastMessageAt && (
                     <span className="text-[11px] text-chat-textMuted flex-shrink-0 ml-2 font-medium">

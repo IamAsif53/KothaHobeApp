@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchUserApi } from '../api/userApi';
+import { searchUserByPhoneApi } from '../api/userApi';
 import { getOrCreateConversationApi } from '../api/conversationApi';
 import { IUser } from '../types';
 import { Avatar } from '../components/common/Avatar';
-import { Search, ArrowLeft, MessageSquare, UserX, AlertCircle, Mail } from 'lucide-react';
+import { formatPhoneDisplay, formatE164 } from '../utils/phoneFormatter';
+import { Search, ArrowLeft, MessageSquare, UserX, AlertCircle } from 'lucide-react';
 
 export const SearchUserPage: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [countryCode, setCountryCode] = useState('+880');
+  const [phoneDigits, setPhoneDigits] = useState('');
   const [searchResult, setSearchResult] = useState<IUser | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -18,21 +20,22 @@ export const SearchUserPage: React.FC = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
+    if (!phoneDigits) return;
 
     setIsSearching(true);
     setSearchResult(null);
     setNotFound(false);
     setError('');
 
+    const fullPhone = formatE164(phoneDigits, countryCode);
+
     try {
-      const res = await searchUserApi(query);
+      const res = await searchUserByPhoneApi(fullPhone);
       if (res.success && res.user) {
         setSearchResult(res.user);
       } else {
         setNotFound(true);
-        if (res.message && res.message.includes('own account')) {
+        if (res.message && res.message.includes('own number')) {
           setError(res.message);
         }
       }
@@ -77,38 +80,49 @@ export const SearchUserPage: React.FC = () => {
 
       <div className="p-4 flex-1 overflow-y-auto">
         <p className="text-xs text-chat-textMuted mb-4 leading-relaxed">
-          Enter a registered user's Gmail / Email address to start a private 1-to-1 conversation.
+          Enter a registered user's phone number to start a private 1-to-1 conversation.
         </p>
 
         <form onSubmit={handleSearch} className="space-y-4 mb-6">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-chat-textMuted">
-              <Mail className="w-5 h-5" />
+          <div className="flex gap-2">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              className="bg-chat-card border border-white/10 text-white rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:border-brand-500"
+            >
+              <option value="+880">🇧🇩 +880</option>
+              <option value="+1">🇺🇸 +1</option>
+              <option value="+44">🇬🇧 +44</option>
+              <option value="+91">🇮🇳 +91</option>
+              <option value="+971">🇦🇪 +971</option>
+            </select>
+
+            <div className="relative flex-1">
+              <input
+                type="tel"
+                value={phoneDigits}
+                onChange={(e) => {
+                  setPhoneDigits(e.target.value.replace(/[^\d]/g, ''));
+                  setNotFound(false);
+                  setError('');
+                }}
+                placeholder="1700 000000"
+                autoFocus
+                className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl py-3 pl-4 pr-10 text-base font-medium focus:outline-none focus:border-brand-500"
+              />
+              <Search className="w-5 h-5 text-chat-textMuted absolute right-3 top-3.5" />
             </div>
-            <input
-              type="email"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setNotFound(false);
-                setError('');
-              }}
-              placeholder="friend@gmail.com"
-              autoFocus
-              className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl py-3 pl-11 pr-10 text-base font-medium focus:outline-none focus:border-brand-500 transition-colors"
-            />
-            <Search className="w-5 h-5 text-chat-textMuted absolute right-3 top-3.5" />
           </div>
 
           <button
             type="submit"
-            disabled={isSearching || !searchQuery.trim()}
+            disabled={isSearching || !phoneDigits}
             className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md shadow-brand-500/20"
           >
             {isSearching ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <span>Search User</span>
+              <span>Search</span>
             )}
           </button>
         </form>
@@ -133,7 +147,7 @@ export const SearchUserPage: React.FC = () => {
 
             <h3 className="text-base font-bold text-white mb-0.5">{searchResult.displayName}</h3>
             <p className="text-xs font-mono text-chat-textMuted mb-5">
-              {searchResult.email || searchResult.phoneNumber}
+              {formatPhoneDisplay(searchResult.phoneNumber || '')}
             </p>
 
             <button
@@ -146,7 +160,7 @@ export const SearchUserPage: React.FC = () => {
               ) : (
                 <>
                   <MessageSquare className="w-4 h-4" />
-                  <span>Start Conversation</span>
+                  <span>Message</span>
                 </>
               )}
             </button>
@@ -161,7 +175,7 @@ export const SearchUserPage: React.FC = () => {
             </div>
             <h3 className="text-sm font-semibold text-white mb-1">No account found</h3>
             <p className="text-xs text-chat-textMuted">
-              No registered user found with this email address. Make sure your friend has logged into Kotha Hobe.
+              No registered account was found for this phone number.
             </p>
           </div>
         )}

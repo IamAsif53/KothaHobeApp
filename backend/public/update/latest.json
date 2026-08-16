@@ -1,14 +1,14 @@
 {
-  "versionCode": 9,
-  "versionName": "1.0.8",
+  "versionCode": 10,
+  "versionName": "1.0.9",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "1cac3752c50d04b16ba3a16b0b43f39190455fc31b5a17802ff556545d94b946",
+  "sha256": "a444d4a0e657173de9bc7b38c4ac5f9e589809fd6b2740ef79e372793e89dfa9",
   "releaseNotes": [
-    "Release v1.0.8 (Build 9)",
-    "📧 100% Genuine Gmail & Real Email OTP verification",
-    "⚡ Instant 6-digit verification code delivered directly to your inbox",
-    "🔍 Find friends instantly by their Gmail/Email address",
-    "💬 Private real-time messaging & instant synchronization"
+    "Release v1.0.9 (Build 10)",
+    "🔥 Google Firebase Phone Auth & SMS verification",
+    "🛡️ Official google-services.json & SHA-1/SHA-256 integrity",
+    "🔍 Find friends instantly by phone number",
+    "💬 Real-time 1-to-1 private chat engine"
   ],
   "mandatory": false
 }

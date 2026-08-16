@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, ArrowLeft, RefreshCw, Mail } from 'lucide-react';
+import { formatPhoneDisplay } from '../utils/phoneFormatter';
+import { ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
 
 export const OtpPage: React.FC = () => {
   const [code, setCode] = useState(['', '', '', '', '', '']);
@@ -9,15 +10,15 @@ export const OtpPage: React.FC = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(30);
 
-  const { email, verifyOtp, sendOtp } = useAuth();
+  const { phoneNumber, verifyOtp, sendOtp } = useAuth();
   const navigate = useNavigate();
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (!email) {
+    if (!phoneNumber) {
       navigate('/login', { replace: true });
     }
-  }, [email, navigate]);
+  }, [phoneNumber, navigate]);
 
   // Resend timer countdown
   useEffect(() => {
@@ -57,7 +58,7 @@ export const OtpPage: React.FC = () => {
   const handleVerify = async (fullCode?: string) => {
     const otpCode = fullCode || code.join('');
     if (otpCode.length < 6) {
-      setError('Please enter the complete 6-digit verification code.');
+      setError('Please enter the complete 6-digit SMS verification code.');
       return;
     }
 
@@ -74,7 +75,7 @@ export const OtpPage: React.FC = () => {
         navigate('/chats', { replace: true });
       }
     } else {
-      setError(res.error || 'Invalid verification code. Please check your email.');
+      setError(res.error || 'Invalid verification code. Please check your SMS.');
     }
   };
 
@@ -82,7 +83,7 @@ export const OtpPage: React.FC = () => {
     if (resendCooldown > 0) return;
     setError('');
     try {
-      const success = await sendOtp(email);
+      const success = await sendOtp(phoneNumber, 'recaptcha-container');
       if (success) {
         setResendCooldown(30);
         setCode(['', '', '', '', '', '']);
@@ -96,22 +97,25 @@ export const OtpPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
+      {/* Invisible reCAPTCHA container for Firebase */}
+      <div id="recaptcha-container"></div>
+
       <div>
         <button
           onClick={() => navigate('/login')}
           className="flex items-center gap-2 text-chat-textMuted hover:text-white transition-colors mb-6 text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Change Email</span>
+          <span>Change Number</span>
         </button>
 
         <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
-          <Mail className="w-7 h-7 text-brand-400" />
+          <ShieldCheck className="w-7 h-7 text-brand-400" />
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Check your Gmail Inbox</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">Enter SMS Code</h1>
         <p className="text-chat-textMuted text-sm leading-relaxed mb-6">
-          We sent a 6-digit code to <strong className="text-white font-mono">{email}</strong>
+          Verification code sent to <strong className="text-white font-mono">{formatPhoneDisplay(phoneNumber)}</strong>
         </p>
 
         {/* 6 Digit OTP inputs */}
@@ -146,7 +150,7 @@ export const OtpPage: React.FC = () => {
           {isVerifying ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <span>Verify & Enter</span>
+            <span>Verify & Continue</span>
           )}
         </button>
       </div>

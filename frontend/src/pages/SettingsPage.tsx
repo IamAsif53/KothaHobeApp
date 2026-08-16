@@ -103,7 +103,7 @@ export const SettingsPage: React.FC = () => {
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-bold text-white truncate">{user?.displayName}</h2>
             <p className="text-xs font-mono text-chat-textMuted truncate">
-              {user?.email || user?.phoneNumber || 'No email attached'}
+              {formatPhoneDisplay(user?.phoneNumber || '')}
             </p>
           </div>
 

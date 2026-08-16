@@ -6,10 +6,10 @@ def versionJson = new JsonSlurper().parseText(versionFile.text)
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.kotahobe.chat"
+    namespace "com.kothahobe.chat"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.kotahobe.chat"
+        applicationId "com.kothahobe.chat"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode versionJson.versionCode

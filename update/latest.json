@@ -1,12 +1,13 @@
 {
-  "versionCode": 10,
-  "versionName": "1.0.9",
+  "versionCode": 11,
+  "versionName": "1.0.10",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a444d4a0e657173de9bc7b38c4ac5f9e589809fd6b2740ef79e372793e89dfa9",
+  "sha256": "4dbdb30f1cf42033d5afc39553a8796a62b82818459371934420b4e1a2f3e5e0",
   "releaseNotes": [
-    "Release v1.0.9 (Build 10)",
+    "Release v1.0.10 (Build 11)",
+    "🚀 Resolved launch and package activity crash",
     "🔥 Google Firebase Phone Auth & SMS verification",
-    "🛡️ Official google-services.json & SHA-1/SHA-256 integrity",
+    "🛡️ Dual package integrity in google-services.json",
     "🔍 Find friends instantly by phone number",
     "💬 Real-time 1-to-1 private chat engine"
   ],

@@ -115,13 +115,11 @@ export const ChatListPage: React.FC = () => {
           <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
         </div>
 
-        {/* Center: App Bengali Brand Typography */}
+        {/* Center: App Bengali Brand Name as Pure White Text */}
         <div className="flex items-center justify-center">
-          <img
-            src="/logo_text_white.png"
-            alt="কথা হবে"
-            className="h-8 w-auto object-contain opacity-95 select-none"
-          />
+          <span className="text-2xl font-bold text-white tracking-wide font-sans select-none drop-shadow-sm">
+            কথা হবে
+          </span>
         </div>
 
         {/* Right: Actions */}

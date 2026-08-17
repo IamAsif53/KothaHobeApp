@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
@@ -123,7 +124,18 @@ public class NativeMediaPlugin extends Plugin {
             if (audioManager != null) {
                 audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 audioManager.setMicrophoneMute(false);
-                audioManager.setSpeakerphoneOn(true); // Default to loud & clear speaker
+
+                // Modern Android 12+ (API 31+) Communication Device Routing
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
+                    for (AudioDeviceInfo device : devices) {
+                        if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                            audioManager.setCommunicationDevice(device);
+                            break;
+                        }
+                    }
+                }
+                audioManager.setSpeakerphoneOn(true);
             }
             JSObject ret = new JSObject();
             ret.put("success", true);
@@ -139,6 +151,9 @@ public class NativeMediaPlugin extends Plugin {
         try {
             AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    audioManager.clearCommunicationDevice();
+                }
                 audioManager.setSpeakerphoneOn(false);
                 audioManager.setMode(AudioManager.MODE_NORMAL);
             }
@@ -156,6 +171,16 @@ public class NativeMediaPlugin extends Plugin {
             boolean enabled = call.getBoolean("enabled", false);
             AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
+                    for (AudioDeviceInfo device : devices) {
+                        int targetType = enabled ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+                        if (device.getType() == targetType) {
+                            audioManager.setCommunicationDevice(device);
+                            break;
+                        }
+                    }
+                }
                 audioManager.setSpeakerphoneOn(enabled);
             }
             JSObject ret = new JSObject();
@@ -171,7 +196,15 @@ public class NativeMediaPlugin extends Plugin {
     public void isSpeakerphoneOn(PluginCall call) {
         try {
             AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
-            boolean isOn = audioManager != null && audioManager.isSpeakerphoneOn();
+            boolean isOn = false;
+            if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
+                    isOn = currentDevice != null && currentDevice.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+                } else {
+                    isOn = audioManager.isSpeakerphoneOn();
+                }
+            }
             JSObject ret = new JSObject();
             ret.put("isSpeakerphoneOn", isOn);
             call.resolve(ret);

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useCall } from '../../context/CallContext';
-import { Mic, MicOff, Volume2, VolumeX, PhoneOff, Phone } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, PhoneOff, Phone, Activity } from 'lucide-react';
 
 export const CallScreen: React.FC = () => {
   const {
@@ -9,11 +9,16 @@ export const CallScreen: React.FC = () => {
     callDuration,
     isMuted,
     isSpeakerOn,
+    audioStats,
     endCall,
     cancelCall,
     toggleMute,
     toggleSpeaker,
+    testMicrophone,
+    testRemoteAudio,
   } = useCall();
+
+  const [diagnosticMsg, setDiagnosticMsg] = useState<string | null>(null);
 
   if (callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
     return null;
@@ -37,7 +42,7 @@ export const CallScreen: React.FC = () => {
         return 'Ringing...';
       case 'ACCEPTED':
       case 'CONNECTING':
-        return 'Connecting...';
+        return 'Connecting audio...';
       case 'CONNECTED':
         return formatTimer(callDuration);
       case 'ENDED':
@@ -58,6 +63,26 @@ export const CallScreen: React.FC = () => {
   const isConnected = callState === 'CONNECTED';
   const isEnding = ['ENDED', 'REJECTED', 'CANCELLED', 'BUSY', 'FAILED'].includes(callState);
 
+  const handleTestMic = () => {
+    const res = testMicrophone();
+    if (res.ok) {
+      setDiagnosticMsg(`🎙️ Mic Live: ${res.trackInfo.label || 'Active'}`);
+    } else {
+      setDiagnosticMsg(`⚠️ Mic Error: ${res.error || 'Track not ready'}`);
+    }
+    setTimeout(() => setDiagnosticMsg(null), 3000);
+  };
+
+  const handleTestSpeaker = () => {
+    const res = testRemoteAudio();
+    if (res.ok) {
+      setDiagnosticMsg(`🔊 Speaker Output Active (Vol: 100%)`);
+    } else {
+      setDiagnosticMsg(`⚠️ Speaker Note: ${res.error || 'Awaiting stream'}`);
+    }
+    setTimeout(() => setDiagnosticMsg(null), 3000);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-gradient-to-b from-[#0B141A] via-[#111B21] to-[#0B141A] flex flex-col justify-between p-6 select-none animate-fadeIn">
       {/* Top Header */}
@@ -77,6 +102,23 @@ export const CallScreen: React.FC = () => {
         >
           {getStatusText()}
         </p>
+
+        {/* Live RTP Audio Traffic Indicator */}
+        {isConnected && audioStats && (
+          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/20 text-[11px] font-mono text-emerald-300">
+            <Activity className="w-3 h-3 text-emerald-400 animate-pulse" />
+            <span>
+              Out: {audioStats.packetsSent} pkts | In: {audioStats.packetsReceived} pkts
+            </span>
+          </div>
+        )}
+
+        {/* Diagnostic Pop-up Message */}
+        {diagnosticMsg && (
+          <div className="mt-2 text-xs font-medium text-amber-300 bg-amber-950/60 border border-amber-500/30 px-3 py-1 rounded-lg inline-block animate-fade-in">
+            {diagnosticMsg}
+          </div>
+        )}
       </div>
 
       {/* Center Avatar with Pulsing Halo */}
@@ -109,6 +151,26 @@ export const CallScreen: React.FC = () => {
             <div className="w-1.5 h-8 bg-emerald-400 rounded-full animate-bounce" />
             <div className="w-1.5 h-6 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
             <div className="w-1.5 h-4 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+          </div>
+        )}
+
+        {/* Diagnostic Test Buttons during Connected Call */}
+        {isConnected && (
+          <div className="flex items-center gap-3 mt-6">
+            <button
+              type="button"
+              onClick={handleTestMic}
+              className="text-[11px] font-medium text-white/70 hover:text-white bg-white/10 hover:bg-white/15 px-3 py-1 rounded-full border border-white/10 transition-colors"
+            >
+              Test Mic
+            </button>
+            <button
+              type="button"
+              onClick={handleTestSpeaker}
+              className="text-[11px] font-medium text-white/70 hover:text-white bg-white/10 hover:bg-white/15 px-3 py-1 rounded-full border border-white/10 transition-colors"
+            >
+              Test Speaker
+            </button>
           </div>
         )}
       </div>

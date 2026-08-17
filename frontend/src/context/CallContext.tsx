@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
-import { getWebRTCConfig } from '../config/webrtcConfig';
 import { soundService } from '../services/soundService';
+import { webrtcVoiceService, AudioStats } from '../services/webrtcVoiceService';
 import {
   ensureAudioPermission,
   openSystemAppSettings,
@@ -50,6 +50,7 @@ interface CallContextType {
   callDuration: number;
   isMuted: boolean;
   isSpeakerOn: boolean;
+  audioStats: AudioStats | null;
   startCall: (recipient: CallParticipant, conversationId: string) => Promise<void>;
   acceptCall: () => Promise<void>;
   rejectCall: () => void;
@@ -57,6 +58,8 @@ interface CallContextType {
   endCall: () => void;
   toggleMute: () => void;
   toggleSpeaker: () => Promise<void>;
+  testMicrophone: () => any;
+  testRemoteAudio: () => any;
   permissionAlert: string | null;
   clearPermissionAlert: () => void;
 }
@@ -74,13 +77,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [callDuration, setCallDuration] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
+  const [audioStats, setAudioStats] = useState<AudioStats | null>(null);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
 
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const callDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync refs with state
   useEffect(() => {
@@ -91,7 +92,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     activeCallRef.current = activeCall;
   }, [activeCall]);
 
-  // Clean up all WebRTC resources and audio tracks
+  // Clean up all resources
   const cleanupCall = useCallback(() => {
     soundService.stopAll();
 
@@ -100,32 +101,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callDurationTimerRef.current = null;
     }
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+      statsIntervalRef.current = null;
     }
 
-    if (pcRef.current) {
-      try {
-        pcRef.current.onicecandidate = null;
-        pcRef.current.ontrack = null;
-        pcRef.current.onconnectionstatechange = null;
-        pcRef.current.oniceconnectionstatechange = null;
-        pcRef.current.close();
-      } catch (e) {
-        // Ignore close error
-      }
-      pcRef.current = null;
-    }
-
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
-
-    pendingIceCandidatesRef.current = [];
+    webrtcVoiceService.cleanup();
     disableCallAudioMode();
     setIsMuted(false);
-    setIsSpeakerOn(false);
+    setIsSpeakerOn(true);
+    setAudioStats(null);
   }, []);
 
   // Reset to IDLE after showing transient state (e.g. Call Ended, User Busy)
@@ -143,173 +128,79 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [cleanupCall]
   );
 
-  // Mark Call as CONNECTED
+  // Transition to CONNECTED state
   const markConnected = useCallback(
     (callId: string) => {
       if (callStateRef.current !== 'CONNECTED') {
-        console.log('[WebRTC] Voice call CONNECTED successfully!');
+        console.log('[CallContext] Transitioning to CONNECTED state!');
         callStateRef.current = 'CONNECTED';
         setCallState('CONNECTED');
         soundService.stopAll();
+
+        // Enable Android hardware communication audio routing & loud speaker
         enableCallAudioMode();
 
-        // Notify socket server
+        // Notify socket server that WebRTC audio stream is verified LIVE
         if (socket) {
           socket.emit('call:connected', { callId });
         }
 
-        // Start duration timer
+        // Start connected duration timer
         if (!callDurationTimerRef.current) {
           setCallDuration(0);
           callDurationTimerRef.current = setInterval(() => {
             setCallDuration((prev) => prev + 1);
           }, 1000);
         }
+
+        // Start Live Audio Stats monitor (every 2 seconds)
+        if (!statsIntervalRef.current) {
+          statsIntervalRef.current = setInterval(async () => {
+            const stats = await webrtcVoiceService.getAudioStats();
+            setAudioStats(stats);
+            console.log(
+              `[WebRTC Stats] 📤 Out: ${stats.packetsSent} pkts (${stats.bytesSent} bytes) | 📥 In: ${stats.packetsReceived} pkts (${stats.bytesReceived} bytes)`
+            );
+          }, 2000);
+        }
       }
     },
     [socket]
   );
 
-  // Handle WebRTC Peer Connection setup
-  const createPeerConnection = useCallback(
-    (callId: string): RTCPeerConnection => {
-      if (pcRef.current) {
-        try {
-          pcRef.current.close();
-        } catch (e) {}
-        pcRef.current = null;
-      }
-
-      const config = getWebRTCConfig();
-      console.log('[WebRTC] Initializing RTCPeerConnection with STUN servers:', config.iceServers);
-      const pc = new RTCPeerConnection(config);
-      pcRef.current = pc;
-
-      // 1. ICE Candidate Relay
-      pc.onicecandidate = (event) => {
-        if (event.candidate && socket) {
-          socket.emit('call:ice-candidate', {
-            callId,
-            candidate: event.candidate.toJSON(),
-          });
-        }
-      };
-
-      // 2. Remote Audio Track Received
-      pc.ontrack = (event) => {
-        console.log('[WebRTC] Remote audio track received:', event.track.kind, event.streams);
-        try {
-          const remoteStream =
-            event.streams && event.streams.length > 0 && event.streams[0]
-              ? event.streams[0]
-              : new MediaStream([event.track]);
-
-          let audio =
-            remoteAudioRef.current ||
-            (document.getElementById('kothahobe-remote-audio') as HTMLAudioElement);
-
-          if (!audio) {
-            audio = document.createElement('audio');
-            audio.id = 'kothahobe-remote-audio';
-            audio.autoplay = true;
-            audio.setAttribute('playsinline', 'true');
-            (audio as any).playsInline = true;
-            document.body.appendChild(audio);
-            remoteAudioRef.current = audio;
+  // Setup WebRTC Engine with Callbacks
+  const setupWebRTC = useCallback(
+    (callId: string) => {
+      webrtcVoiceService.createPeerConnection(
+        callId,
+        // On local ICE candidate
+        (candidate) => {
+          if (socket) {
+            socket.emit('call:ice-candidate', { callId, candidate });
           }
-
-          audio.srcObject = remoteStream;
-          audio.muted = false;
-          audio.volume = 1.0;
-
-          audio
-            .play()
-            .then(() => {
-              console.log('[WebRTC] Remote audio output playing successfully');
-              markConnected(callId);
-            })
-            .catch((err) => {
-              console.warn('[WebRTC] Remote audio play promise catch:', err);
-              markConnected(callId);
-            });
-        } catch (err) {
-          console.error('[WebRTC] Error in ontrack handler:', err);
-        }
-      };
-
-      // 3. WebRTC Connection State Machine
-      pc.onconnectionstatechange = () => {
-        console.log('[WebRTC] PeerConnection State:', pc.connectionState);
-        if (pc.connectionState === 'connected') {
+        },
+        // On remote track received
+        (track, stream) => {
+          console.log('[CallContext] Remote track callback received:', track.id);
           markConnected(callId);
-        } else if (pc.connectionState === 'failed') {
-          console.warn('[WebRTC] Connection failed, attempting ICE restart...');
-          try {
-            pc.restartIce();
-          } catch (e) {
+        },
+        // On connection state change
+        (state, iceState) => {
+          console.log(`[CallContext] WebRTC State Changed: ${state}, ICE: ${iceState}`);
+          if (state === 'connected' || iceState === 'connected' || iceState === 'completed') {
+            markConnected(callId);
+          } else if (state === 'failed') {
             soundService.playCallEndTone();
             setCallState('FAILED');
             callStateRef.current = 'FAILED';
             if (socket) socket.emit('call:failed', { callId });
             resetToIdleAfterDelay(2500);
           }
-        } else if (pc.connectionState === 'closed') {
-          cleanupCall();
         }
-      };
-
-      // 4. ICE Connection State Monitoring
-      pc.oniceconnectionstatechange = () => {
-        console.log('[WebRTC] ICE Connection State:', pc.iceConnectionState);
-        if (
-          pc.iceConnectionState === 'connected' ||
-          pc.iceConnectionState === 'completed'
-        ) {
-          markConnected(callId);
-        } else if (pc.iceConnectionState === 'failed') {
-          console.warn('[WebRTC] ICE failed, attempting restart...');
-          try {
-            pc.restartIce();
-          } catch (e) {
-            console.error('[WebRTC] ICE restart failed:', e);
-          }
-        }
-      };
-
-      return pc;
+      );
     },
-    [socket, markConnected, resetToIdleAfterDelay, cleanupCall]
+    [socket, markConnected, resetToIdleAfterDelay]
   );
-
-  // Request Microphone Stream with Acoustic Processing
-  const getMicrophoneAudioStream = async (): Promise<MediaStream> => {
-    try {
-      // First try with full hardware AEC / NS / AGC
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
-      localStreamRef.current = stream;
-      return stream;
-    } catch (err: any) {
-      console.warn('[WebRTC] Advanced audio constraints failed, trying basic audio: true fallback...', err);
-      try {
-        const fallbackStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
-        localStreamRef.current = fallbackStream;
-        return fallbackStream;
-      } catch (fallbackErr: any) {
-        console.error('[WebRTC] Microphone getUserMedia fatal error:', fallbackErr);
-        throw fallbackErr;
-      }
-    }
-  };
 
   // Start Outgoing Voice Call
   const startCall = async (recipient: CallParticipant, conversationId: string) => {
@@ -319,11 +210,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (callStateRef.current !== 'IDLE') {
-      console.warn('[Call] Cannot initiate call: call already in progress (state:', callStateRef.current, ')');
+      console.warn('[CallContext] Cannot initiate call: call in progress (state:', callStateRef.current, ')');
       return;
     }
 
-    // 1. Verify Microphone Permission
+    // 1. Check microphone permission
     const perm = await ensureAudioPermission();
     if (!perm.granted) {
       setPermissionAlert(
@@ -338,8 +229,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 2. Prepare Local Audio Stream
-      const stream = await getMicrophoneAudioStream();
+      // 2. Start local microphone stream
+      await webrtcVoiceService.startLocalMicrophone();
 
       // 3. Set Outgoing Call State
       const newSession: CallSession = {
@@ -369,7 +260,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callType: 'voice',
       });
     } catch (err: any) {
-      console.error('[Call] Start call error:', err);
+      console.error('[CallContext] Start call error:', err);
       soundService.stopAll();
       setCallState('IDLE');
       callStateRef.current = 'IDLE';
@@ -388,7 +279,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCallState('CONNECTING');
     callStateRef.current = 'CONNECTING';
 
-    // 1. Verify Microphone Permission
+    // 1. Check microphone permission
     const perm = await ensureAudioPermission();
     if (!perm.granted) {
       setPermissionAlert('Microphone permission is required to accept call.');
@@ -400,17 +291,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 2. Capture Microphone Stream
-      const stream = await getMicrophoneAudioStream();
+      // 2. Start local microphone stream
+      await webrtcVoiceService.startLocalMicrophone();
 
-      // 3. Create WebRTC Peer Connection
-      const pc = createPeerConnection(current.callId);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      // 3. Setup WebRTC PeerConnection
+      setupWebRTC(current.callId);
 
       // 4. Emit Call Accepted Signal to Caller
       socket.emit('call:accept', { callId: current.callId });
     } catch (err) {
-      console.error('[Call] Accept call error:', err);
+      console.error('[CallContext] Accept call error:', err);
       rejectCall();
     }
   };
@@ -453,14 +343,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Toggle Microphone Mute
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        const nextMuted = !isMuted;
-        audioTrack.enabled = !nextMuted;
-        setIsMuted(nextMuted);
-      }
-    }
+    const nextMuted = !isMuted;
+    webrtcVoiceService.setMuted(nextMuted);
+    setIsMuted(nextMuted);
   };
 
   // Toggle Physical Loudspeaker
@@ -470,7 +355,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsSpeakerOn(nextSpeaker);
   };
 
-  // Attach Socket.IO Call Signaling Listeners
+  // Diagnostic Test Helpers
+  const testMicrophone = () => webrtcVoiceService.testLocalMicrophone();
+  const testRemoteAudio = () => webrtcVoiceService.testRemotePlayback();
+
+  // Attach Socket.IO Signaling Listeners
   useEffect(() => {
     if (!socket) return;
 
@@ -507,7 +396,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callStateRef.current = 'RINGING';
       soundService.startRingtone();
 
-      // Send ringing acknowledgment back to caller
       socket.emit('call:ringing', { callId: data.callId });
     };
 
@@ -520,36 +408,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // 4. Caller notified that receiver accepted -> start WebRTC Offer
+    // 4. Caller notified that receiver accepted -> create WebRTC Offer
     const handleCallAccepted = async (data: { callId: string }) => {
-      console.log('[Signaling] Receiver accepted call:', data.callId, 'Starting WebRTC Offer...');
+      console.log('[Signaling] Receiver accepted call:', data.callId, 'Generating SDP Offer...');
       soundService.stopAll();
       setCallState('CONNECTING');
       callStateRef.current = 'CONNECTING';
 
       try {
-        const pc = createPeerConnection(data.callId);
-
-        // Attach local microphone audio track to PeerConnection
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach((track) => {
-            pc.addTrack(track, localStreamRef.current!);
-          });
-        }
-
-        // Create SDP Offer
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: false,
-        });
-        await pc.setLocalDescription(offer);
-
+        setupWebRTC(data.callId);
+        const offer = await webrtcVoiceService.createOffer();
         socket.emit('call:offer', {
           callId: data.callId,
           sdp: offer,
         });
       } catch (err) {
-        console.error('[WebRTC] Create offer error:', err);
+        console.error('[CallContext] Create offer error:', err);
         endCall();
       }
     };
@@ -557,88 +431,34 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 5. Receiver receives SDP Offer -> creates SDP Answer
     const handleCallOffer = async (data: { callId: string; sdp: any }) => {
       console.log('[Signaling] Received SDP Offer for call:', data.callId);
-      const pc = pcRef.current;
-      if (!pc) return;
-
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-
-        // Flush any buffered ICE candidates that arrived before remoteDescription
-        while (pendingIceCandidatesRef.current.length > 0) {
-          const candidate = pendingIceCandidatesRef.current.shift();
-          if (candidate) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-              console.warn('[WebRTC] Add pending ICE candidate note:', e);
-            }
-          }
-        }
-
-        // Ensure receiver microphone tracks are attached to PC before creating Answer
-        if (localStreamRef.current && pc.getSenders().length === 0) {
-          console.log('[WebRTC] Attaching local stream tracks to receiver PC before creating Answer');
-          localStreamRef.current.getTracks().forEach((track) => {
-            pc.addTrack(track, localStreamRef.current!);
-          });
-        }
-
-        // Create SDP Answer
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
+        await webrtcVoiceService.handleOffer(data.sdp);
+        const answer = await webrtcVoiceService.createAnswer();
         socket.emit('call:answer', {
           callId: data.callId,
           sdp: answer,
         });
       } catch (err) {
-        console.error('[WebRTC] Set offer / create answer error:', err);
+        console.error('[CallContext] Handle offer / create answer error:', err);
       }
     };
 
     // 6. Caller receives SDP Answer
     const handleCallAnswer = async (data: { callId: string; sdp: any }) => {
       console.log('[Signaling] Received SDP Answer for call:', data.callId);
-      const pc = pcRef.current;
-      if (!pc) return;
-
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-
-        // Flush any buffered ICE candidates
-        while (pendingIceCandidatesRef.current.length > 0) {
-          const candidate = pendingIceCandidatesRef.current.shift();
-          if (candidate) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-              console.warn('[WebRTC] Add pending ICE candidate note:', e);
-            }
-          }
-        }
+        await webrtcVoiceService.handleAnswer(data.sdp);
       } catch (err) {
-        console.error('[WebRTC] Set remote answer error:', err);
+        console.error('[CallContext] Handle answer error:', err);
       }
     };
 
-    // 7. ICE Candidate Exchange
+    // 7. ICE Candidate Relay
     const handleIceCandidate = async (data: { callId: string; candidate: any }) => {
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      try {
-        if (pc.remoteDescription && pc.remoteDescription.type) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } else {
-          // Buffer candidate until remote description is ready
-          pendingIceCandidatesRef.current.push(data.candidate);
-        }
-      } catch (err) {
-        console.warn('[WebRTC] Add ICE candidate note:', err);
-      }
+      await webrtcVoiceService.addIceCandidate(data.candidate);
     };
 
-    // 8. Call Connected notification from server
+    // 8. Call Connected confirmation from server
     const handleCallConnected = (data: { callId: string }) => {
       console.log('[Signaling] Server confirmed call connected:', data.callId);
       markConnected(data.callId);
@@ -741,7 +561,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('call:failed', handleCallFailed);
       socket.off('call:error', handleCallError);
     };
-  }, [socket, user, createPeerConnection, markConnected, resetToIdleAfterDelay]);
+  }, [socket, user, setupWebRTC, markConnected, resetToIdleAfterDelay]);
 
   // Clean up on component unmount
   useEffect(() => {
@@ -758,6 +578,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callDuration,
         isMuted,
         isSpeakerOn,
+        audioStats,
         startCall,
         acceptCall,
         rejectCall,
@@ -765,6 +586,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         endCall,
         toggleMute,
         toggleSpeaker,
+        testMicrophone,
+        testRemoteAudio,
         permissionAlert,
         clearPermissionAlert: () => setPermissionAlert(null),
       }}

@@ -5,11 +5,16 @@ import { IReplyTo, IAttachment } from '../../types';
 import { ensureAudioPermission, openSystemAppSettings } from '../../services/nativeMediaService';
 
 interface MessageComposerProps {
-  onSend: (text: string, type?: 'text' | 'image' | 'audio' | 'document', attachment?: IAttachment, replyTo?: IReplyTo) => void;
+  onSend: (
+    text: string,
+    type?: 'text' | 'image' | 'audio' | 'document',
+    attachment?: IAttachment,
+    replyTo?: IReplyTo,
+    localFile?: File | Blob
+  ) => void;
   onTyping: () => void;
   replyingTo?: IReplyTo | null;
   onCancelReply?: () => void;
-  onUploadFile: (file: File | Blob, fileName: string, type: 'image' | 'audio' | 'document') => Promise<IAttachment | null>;
   disabled?: boolean;
 }
 
@@ -18,7 +23,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onTyping,
   replyingTo,
   onCancelReply,
-  onUploadFile,
   disabled = false,
 }) => {
   const [text, setText] = useState('');
@@ -27,7 +31,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
   // Pending attachment preview state
   const [pendingFile, setPendingFile] = useState<{ file: File; type: 'image' | 'document'; previewUrl?: string } | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   // Audio Recording State
   const [isRecording, setIsRecording] = useState(false);
@@ -83,23 +86,31 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  // 1. Send Text / Caption Message
-  const handleSend = async () => {
-    if (disabled || isUploading) return;
+  // 1. Send Text / Image / Document Message Instantly
+  const handleSend = () => {
+    if (disabled) return;
 
     if (pendingFile) {
-      setIsUploading(true);
-      try {
-        const attachment = await onUploadFile(pendingFile.file, pendingFile.file.name, pendingFile.type);
-        if (attachment) {
-          onSend(text.trim(), pendingFile.type, attachment, replyingTo || undefined);
-          setPendingFile(null);
-          setText('');
-          if (onCancelReply) onCancelReply();
-        }
-      } finally {
-        setIsUploading(false);
-      }
+      const file = pendingFile.file;
+      const previewUrl = pendingFile.previewUrl || URL.createObjectURL(file);
+      const mimeType = file.type || (pendingFile.type === 'image' ? 'image/jpeg' : 'application/pdf');
+
+      onSend(
+        text.trim(),
+        pendingFile.type,
+        {
+          url: previewUrl,
+          fileName: file.name,
+          mimeType,
+          size: file.size,
+        },
+        replyingTo || undefined,
+        file
+      );
+
+      setPendingFile(null);
+      setText('');
+      if (onCancelReply) onCancelReply();
       return;
     }
 
@@ -136,7 +147,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const handleMicClick = async () => {
     if (disabled || isRecording) return;
 
-    // Check & request runtime microphone permission
     const perm = await ensureAudioPermission();
     if (!perm.granted) {
       if (perm.permanentlyDenied) {
@@ -180,7 +190,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         }
       };
 
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         if (activeStreamRef.current) {
           activeStreamRef.current.getTracks().forEach((track) => track.stop());
           activeStreamRef.current = null;
@@ -190,19 +200,26 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: finalType });
 
         if (audioChunksRef.current.length > 0 && recordingSeconds >= 1) {
-          setIsUploading(true);
-          try {
-            const ext = finalType.includes('mp4') ? 'm4a' : 'webm';
-            const fileName = `voice_${Date.now()}.${ext}`;
-            const attachment = await onUploadFile(audioBlob, fileName, 'audio');
-            if (attachment) {
-              attachment.duration = recordingSeconds;
-              onSend('', 'audio', attachment, replyingTo || undefined);
-              if (onCancelReply) onCancelReply();
-            }
-          } finally {
-            setIsUploading(false);
-          }
+          const ext = finalType.includes('mp4') ? 'm4a' : 'webm';
+          const fileName = `voice_${Date.now()}.${ext}`;
+          const localBlobUrl = URL.createObjectURL(audioBlob);
+
+          // Instant 0ms Chat Display!
+          onSend(
+            '',
+            'audio',
+            {
+              url: localBlobUrl,
+              fileName,
+              mimeType: finalType,
+              size: audioBlob.size,
+              duration: recordingSeconds,
+            },
+            replyingTo || undefined,
+            audioBlob
+          );
+
+          if (onCancelReply) onCancelReply();
         }
       };
 
@@ -495,7 +512,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               placeholder={pendingFile ? 'Add a caption...' : 'Type a message...'}
-              disabled={disabled || isUploading}
+              disabled={disabled}
               rows={1}
               className="w-full bg-transparent text-chat-textPrimary placeholder:text-chat-textMuted resize-none outline-none text-[15px] leading-relaxed max-h-[120px]"
             />
@@ -506,17 +523,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <button
               type="button"
               onClick={handleSend}
-              disabled={isUploading || disabled}
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md bg-brand-500 hover:bg-brand-600 text-white active:scale-95 ${
-                isUploading ? 'opacity-50 cursor-wait' : ''
-              }`}
+              disabled={disabled}
+              className="w-11 h-11 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md bg-brand-500 hover:bg-brand-600 text-white active:scale-95"
               title="Send"
             >
-              {isUploading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Send className="w-5 h-5 ml-0.5" />
-              )}
+              <Send className="w-5 h-5 ml-0.5" />
             </button>
           ) : (
             <button

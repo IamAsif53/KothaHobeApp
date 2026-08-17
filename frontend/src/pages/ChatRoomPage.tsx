@@ -402,33 +402,13 @@ export const ChatRoomPage: React.FC = () => {
     }
   };
 
-  // Upload File Helper
-  const handleUploadFile = async (
-    file: File | Blob,
-    fileName: string,
-    type: 'image' | 'audio' | 'document'
-  ): Promise<IAttachment | null> => {
-    if (!conversationId) return null;
-    try {
-      const res = await uploadMediaApi(file, fileName, conversationId, type);
-      if (res.success && res.attachment) {
-        return res.attachment;
-      }
-      alert(res.message || 'File upload failed');
-      return null;
-    } catch (err) {
-      console.error('[Upload] Error:', err);
-      alert('Network error while uploading file');
-      return null;
-    }
-  };
-
-  // Send Message
+  // Send Message (Instant 0ms UI Rendering + Background Upload)
   const handleSendMessage = (
     text: string,
     type: 'text' | 'image' | 'audio' | 'document' = 'text',
     attachment?: IAttachment,
-    replyTo?: IReplyTo
+    replyTo?: IReplyTo,
+    localFile?: File | Blob
   ) => {
     if (!conversationId || !recipient) return;
 
@@ -448,6 +428,7 @@ export const ChatRoomPage: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
+    // 1. Instant 0ms display in chat
     setMessages((prev) => {
       const updated = [...prev, optimisticMessage];
       persistMessages(updated);
@@ -457,7 +438,64 @@ export const ChatRoomPage: React.FC = () => {
     requestAnimationFrame(() => scrollToBottom(true));
     setReplyingTo(null);
 
-    // Send via socket
+    // 2. If a local media file needs background uploading
+    if (localFile && attachment) {
+      uploadMediaApi(localFile, attachment.fileName, conversationId, type)
+        .then((res) => {
+          if (res.success && res.attachment) {
+            const serverAttachment: IAttachment = {
+              ...res.attachment,
+              duration: attachment.duration,
+            };
+
+            // Update optimistic message with real server attachment URL
+            setMessages((prev) => {
+              const updated = prev.map((m) =>
+                m.clientMessageId === tempId ? { ...m, attachment: serverAttachment } : m
+              );
+              persistMessages(updated);
+              return updated;
+            });
+
+            // Dispatch socket event to recipient
+            if (socket && isConnected) {
+              socket.emit('message:send', {
+                conversationId,
+                receiverId: recipient._id,
+                text: text.trim(),
+                clientMessageId: tempId,
+                type,
+                attachment: serverAttachment,
+                replyTo,
+              });
+            }
+          } else {
+            // Mark failed on server error
+            setMessages((prev) => {
+              const updated = prev.map((m) =>
+                m.clientMessageId === tempId ? { ...m, status: 'failed' as const } : m
+              );
+              persistMessages(updated);
+              return updated;
+            });
+            showToast(res.message || 'Upload failed. Tap to retry.');
+          }
+        })
+        .catch((err) => {
+          console.error('[Upload] Background error:', err);
+          setMessages((prev) => {
+            const updated = prev.map((m) =>
+              m.clientMessageId === tempId ? { ...m, status: 'failed' as const } : m
+            );
+            persistMessages(updated);
+            return updated;
+          });
+          showToast('Network error while uploading.');
+        });
+      return;
+    }
+
+    // 3. Regular text message dispatch
     if (socket && isConnected) {
       socket.emit('message:send', {
         conversationId,
@@ -741,7 +779,6 @@ export const ChatRoomPage: React.FC = () => {
         onTyping={handleTyping}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
-        onUploadFile={handleUploadFile}
         disabled={!recipient}
       />
     </div>

@@ -52,7 +52,13 @@ export async function uploadMediaApi(
 
 export function getMediaUrl(relativeUrl: string): string {
   if (!relativeUrl) return '';
-  if (relativeUrl.startsWith('http')) return relativeUrl;
+  if (
+    relativeUrl.startsWith('blob:') ||
+    relativeUrl.startsWith('data:') ||
+    relativeUrl.startsWith('http')
+  ) {
+    return relativeUrl;
+  }
 
   const token = getAuthToken();
   const baseUrl =

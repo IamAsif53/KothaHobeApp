@@ -29,3 +29,11 @@ export async function searchUserByUsernameApi(username: string): Promise<UserRes
 export async function searchUserApi(query: string): Promise<UserResponse> {
   return apiFetch<UserResponse>(`/users/search?query=${encodeURIComponent(query)}`);
 }
+
+export async function registerPushTokenApi(token: string): Promise<{ success: boolean; message?: string }> {
+  return apiFetch<{ success: boolean; message?: string }>('/users/push-token', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+

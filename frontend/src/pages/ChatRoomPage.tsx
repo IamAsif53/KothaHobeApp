@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchMessagesApi } from '../api/messageApi';
 import { fetchConversations } from '../api/conversationApi';
@@ -57,11 +57,36 @@ export const ChatRoomPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Set Active Conversation ID so system doesn't ping notifications for current room
+  // Debounced LocalStorage save (prevents main thread stutter during rapid sending)
+  const persistMessages = useCallback((msgs: IMessage[]) => {
+    if (!conversationId) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(msgs));
+      } catch {}
+    }, 400);
+  }, [conversationId]);
+
+  // Instant hardware scroll (replaces heavy animation loop with fluid 60fps positioning)
+  const scrollToBottom = useCallback((instant = false) => {
+    if (scrollContainerRef.current) {
+      if (instant) {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      } else {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }
+    }
+  }, []);
+
+  // Set Active Conversation ID
   useEffect(() => {
     if (conversationId) {
       setActiveConversationId(conversationId);
@@ -97,22 +122,22 @@ export const ChatRoomPage: React.FC = () => {
                 !msgRes.messages.some((serverM) => serverM.clientMessageId === m.clientMessageId)
             );
             const merged = [...msgRes.messages, ...pendingOptimistic];
-            localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(merged));
+            persistMessages(merged);
             return merged;
           });
           setHasMore(msgRes.hasMore);
           setOldestCursor(msgRes.oldestCursor);
         }
       } catch (error) {
-        console.warn('[ChatRoom] Background sync notice (offline or network pause)');
+        console.warn('[ChatRoom] Background sync notice');
       } finally {
         setLoading(false);
-        setTimeout(() => scrollToBottom(), 80);
+        setTimeout(() => scrollToBottom(true), 60);
       }
     };
 
     initChat();
-  }, [conversationId]);
+  }, [conversationId, persistMessages, scrollToBottom]);
 
   // Join socket conversation room & mark messages as read
   useEffect(() => {
@@ -138,16 +163,16 @@ export const ChatRoomPage: React.FC = () => {
             return prev;
           }
           const updated = [...prev, newMsg];
-          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+          persistMessages(updated);
           return updated;
         });
 
         markAsRead(conversationId);
-        scrollToBottom();
+        scrollToBottom(true);
       }
     };
 
-    // Message sent acknowledgement from server (safe merge)
+    // Message sent acknowledgement from server (fluid merge)
     const handleMessageSent = (sentMsg: IMessage) => {
       if (sentMsg.conversationId === conversationId) {
         setMessages((prev) => {
@@ -156,7 +181,7 @@ export const ChatRoomPage: React.FC = () => {
               ? { ...m, ...sentMsg, text: sentMsg.text || m.text, status: sentMsg.status || 'sent' }
               : m
           );
-          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+          persistMessages(updated);
           return updated;
         });
       }
@@ -220,7 +245,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('user:online', handleUserOnline);
       socket.off('user:offline', handleUserOffline);
     };
-  }, [socket, conversationId, recipient]);
+  }, [socket, conversationId, recipient, persistMessages, scrollToBottom]);
 
   // Load older messages (pagination)
   const handleLoadMore = async () => {
@@ -241,10 +266,6 @@ export const ChatRoomPage: React.FC = () => {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   const handleSendMessage = (text: string) => {
     if (!conversationId || !recipient || !text.trim()) return;
 
@@ -261,13 +282,14 @@ export const ChatRoomPage: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
-    // ⚡ Instant Optimistic Message Render with Zero Flicker
+    // ⚡ Instant Optimistic Message Render in 60fps without lag
     setMessages((prev) => {
       const updated = [...prev, optimisticMessage];
-      localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+      persistMessages(updated);
       return updated;
     });
-    setTimeout(() => scrollToBottom(), 40);
+
+    scrollToBottom(true);
 
     // Send via socket or offline outbox
     sendMessage(conversationId, recipient._id, text.trim(), tempId);
@@ -398,8 +420,6 @@ export const ChatRoomPage: React.FC = () => {
             );
           })
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Message Composer */}

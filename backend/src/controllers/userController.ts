@@ -194,3 +194,29 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
     res.status(500).json({ success: false, message: 'Failed to search user' });
   }
 };
+
+export const registerPushToken = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { token } = req.body;
+    if (!token || typeof token !== 'string' || token.length < 10) {
+      res.status(400).json({ success: false, message: 'Invalid push token' });
+      return;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { fcmTokens: token.trim() },
+    });
+
+    console.log(`[FCM] Registered device push token for user ${req.user._id}`);
+    res.status(200).json({ success: true, message: 'Push token registered' });
+  } catch (error) {
+    console.error('[FCM] Token registration error:', error);
+    res.status(500).json({ success: false, message: 'Failed to register push token' });
+  }
+};
+

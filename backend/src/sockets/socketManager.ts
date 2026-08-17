@@ -3,6 +3,7 @@ import { verifyToken } from '../utils/jwt';
 import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
 import { Message, MessageStatus } from '../models/Message';
+import { sendPushNotification } from '../services/notificationService';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -136,6 +137,19 @@ export function setupSocketIO(io: SocketIOServer): void {
 
         // 2. Emit to recipient in real time
         io.to(`user:${receiverId}`).emit('message:new', message);
+
+        // 3. Dispatch FCM Push Notification (arrives even if app is closed or phone is locked!)
+        User.findById(userId)
+          .select('displayName username')
+          .then((senderUser) => {
+            sendPushNotification({
+              recipientId: receiverId,
+              senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+              messageText: text.trim(),
+              conversationId,
+            }).catch((err) => console.warn('[Push] Dispatch notice:', err));
+          })
+          .catch(() => {});
 
         // 3. If delivered instantly, inform sender
         if (message.status === 'delivered') {

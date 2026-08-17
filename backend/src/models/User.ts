@@ -12,6 +12,7 @@ export interface IUser extends Document {
   phoneNumber?: string;
   phoneVerified?: boolean;
   firebaseUid?: string;
+  fcmTokens: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +71,10 @@ const UserSchema: Schema = new Schema(
     },
     firebaseUid: {
       type: String,
+    },
+    fcmTokens: {
+      type: [String],
+      default: [],
     },
   },
   {

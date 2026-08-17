@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { IMessage } from '../types';
+import { registerPushTokenApi } from '../api/userApi';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -46,33 +48,56 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     activeChatRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // Request Notification Permissions on App Start
+  // Register Native FCM Push Notifications on Android
   useEffect(() => {
-    const initNotifications = async () => {
+    if (!token || !user || !Capacitor.isNativePlatform()) return;
+
+    const setupPush = async () => {
       try {
-        if (Capacitor.isNativePlatform()) {
-          const perm = await LocalNotifications.checkPermissions();
-          if (perm.display !== 'granted') {
-            await LocalNotifications.requestPermissions();
-          }
-          // Create Notification Channel for Android
-          await LocalNotifications.createChannel({
-            id: 'kotha_hobe_messages',
-            name: 'Chat Messages',
-            description: 'Incoming message notifications from Kotha Hobe',
-            importance: 5, // High importance (heads-up banner + sound)
-            visibility: 1,
-            sound: 'default',
-            vibration: true,
-          });
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+          permStatus = await PushNotifications.requestPermissions();
         }
+
+        if (permStatus.receive === 'granted') {
+          await PushNotifications.register();
+        }
+
+        // Setup notification channel for Android heads-up display
+        await PushNotifications.createChannel({
+          id: 'kotha_hobe_messages',
+          name: 'Chat Messages',
+          description: 'Incoming message notifications from Kotha Hobe',
+          importance: 5,
+          visibility: 1,
+          sound: 'default',
+          vibration: true,
+        });
       } catch (err) {
-        console.warn('[Notifications] Init warning:', err);
+        console.warn('[PushNotifications] Setup warning:', err);
       }
     };
 
-    initNotifications();
-  }, []);
+    setupPush();
+
+    const regListener = PushNotifications.addListener('registration', async (fcmToken) => {
+      console.log('[PushNotifications] Registered FCM token:', fcmToken.value);
+      try {
+        await registerPushTokenApi(fcmToken.value);
+      } catch (e) {
+        console.warn('[PushNotifications] Failed to sync FCM token with backend:', e);
+      }
+    });
+
+    const errorListener = PushNotifications.addListener('registrationError', (error) => {
+      console.warn('[PushNotifications] Registration error:', error);
+    });
+
+    return () => {
+      regListener.then((h) => h.remove()).catch(() => {});
+      errorListener.then((h) => h.remove()).catch(() => {});
+    };
+  }, [token, user]);
 
   // Helper to get stored outbox
   const getStoredOutbox = (): OutboxItem[] => {
@@ -169,17 +194,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       saveOutbox(filtered);
     });
 
-    // Handle Incoming Device Notifications for incoming messages
+    // Handle Local Fallback Notification if in another screen inside app
     newSocket.on('message:new', async (newMsg: IMessage) => {
       try {
-        // If message is from current active chat room, don't trigger system notification banner
         if (activeChatRef.current === newMsg.conversationId) {
           return;
         }
 
         const soundPref = localStorage.getItem('kotha_hobe_sound_enabled') !== 'false';
         const previewPref = localStorage.getItem('kotha_hobe_preview_enabled') !== 'false';
-        const vibratePref = localStorage.getItem('kotha_hobe_vibrate_enabled') !== 'false';
 
         let senderName = 'New Message';
         try {
@@ -210,14 +233,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               },
             ],
           });
-        } else if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(senderName, {
-            body: bodyText,
-            icon: '/icon.png',
-          });
         }
       } catch (err) {
-        console.warn('[Notifications] Trigger warning:', err);
+        console.warn('[Notifications] Trigger notice:', err);
       }
     });
 
@@ -247,7 +265,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     text: string,
     clientMessageId: string
   ) => {
-    // 1. Add to Outbox Queue (ensuring it is never lost even if offline)
     const outbox = getStoredOutbox();
     if (!outbox.some((item) => item.clientMessageId === clientMessageId)) {
       outbox.push({
@@ -260,7 +277,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       saveOutbox(outbox);
     }
 
-    // 2. If connected, emit immediately
     if (socket && isConnected) {
       socket.emit('message:send', {
         conversationId,
@@ -269,8 +285,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         clientMessageId,
         type: 'text',
       });
-    } else {
-      console.log('[Socket] Offline: message queued in Outbox and will send automatically upon reconnect');
     }
   };
 

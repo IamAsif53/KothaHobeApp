@@ -14,6 +14,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 }) => {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastTypingCallRef = useRef<number>(0);
 
   // Auto-resize textarea based on text lines (up to max 5 lines)
   useEffect(() => {
@@ -24,8 +25,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   }, [text]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
-    if (e.target.value.trim().length > 0) {
+    const val = e.target.value;
+    setText(val);
+
+    // Throttle typing notification to at most once every 1.8 seconds
+    const now = Date.now();
+    if (val.trim().length > 0 && now - lastTypingCallRef.current > 1800) {
+      lastTypingCallRef.current = now;
       onTyping();
     }
   };
@@ -77,7 +83,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         disabled={!text.trim() || disabled}
         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md ${
           text.trim() && !disabled
-            ? 'bg-brand-500 hover:bg-brand-600 text-white scale-100'
+            ? 'bg-brand-500 hover:bg-brand-600 text-white scale-100 active:scale-95'
             : 'bg-white/10 text-white/30 cursor-not-allowed scale-95'
         }`}
       >

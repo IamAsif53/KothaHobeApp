@@ -13,6 +13,7 @@ import {
 import { CURRENT_VERSION } from './config/version';
 import { App as CapApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications, ActionPerformed } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 
 import { SplashPage } from './pages/SplashPage';
@@ -52,14 +53,15 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const lastBackPressRef = useRef<number>(0);
 
-  // Native Device Notification Click Navigation
+  // Native Device Push & Local Notification Click Navigation
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    let notifHandle: any = null;
+    let localHandle: any = null;
+    let pushHandle: any = null;
 
     const setupNotifAction = async () => {
-      notifHandle = await LocalNotifications.addListener(
+      localHandle = await LocalNotifications.addListener(
         'localNotificationActionPerformed',
         (notificationAction) => {
           const extra = notificationAction.notification.extra;
@@ -68,14 +70,23 @@ export const AppContent: React.FC = () => {
           }
         }
       );
+
+      pushHandle = await PushNotifications.addListener(
+        'pushNotificationActionPerformed',
+        (notificationAction: ActionPerformed) => {
+          const data = notificationAction.notification.data;
+          if (data && data.conversationId) {
+            navigate(`/chat/${data.conversationId}`, { replace: false });
+          }
+        }
+      );
     };
 
     setupNotifAction();
 
     return () => {
-      if (notifHandle) {
-        notifHandle.remove();
-      }
+      if (localHandle) localHandle.remove();
+      if (pushHandle) pushHandle.remove();
     };
   }, [navigate]);
 

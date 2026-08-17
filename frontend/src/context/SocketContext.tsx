@@ -30,6 +30,7 @@ interface SocketContextType {
   stopTyping: (conversationId: string, receiverId: string) => void;
   activeConversationId: string | null;
   setActiveConversationId: (id: string | null) => void;
+  pushToken: string | null;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -40,6 +41,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
 
   const typingTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
   const activeChatRef = useRef<string | null>(null);
@@ -48,54 +50,94 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     activeChatRef.current = activeConversationId;
   }, [activeConversationId]);
 
-  // Register Native FCM Push Notifications on Android
+  // Complete FCM Push Notification Lifecycle on Native Android
   useEffect(() => {
     if (!token || !user || !Capacitor.isNativePlatform()) return;
 
-    const setupPush = async () => {
+    let isMounted = true;
+
+    const initializeFCM = async () => {
       try {
+        console.log('[Push] Initializing Push Notifications...');
+
+        // 1. Create Android Notification Channel
+        try {
+          await PushNotifications.createChannel({
+            id: 'chat_messages',
+            name: 'Chat Messages',
+            description: 'Incoming messages from Kotha Hobe',
+            importance: 5,
+            visibility: 1,
+            sound: 'default',
+            vibration: true,
+            lights: true,
+          });
+          console.log('[Push] Channel "chat_messages" created with HIGH importance');
+        } catch (e) {
+          console.warn('[Push] Channel creation note:', e);
+        }
+
+        // 2. Check and Request Permissions
         let permStatus = await PushNotifications.checkPermissions();
-        if (permStatus.receive === 'prompt') {
+        console.log('[Push] Initial Permission status:', permStatus.receive);
+
+        if (permStatus.receive !== 'granted') {
+          console.log('[Push] Requesting notification permission...');
           permStatus = await PushNotifications.requestPermissions();
+          console.log('[Push] Updated Permission status:', permStatus.receive);
         }
 
         if (permStatus.receive === 'granted') {
-          await PushNotifications.register();
-        }
+          // 3. Attach Listeners BEFORE Registering
+          const regListener = await PushNotifications.addListener('registration', async (fcmToken) => {
+            if (!isMounted) return;
+            const tokenVal = fcmToken.value;
+            const fingerprint = tokenVal.length > 8 ? `...${tokenVal.slice(-6)}` : tokenVal;
+            console.log(`[Push] FCM Registration Successful! Token fingerprint: ${fingerprint}`);
+            setPushToken(tokenVal);
 
-        // Setup notification channel for Android heads-up display
-        await PushNotifications.createChannel({
-          id: 'kotha_hobe_messages',
-          name: 'Chat Messages',
-          description: 'Incoming message notifications from Kotha Hobe',
-          importance: 5,
-          visibility: 1,
-          sound: 'default',
-          vibration: true,
-        });
+            try {
+              const res = await registerPushTokenApi(tokenVal);
+              if (res.success) {
+                console.log('[Push] Token registered successfully on backend database.');
+              }
+            } catch (err) {
+              console.warn('[Push] Failed to register token with backend:', err);
+            }
+          });
+
+          const regErrorListener = await PushNotifications.addListener('registrationError', (error) => {
+            console.error('[Push] FCM Registration Error:', error);
+          });
+
+          const pushRecvListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            console.log('[Push] Foreground push received:', notification.title, notification.body);
+          });
+
+          // 4. Register with FCM via Google Play Services
+          console.log('[Push] Calling PushNotifications.register()...');
+          await PushNotifications.register();
+
+          return () => {
+            regListener.remove();
+            regErrorListener.remove();
+            pushRecvListener.remove();
+          };
+        } else {
+          console.warn('[Push] Notification permission denied by user.');
+        }
       } catch (err) {
-        console.warn('[PushNotifications] Setup warning:', err);
+        console.error('[Push] FCM Initialization error:', err);
       }
     };
 
-    setupPush();
-
-    const regListener = PushNotifications.addListener('registration', async (fcmToken) => {
-      console.log('[PushNotifications] Registered FCM token:', fcmToken.value);
-      try {
-        await registerPushTokenApi(fcmToken.value);
-      } catch (e) {
-        console.warn('[PushNotifications] Failed to sync FCM token with backend:', e);
-      }
-    });
-
-    const errorListener = PushNotifications.addListener('registrationError', (error) => {
-      console.warn('[PushNotifications] Registration error:', error);
-    });
+    const cleanupPromise = initializeFCM();
 
     return () => {
-      regListener.then((h) => h.remove()).catch(() => {});
-      errorListener.then((h) => h.remove()).catch(() => {});
+      isMounted = false;
+      cleanupPromise.then((cleanup) => {
+        if (typeof cleanup === 'function') cleanup();
+      }).catch(() => {});
     };
   }, [token, user]);
 
@@ -194,7 +236,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       saveOutbox(filtered);
     });
 
-    // Handle Local Fallback Notification if in another screen inside app
+    // Handle Local In-App Notification if user is on another screen inside app
     newSocket.on('message:new', async (newMsg: IMessage) => {
       try {
         if (activeChatRef.current === newMsg.conversationId) {
@@ -225,7 +267,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 body: bodyText,
                 id: Math.floor(Math.random() * 1000000),
                 schedule: { at: new Date(Date.now() + 50) },
-                channelId: 'kotha_hobe_messages',
+                channelId: 'chat_messages',
                 sound: soundPref ? 'default' : undefined,
                 extra: {
                   conversationId: newMsg.conversationId,
@@ -329,6 +371,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         stopTyping,
         activeConversationId,
         setActiveConversationId,
+        pushToken,
       }}
     >
       {children}

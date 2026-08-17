@@ -1,14 +1,15 @@
 {
-  "versionCode": 17,
-  "versionName": "1.0.16",
+  "versionCode": 18,
+  "versionName": "1.0.17",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "f25d2a3d1b74991f74c3c1a130dfc805dc909e7c7ec6b8d581eb51735dc2794f",
+  "sha256": "9d10fba2343e8b43869e36d9765a9c455ef72b81025ce02eb0030169c646d652",
   "releaseNotes": [
-    "Release v1.0.16 (Build 17)",
-    "🔔 Native Google FCM Push Notifications (arrives when app is closed, in background, or phone is locked)",
-    "⚡ Ultra-smooth 60fps chatting: debounced storage and hardware scroll for rapid multi-message synchronization",
-    "⌨️ Throttled typing indicators avoiding network congestion",
-    "💬 1-Tap system push notification navigation directly into sender's chat room"
+    "Release v1.0.17 (Build 18)",
+    "🔔 Added POST_NOTIFICATIONS, VIBRATE, WAKE_LOCK permissions in AndroidManifest.xml",
+    "⚡ Initialized Android HIGH importance 'chat_messages' notification channel",
+    "🧪 Added Direct Test Push Diagnostic in Settings for instant device testing",
+    "📡 Server-side FCM HTTP v1 dispatch pipeline with direct diagnostic status",
+    "💬 1-Tap system push notification navigation directly into conversation"
   ],
   "mandatory": false
 }

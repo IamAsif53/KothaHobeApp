@@ -22,7 +22,9 @@ import {
   Vibrate,
   Eye,
   Trash2,
+  Send,
 } from 'lucide-react';
+import { sendTestPushApi } from '../api/userApi';
 import {
   checkLatestRelease,
   getCurrentAppVersion,
@@ -527,6 +529,38 @@ export const SettingsPage: React.FC = () => {
                       previewEnabled ? 'left-7' : 'left-1'
                     }`}
                   />
+                </button>
+              </div>
+
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="p-3 rounded-xl border border-dashed border-white/10 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-white">Direct Push Diagnostic</div>
+                  <span className="text-[10px] text-sky-400 font-mono">Channel: chat_messages</span>
+                </div>
+                <p className="text-[11px] text-chat-textMuted">
+                  Test if your device receives high-priority background & lock-screen push alerts from the server.
+                </p>
+                <button
+                  onClick={async () => {
+                    showToast('Sending test push to your phone...');
+                    try {
+                      const res = await sendTestPushApi();
+                      if (res.success) {
+                        showToast('✅ Test push sent! Check notification shade / lock screen.');
+                      } else {
+                        showToast(`⚠️ Push error: ${res.message || res.error || 'Check server credentials'}`);
+                      }
+                    } catch (e: any) {
+                      showToast('❌ Failed to reach test push server');
+                    }
+                  }}
+                  className="w-full bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-sky-500/30"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send Test Push Notification Now</span>
                 </button>
               </div>
             </div>

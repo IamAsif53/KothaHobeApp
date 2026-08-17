@@ -37,3 +37,27 @@ export async function registerPushTokenApi(token: string): Promise<{ success: bo
   });
 }
 
+export async function sendTestPushApi(): Promise<{ success: boolean; result?: any; message?: string; error?: string }> {
+  return apiFetch<{ success: boolean; result?: any; message?: string; error?: string }>('/dev/push-test', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getPushStatusApi(): Promise<{
+  success: boolean;
+  firebaseReady: boolean;
+  userTokenCount: number;
+  tokensMasked?: string[];
+  instructions?: string;
+}> {
+  return apiFetch<{
+    success: boolean;
+    firebaseReady: boolean;
+    userTokenCount: number;
+    tokensMasked?: string[];
+    instructions?: string;
+  }>('/dev/push-status');
+}
+
+

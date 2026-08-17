@@ -735,7 +735,7 @@ export const ChatRoomPage: React.FC = () => {
               new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
 
             return (
-              <React.Fragment key={msg._id || msg.clientMessageId}>
+              <React.Fragment key={msg.clientMessageId || msg._id}>
                 {showDateHeader && (
                   <div className="flex justify-center my-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-chat-textMuted/80 bg-chat-card/80 px-3 py-1 rounded-full border border-white/5">

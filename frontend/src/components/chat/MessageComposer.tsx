@@ -166,11 +166,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     startRecording();
   };
 
+  const recordingSecondsRef = useRef<number>(0);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       activeStreamRef.current = stream;
       audioChunksRef.current = [];
+      recordingSecondsRef.current = 0;
 
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -198,8 +201,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
         const finalType = recorder.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: finalType });
+        const finalDuration = Math.max(1, recordingSecondsRef.current);
 
-        if (audioChunksRef.current.length > 0 && recordingSeconds >= 1) {
+        if (audioBlob.size > 0) {
           const ext = finalType.includes('mp4') ? 'm4a' : 'webm';
           const fileName = `voice_${Date.now()}.${ext}`;
           const localBlobUrl = URL.createObjectURL(audioBlob);
@@ -213,7 +217,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               fileName,
               mimeType: finalType,
               size: audioBlob.size,
-              duration: recordingSeconds,
+              duration: finalDuration,
             },
             replyingTo || undefined,
             audioBlob
@@ -223,13 +227,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         }
       };
 
-      recorder.start(200);
+      recorder.start(100);
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
       setRecordingSeconds(0);
 
       recordTimerRef.current = setInterval(() => {
-        setRecordingSeconds((sec) => sec + 1);
+        setRecordingSeconds((sec) => {
+          const next = sec + 1;
+          recordingSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
     } catch (err: any) {
       console.error('[VoiceRecorder] Start error:', err);
@@ -242,6 +250,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      if (mediaRecorderRef.current.state === 'recording') {
+        try {
+          mediaRecorderRef.current.requestData();
+        } catch {}
+      }
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (recordTimerRef.current) {

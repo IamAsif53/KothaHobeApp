@@ -60,7 +60,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         console.log('[Push] Initializing Push Notifications...');
 
-        // 1. Create Android Notification Channel
+        // 1. Create Android Notification Channels
         try {
           await PushNotifications.createChannel({
             id: 'chat_messages',
@@ -72,7 +72,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             vibration: true,
             lights: true,
           });
-          console.log('[Push] Channel "chat_messages" created with HIGH importance');
+          await PushNotifications.createChannel({
+            id: 'incoming_calls',
+            name: 'Incoming Voice Calls',
+            description: 'Incoming live calls from Kotha Hobe',
+            importance: 5,
+            visibility: 1,
+            sound: 'default',
+            vibration: true,
+            lights: true,
+          });
+          console.log('[Push] Notification channels "chat_messages" and "incoming_calls" created with HIGH importance');
         } catch (e) {
           console.warn('[Push] Channel creation note:', e);
         }

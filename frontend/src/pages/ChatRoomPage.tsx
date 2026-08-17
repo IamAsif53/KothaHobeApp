@@ -6,6 +6,7 @@ import { IMessage, IUser, IReplyTo, IAttachment } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
+import { useCall } from '../context/CallContext';
 import { Avatar } from '../components/common/Avatar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
@@ -23,6 +24,7 @@ import {
   WifiOff,
   Search,
   MoreVertical,
+  Phone,
   X,
   ChevronDown,
 } from 'lucide-react';
@@ -32,6 +34,7 @@ export const ChatRoomPage: React.FC = () => {
   const { user } = useAuth();
   const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping, setActiveConversationId } = useSocket();
   const { themeConfig } = useTheme();
+  const { startCall } = useCall();
   const navigate = useNavigate();
 
   const [recipient, setRecipient] = useState<IUser | null>(() => {
@@ -652,6 +655,28 @@ export const ChatRoomPage: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex items-center gap-1">
+          {/* Voice Call Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (recipient && conversationId) {
+                startCall(
+                  {
+                    _id: recipient._id,
+                    displayName: recipient.displayName || recipient.username || 'User',
+                    avatarUrl: recipient.avatarUrl,
+                    username: recipient.username,
+                  },
+                  conversationId
+                );
+              }
+            }}
+            className="p-2 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-white/5 active:scale-95 transition-all"
+            title="Start Voice Call"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={`p-2 rounded-full transition-colors ${

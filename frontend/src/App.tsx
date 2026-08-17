@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocat
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { CallProvider } from './context/CallContext';
+import { CallScreen } from './components/call/CallScreen';
+import { IncomingCallModal } from './components/call/IncomingCallModal';
 import { BottomNav } from './components/common/BottomNav';
 import { UpdateModal } from './components/common/UpdateModal';
 import {
@@ -252,6 +255,10 @@ export const AppContent: React.FC = () => {
 
       <BottomNav />
 
+      {/* Global WebRTC Voice Calling UI Modals */}
+      <CallScreen />
+      <IncomingCallModal />
+
       {/* In-App Update Modal */}
       {updateManifest && (
         <UpdateModal
@@ -270,7 +277,9 @@ export const App: React.FC = () => {
       <ThemeProvider>
         <AuthProvider>
           <SocketProvider>
-            <AppContent />
+            <CallProvider>
+              <AppContent />
+            </CallProvider>
           </SocketProvider>
         </AuthProvider>
       </ThemeProvider>

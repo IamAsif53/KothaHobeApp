@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
 import { Message, MessageStatus, IAttachment, IReplyTo } from '../models/Message';
 import { sendPushNotification } from '../services/notificationService';
+import { registerCallHandlers } from './callHandler';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -360,6 +361,9 @@ export function setupSocketIO(io: SocketIOServer): void {
         });
       }
     });
+
+    // Register 1-to-1 WebRTC Call Signaling Handlers
+    registerCallHandlers(io, socket);
 
     // Disconnection handling
     socket.on('disconnect', async () => {

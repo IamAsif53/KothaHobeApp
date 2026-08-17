@@ -1,7 +1,16 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
+
+export interface ICallDetails {
+  callId: string;
+  callType: 'voice' | 'video';
+  status: 'completed' | 'missed' | 'declined' | 'cancelled' | 'failed' | 'busy';
+  duration: number; // in seconds
+  startedAt?: Date;
+  endedAt?: Date;
+}
 
 export interface IAttachment {
   url: string;
@@ -37,6 +46,7 @@ export interface IMessage extends Document {
   status: MessageStatus;
   clientMessageId: string;
   attachment?: IAttachment;
+  callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   reactions: IReaction[];
   deletedFor: Types.ObjectId[];
@@ -70,12 +80,28 @@ const AttachmentSchema = new Schema(
   { _id: false }
 );
 
+const CallDetailsSchema = new Schema(
+  {
+    callId: { type: String, required: true },
+    callType: { type: String, enum: ['voice', 'video'], default: 'voice' },
+    status: {
+      type: String,
+      enum: ['completed', 'missed', 'declined', 'cancelled', 'failed', 'busy'],
+      default: 'completed',
+    },
+    duration: { type: Number, default: 0 },
+    startedAt: { type: Date },
+    endedAt: { type: Date },
+  },
+  { _id: false }
+);
+
 const ReplyToSchema = new Schema(
   {
     messageId: { type: Schema.Types.ObjectId, ref: 'Message', required: true },
     text: { type: String, default: '' },
     senderName: { type: String, default: '' },
-    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document'], default: 'text' },
+    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call'], default: 'text' },
     fileName: { type: String },
   },
   { _id: false }
@@ -109,7 +135,7 @@ const MessageSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'video', 'audio', 'document'],
+      enum: ['text', 'image', 'video', 'audio', 'document', 'call'],
       default: 'text',
       index: true,
     },
@@ -126,6 +152,10 @@ const MessageSchema: Schema = new Schema(
     },
     attachment: {
       type: AttachmentSchema,
+      default: null,
+    },
+    callDetails: {
+      type: CallDetailsSchema,
       default: null,
     },
     replyTo: {

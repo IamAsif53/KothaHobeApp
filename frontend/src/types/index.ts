@@ -10,8 +10,17 @@ export interface IUser {
   phoneNumber?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface ICallDetails {
+  callId: string;
+  callType: 'voice' | 'video';
+  status: 'completed' | 'missed' | 'declined' | 'cancelled' | 'failed' | 'busy';
+  duration: number;
+  startedAt?: string;
+  endedAt?: string;
+}
 
 export interface IAttachment {
   url: string;
@@ -48,6 +57,7 @@ export interface IMessage {
   status: MessageStatus;
   clientMessageId: string;
   attachment?: IAttachment;
+  callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   reactions?: IReaction[];
   isDeletedForEveryone?: boolean;

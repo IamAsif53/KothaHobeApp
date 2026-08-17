@@ -121,3 +121,86 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
     };
   }
 };
+
+export interface CallPushNotificationPayload {
+  recipientId: string;
+  callerId: string;
+  callerName: string;
+  callerAvatar?: string;
+  callId: string;
+  conversationId: string;
+  callType?: 'voice' | 'video';
+}
+
+export const sendCallPushNotification = async (payload: CallPushNotificationPayload): Promise<PushResult> => {
+  try {
+    const { recipientId, callerId, callerName, callerAvatar, callId, conversationId, callType = 'voice' } = payload;
+    if (!recipientId || !callId) {
+      return { success: false, attempted: 0, successCount: 0, failureCount: 0, message: 'Missing recipientId or callId' };
+    }
+
+    if (!isFirebaseReady()) {
+      console.warn('[FCM] Call push skipped: Firebase Admin not ready.');
+      return { success: false, attempted: 0, successCount: 0, failureCount: 0, message: 'Firebase Admin not configured' };
+    }
+
+    const recipient = await User.findById(recipientId).select('fcmTokens displayName');
+    if (!recipient || !recipient.fcmTokens || recipient.fcmTokens.length === 0) {
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No registered tokens' };
+    }
+
+    const tokens = recipient.fcmTokens.filter((t) => typeof t === 'string' && t.trim().length > 10);
+    if (tokens.length === 0) {
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid tokens' };
+    }
+
+    const messagePayload = {
+      notification: {
+        title: `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`,
+        body: `${callerName || 'Someone'} is calling you on Kotha Hobe...`,
+      },
+      data: {
+        type: 'incoming_call',
+        callId: String(callId),
+        callerId: String(callerId),
+        callerName: String(callerName || 'Unknown'),
+        callerAvatar: String(callerAvatar || ''),
+        conversationId: String(conversationId || ''),
+        callType: String(callType),
+      },
+      android: {
+        priority: 'high' as const,
+        notification: {
+          channelId: 'incoming_calls',
+          sound: 'default',
+          priority: 'max' as const,
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          visibility: 'public' as const,
+          tag: `call_${callId}`,
+        },
+      },
+      tokens,
+    };
+
+    console.log(`[FCM] Dispatching call push to ${tokens.length} device(s) for call ${callId}`);
+    const response = await admin.messaging().sendEachForMulticast(messagePayload);
+    console.log(`[FCM] Call push result: ${response.successCount} succeeded, ${response.failureCount} failed.`);
+
+    return {
+      success: response.successCount > 0,
+      attempted: tokens.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    };
+  } catch (error: any) {
+    console.error('[FCM] Call push dispatch error:', error?.message || error);
+    return {
+      success: false,
+      attempted: 0,
+      successCount: 0,
+      failureCount: 0,
+      error: error?.message || 'Call push dispatch failed',
+    };
+  }
+};

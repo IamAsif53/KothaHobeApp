@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.media.AudioManager;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
@@ -112,6 +113,68 @@ public class NativeMediaPlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to open app settings", e);
+        }
+    }
+
+    @PluginMethod
+    public void setCallAudioMode(PluginCall call) {
+        try {
+            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                audioManager.setMicrophoneMute(false);
+            }
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to set call audio mode", e);
+        }
+    }
+
+    @PluginMethod
+    public void resetAudioMode(PluginCall call) {
+        try {
+            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                audioManager.setSpeakerphoneOn(false);
+                audioManager.setMode(AudioManager.MODE_NORMAL);
+            }
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to reset audio mode", e);
+        }
+    }
+
+    @PluginMethod
+    public void setSpeakerphoneOn(PluginCall call) {
+        try {
+            boolean enabled = call.getBoolean("enabled", false);
+            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                audioManager.setSpeakerphoneOn(enabled);
+            }
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("isSpeakerphoneOn", enabled);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to toggle speakerphone", e);
+        }
+    }
+
+    @PluginMethod
+    public void isSpeakerphoneOn(PluginCall call) {
+        try {
+            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            boolean isOn = audioManager != null && audioManager.isSpeakerphoneOn();
+            JSObject ret = new JSObject();
+            ret.put("isSpeakerphoneOn", isOn);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to check speakerphone status", e);
         }
     }
 

@@ -7,6 +7,10 @@ export interface NativeMediaPluginInterface {
   checkAudioPermission(): Promise<{ state: 'granted' | 'denied' | 'prompt'; shouldShowRationale?: boolean }>;
   requestAudioPermission(): Promise<{ state: 'granted' | 'denied'; shouldShowRationale?: boolean }>;
   openAppSettings(): Promise<{ success: boolean }>;
+  setCallAudioMode(): Promise<{ success: boolean }>;
+  resetAudioMode(): Promise<{ success: boolean }>;
+  setSpeakerphoneOn(options: { enabled: boolean }): Promise<{ success: boolean; isSpeakerphoneOn: boolean }>;
+  isSpeakerphoneOn(): Promise<{ isSpeakerphoneOn: boolean }>;
   saveImageToGallery(options: { base64Data: string; fileName: string }): Promise<{ success: boolean; uri?: string; filePath?: string }>;
   downloadDocument(options: { base64Data: string; fileName: string; mimeType: string }): Promise<{ success: boolean; fileName: string; uri?: string; filePath?: string }>;
 }
@@ -223,5 +227,60 @@ export async function openDocumentInNativeApp(
       success: false,
       error: err?.message || 'No compatible reader app found on device',
     };
+  }
+}
+
+/**
+ * Configure native Android AudioManager for VoIP communication
+ */
+export async function enableCallAudioMode(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const res = await NativeMedia.setCallAudioMode();
+    return !!res?.success;
+  } catch (err) {
+    console.warn('[NativeMedia] setCallAudioMode error:', err);
+    return false;
+  }
+}
+
+/**
+ * Restore normal audio mode after call terminates
+ */
+export async function disableCallAudioMode(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const res = await NativeMedia.resetAudioMode();
+    return !!res?.success;
+  } catch (err) {
+    console.warn('[NativeMedia] resetAudioMode error:', err);
+    return false;
+  }
+}
+
+/**
+ * Enable/disable physical loudspeaker on device
+ */
+export async function toggleNativeSpeakerphone(enabled: boolean): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return enabled;
+  try {
+    const res = await NativeMedia.setSpeakerphoneOn({ enabled });
+    return !!res?.isSpeakerphoneOn;
+  } catch (err) {
+    console.warn('[NativeMedia] setSpeakerphoneOn error:', err);
+    return false;
+  }
+}
+
+/**
+ * Query current loudspeaker status
+ */
+export async function getNativeSpeakerphoneStatus(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const res = await NativeMedia.isSpeakerphoneOn();
+    return !!res?.isSpeakerphoneOn;
+  } catch (err) {
+    return false;
   }
 }

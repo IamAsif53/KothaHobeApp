@@ -14,6 +14,11 @@ import {
   Trash2,
   Copy,
   ExternalLink,
+  Phone,
+  PhoneIncoming,
+  PhoneOutgoing,
+  PhoneMissed,
+  PhoneOff,
 } from 'lucide-react';
 
 interface MessageBubbleProps {
@@ -342,6 +347,43 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           <p className="whitespace-pre-wrap pr-12 text-[14.5px] leading-relaxed">
             {message.text}
           </p>
+        )}
+
+        {/* 5. Call Record Event */}
+        {message.type === 'call' && (
+          <div className="flex items-center gap-3 py-1 pr-12">
+            <div
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-emerald-500/20 text-emerald-400'
+              }`}
+            >
+              {message.callDetails?.status === 'missed' ? (
+                <PhoneMissed className="w-4 h-4" />
+              ) : message.callDetails?.status === 'declined' ? (
+                <PhoneOff className="w-4 h-4" />
+              ) : isMe ? (
+                <PhoneOutgoing className="w-4 h-4" />
+              ) : (
+                <PhoneIncoming className="w-4 h-4" />
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-white">
+                {message.text || 'Voice Call'}
+              </div>
+              <div className="text-[11px] text-white/60">
+                {message.callDetails?.status === 'missed'
+                  ? 'Missed voice call'
+                  : message.callDetails?.status === 'declined'
+                  ? 'Call declined'
+                  : message.callDetails?.duration
+                  ? `${Math.floor(message.callDetails.duration / 60)}:${(message.callDetails.duration % 60).toString().padStart(2, '0')}`
+                  : 'Voice call'}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Bottom Time & Status Checkmarks */}

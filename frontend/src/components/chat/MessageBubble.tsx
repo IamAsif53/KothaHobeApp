@@ -45,6 +45,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const renderStatusIcon = () => {
     if (!isMe) return null;
@@ -65,15 +66,45 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  const handleTouchStart = () => {
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches && e.touches.length > 0) {
+      touchStartPosRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    }
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+    }
     touchTimerRef.current = setTimeout(() => {
       setShowMenu(true);
-    }, 450);
+    }, 550);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches && e.touches.length > 0) {
+      const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+      if (dx > 6 || dy > 6) {
+        if (touchTimerRef.current) {
+          clearTimeout(touchTimerRef.current);
+          touchTimerRef.current = null;
+        }
+      }
+    }
   };
 
   const handleTouchEnd = () => {
     if (touchTimerRef.current) {
       clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+  };
+
+  const handleTouchCancel = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
     }
   };
 
@@ -105,7 +136,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         setShowMenu(true);
       }}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
     >
       {/* Context Action Menu Modal */}
       {showMenu && (

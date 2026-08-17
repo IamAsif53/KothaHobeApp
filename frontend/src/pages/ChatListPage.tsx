@@ -110,13 +110,23 @@ export const ChatListPage: React.FC = () => {
         style={{ backgroundColor: themeConfig.panel }}
         className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 transition-colors duration-200"
       >
+        {/* Left: Chats Title */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-brand-400" />
-          </div>
           <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
         </div>
 
+        {/* Center: App Brand Logo with Bengali Name */}
+        <div className="flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-[#EDEAD9] p-0.5 shadow-md flex items-center justify-center border border-emerald-900/10">
+            <img
+              src="/logo.png"
+              alt="কথা হবে Logo"
+              className="w-full h-full object-contain rounded-lg"
+            />
+          </div>
+        </div>
+
+        {/* Right: Actions */}
         <div className="flex items-center gap-2">
           {!isConnected && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">

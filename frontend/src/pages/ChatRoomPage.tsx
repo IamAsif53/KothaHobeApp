@@ -5,6 +5,7 @@ import { fetchConversations } from '../api/conversationApi';
 import { IMessage, IUser } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useTheme } from '../context/ThemeContext';
 import { Avatar } from '../components/common/Avatar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
@@ -15,11 +16,9 @@ import { ArrowLeft, WifiOff } from 'lucide-react';
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
-  const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping } = useSocket();
+  const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping, setActiveConversationId } = useSocket();
+  const { themeConfig } = useTheme();
   const navigate = useNavigate();
-
-  // Chat Wallpaper Theme from Settings
-  const [chatTheme] = useState(() => localStorage.getItem('kotha_hobe_chat_theme') || 'dark');
 
   const [recipient, setRecipient] = useState<IUser | null>(() => {
     try {
@@ -62,6 +61,16 @@ export const ChatRoomPage: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Set Active Conversation ID so system doesn't ping notifications for current room
+  useEffect(() => {
+    if (conversationId) {
+      setActiveConversationId(conversationId);
+    }
+    return () => {
+      setActiveConversationId(null);
+    };
+  }, [conversationId, setActiveConversationId]);
+
   // Load conversation details & initial messages
   useEffect(() => {
     if (!conversationId) return;
@@ -71,7 +80,6 @@ export const ChatRoomPage: React.FC = () => {
         setLoading(true);
       }
       try {
-        // Fetch conversation to get recipient info
         const convsRes = await fetchConversations();
         if (convsRes.success && convsRes.conversations) {
           const currentConv = convsRes.conversations.find((c) => c._id === conversationId);
@@ -80,13 +88,13 @@ export const ChatRoomPage: React.FC = () => {
           }
         }
 
-        // Fetch message history
         const msgRes = await fetchMessagesApi(conversationId, undefined, 30);
         if (msgRes.success && msgRes.messages) {
           setMessages((prev) => {
-            // Keep any pending optimistic messages that have not yet arrived on server
             const pendingOptimistic = prev.filter(
-              (m) => m._id.startsWith('temp_') && !msgRes.messages.some((serverM) => serverM.clientMessageId === m.clientMessageId)
+              (m) =>
+                m._id.startsWith('temp_') &&
+                !msgRes.messages.some((serverM) => serverM.clientMessageId === m.clientMessageId)
             );
             const merged = [...msgRes.messages, ...pendingOptimistic];
             localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(merged));
@@ -139,7 +147,7 @@ export const ChatRoomPage: React.FC = () => {
       }
     };
 
-    // Message sent acknowledgement from server (safe merge preserving text & optimistic fields)
+    // Message sent acknowledgement from server (safe merge)
     const handleMessageSent = (sentMsg: IMessage) => {
       if (sentMsg.conversationId === conversationId) {
         setMessages((prev) => {
@@ -253,7 +261,7 @@ export const ChatRoomPage: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
-    // ⚡ Instant Optimistic Message Render with Zero Disappearance
+    // ⚡ Instant Optimistic Message Render with Zero Flicker
     setMessages((prev) => {
       const updated = [...prev, optimisticMessage];
       localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
@@ -261,6 +269,7 @@ export const ChatRoomPage: React.FC = () => {
     });
     setTimeout(() => scrollToBottom(), 40);
 
+    // Send via socket or offline outbox
     sendMessage(conversationId, recipient._id, text.trim(), tempId);
   };
 
@@ -278,26 +287,16 @@ export const ChatRoomPage: React.FC = () => {
     }, 2500);
   };
 
-  // Chat Theme Background Class
-  const getThemeBg = () => {
-    switch (chatTheme) {
-      case 'midnight':
-        return 'bg-[#0f172a]';
-      case 'emerald':
-        return 'bg-[#06281e]';
-      case 'navy':
-        return 'bg-[#0a192f]';
-      case 'charcoal':
-        return 'bg-[#18181b]';
-      default:
-        return 'bg-chat-bg';
-    }
-  };
-
   return (
-    <div className={`h-full w-full ${getThemeBg()} flex flex-col overflow-hidden`}>
+    <div
+      style={{ backgroundColor: themeConfig.bg }}
+      className="h-full w-full flex flex-col overflow-hidden transition-colors duration-200"
+    >
       {/* Top Header with Status Bar Safe Area Padding */}
-      <header className="px-3 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10">
+      <header
+        style={{ backgroundColor: themeConfig.panel }}
+        className="px-3 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200"
+      >
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/chats')}
@@ -343,7 +342,8 @@ export const ChatRoomPage: React.FC = () => {
       {/* Messages Scroll Area */}
       <div
         ref={scrollContainerRef}
-        className={`flex-1 overflow-y-auto p-4 space-y-3 flex flex-col ${getThemeBg()} select-text`}
+        style={{ backgroundColor: themeConfig.bg }}
+        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200"
       >
         {/* Load More Button */}
         {hasMore && (

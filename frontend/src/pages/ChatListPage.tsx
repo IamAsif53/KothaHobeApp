@@ -6,9 +6,11 @@ import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
 import { ConversationSkeleton } from '../components/common/Skeleton';
 import { formatChatListDate } from '../utils/dateUtils';
+import { useTheme } from '../context/ThemeContext';
 import { Search, UserPlus, MessageSquare, Check, CheckCheck, WifiOff } from 'lucide-react';
 
 export const ChatListPage: React.FC = () => {
+  const { themeConfig } = useTheme();
   // ⚡ Instant Render: Initialize immediately from cached conversations
   const [conversations, setConversations] = useState<IConversation[]>(() => {
     try {
@@ -99,9 +101,15 @@ export const ChatListPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col overflow-hidden">
+    <div
+      style={{ backgroundColor: themeConfig.bg }}
+      className="h-full w-full flex flex-col overflow-hidden transition-colors duration-200"
+    >
       {/* Top Bar Header with safe area status bar padding */}
-      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
+      <header
+        style={{ backgroundColor: themeConfig.panel }}
+        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 transition-colors duration-200"
+      >
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center">
             <MessageSquare className="w-4 h-4 text-brand-400" />

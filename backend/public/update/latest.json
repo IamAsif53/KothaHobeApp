@@ -1,15 +1,14 @@
 {
-  "versionCode": 15,
-  "versionName": "1.0.14",
+  "versionCode": 16,
+  "versionName": "1.0.15",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "3d1a4efac22ba8ee2426211f85d1321ab774f7e89b86603da80c27d831d5ab6b",
+  "sha256": "0435e31ade90ca222ca015840a9530b1753e2e0796c71249379a92b992bd981b",
   "releaseNotes": [
-    "Release v1.0.14 (Build 15)",
-    "⚡ Fixed message send flicker: messages appear instantly with zero delay",
-    "🛡️ Guaranteed 1 Gmail = 1 User account continuity across logouts",
-    "⚙️ Complete interactive Settings suite (Sounds, Privacy, Themes, Storage)",
-    "🎨 5 Customizable Chat Wallpaper themes & text sizing",
-    "💾 Storage & offline cache management with instant clear action"
+    "Release v1.0.15 (Build 16)",
+    "⚡ Offline Outbox: messages typed offline send automatically the moment internet reconnects",
+    "🔔 Native Device Push Notifications with high-priority banner alerts, sound & vibration",
+    "🎨 Live dynamic theme engine: changes backgrounds, headers & fonts instantly across all screens",
+    "💬 One-tap notification navigation directly into sender's chat room"
   ],
   "mandatory": false
 }

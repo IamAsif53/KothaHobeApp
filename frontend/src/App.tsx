@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { BottomNav } from './components/common/BottomNav';
 import { UpdateModal } from './components/common/UpdateModal';
 import {
@@ -11,6 +12,7 @@ import {
 } from './services/appUpdateService';
 import { CURRENT_VERSION } from './config/version';
 import { App as CapApp } from '@capacitor/app';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
 import { SplashPage } from './pages/SplashPage';
@@ -44,10 +46,38 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const AppContent: React.FC = () => {
   const [updateManifest, setUpdateManifest] = useState<ReleaseManifest | null>(null);
   const [currentVersion, setCurrentVersion] = useState<{ versionName: string; versionCode: number }>(CURRENT_VERSION);
+  const { themeConfig } = useTheme();
 
   const navigate = useNavigate();
   const location = useLocation();
   const lastBackPressRef = useRef<number>(0);
+
+  // Native Device Notification Click Navigation
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let notifHandle: any = null;
+
+    const setupNotifAction = async () => {
+      notifHandle = await LocalNotifications.addListener(
+        'localNotificationActionPerformed',
+        (notificationAction) => {
+          const extra = notificationAction.notification.extra;
+          if (extra && extra.conversationId) {
+            navigate(`/chat/${extra.conversationId}`, { replace: false });
+          }
+        }
+      );
+    };
+
+    setupNotifAction();
+
+    return () => {
+      if (notifHandle) {
+        notifHandle.remove();
+      }
+    };
+  }, [navigate]);
 
   // Android Hardware & Gesture Back Button listener
   useEffect(() => {
@@ -132,7 +162,10 @@ export const AppContent: React.FC = () => {
   }, []);
 
   return (
-    <div className="h-dvh w-full flex flex-col bg-chat-bg max-w-md mx-auto relative shadow-2xl overflow-hidden border-x border-white/5">
+    <div
+      style={{ backgroundColor: themeConfig.bg }}
+      className="h-dvh w-full flex flex-col max-w-md mx-auto relative shadow-2xl overflow-hidden border-x border-white/5 transition-colors duration-200"
+    >
       <div className="flex-1 overflow-hidden flex flex-col">
         <Routes>
           <Route path="/" element={<SplashPage />} />
@@ -199,11 +232,13 @@ export const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <Router>
-      <AuthProvider>
-        <SocketProvider>
-          <AppContent />
-        </SocketProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <SocketProvider>
+            <AppContent />
+          </SocketProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme, AppTheme, AppFontSize } from '../context/ThemeContext';
 import { Avatar } from '../components/common/Avatar';
 import {
   LogOut,
@@ -28,9 +29,12 @@ import {
   ReleaseManifest,
 } from '../services/appUpdateService';
 import { CURRENT_VERSION } from '../config/version';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
 
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
+  const { theme, fontSize, setTheme, setFontSize, themeConfig } = useTheme();
   const navigate = useNavigate();
 
   // App version & Update states
@@ -52,10 +56,6 @@ export const SettingsPage: React.FC = () => {
   const [readReceipts, setReadReceipts] = useState(() => localStorage.getItem('kotha_hobe_read_receipts') !== 'false');
   const [onlinePresence, setOnlinePresence] = useState(() => localStorage.getItem('kotha_hobe_online_presence') !== 'false');
 
-  // Chat Theme & Wallpaper
-  const [chatTheme, setChatTheme] = useState(() => localStorage.getItem('kotha_hobe_chat_theme') || 'dark');
-  const [fontSize, setFontSize] = useState(() => localStorage.getItem('kotha_hobe_font_size') || 'normal');
-
   // Storage Stats
   const [cacheSizeKb, setCacheSizeKb] = useState<number>(0);
 
@@ -63,7 +63,7 @@ export const SettingsPage: React.FC = () => {
     let total = 0;
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith('kotha_hobe_msgs_') || key === 'kotha_hobe_cached_conversations')) {
+      if (key && (key.startsWith('kotha_hobe_msgs_') || key === 'kotha_hobe_cached_conversations' || key === 'kotha_hobe_outbox')) {
         const val = localStorage.getItem(key) || '';
         total += (key.length + val.length) * 2;
       }
@@ -80,11 +80,18 @@ export const SettingsPage: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleToggleSound = () => {
+  const handleToggleSound = async () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
     localStorage.setItem('kotha_hobe_sound_enabled', String(next));
     showToast(next ? 'Sound alerts enabled' : 'Sound alerts muted');
+
+    if (next && Capacitor.isNativePlatform()) {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
+    }
   };
 
   const handleToggleVibrate = () => {
@@ -115,16 +122,14 @@ export const SettingsPage: React.FC = () => {
     showToast(next ? 'Online status visible to contacts' : 'Online status hidden');
   };
 
-  const handleSelectTheme = (theme: string) => {
-    setChatTheme(theme);
-    localStorage.setItem('kotha_hobe_chat_theme', theme);
-    showToast(`Wallpaper theme updated`);
+  const handleSelectTheme = (selectedTheme: AppTheme) => {
+    setTheme(selectedTheme);
+    showToast(`Theme changed to ${selectedTheme.toUpperCase()}`);
   };
 
-  const handleSelectFontSize = (size: string) => {
+  const handleSelectFontSize = (size: AppFontSize) => {
     setFontSize(size);
-    localStorage.setItem('kotha_hobe_font_size', size);
-    showToast(`Chat font size set to ${size}`);
+    showToast(`Font size set to ${size.toUpperCase()}`);
   };
 
   const handleClearCache = () => {
@@ -191,9 +196,15 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col max-w-md mx-auto overflow-hidden relative">
+    <div
+      style={{ backgroundColor: themeConfig.bg }}
+      className="h-full w-full flex flex-col max-w-md mx-auto overflow-hidden relative transition-colors duration-200"
+    >
       {/* Header with Safe Area Status Bar Padding */}
-      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
+      <header
+        style={{ backgroundColor: themeConfig.panel }}
+        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 transition-colors duration-200"
+      >
         <h1 className="text-xl font-bold text-white tracking-tight">Settings</h1>
       </header>
 
@@ -209,7 +220,8 @@ export const SettingsPage: React.FC = () => {
         {/* User Card */}
         <div
           onClick={() => navigate('/profile-setup')}
-          className="bg-chat-card border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/5 cursor-pointer transition-colors shadow-sm"
+          style={{ backgroundColor: themeConfig.card }}
+          className="border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/5 cursor-pointer transition-all shadow-sm"
         >
           <Avatar
             src={user?.avatarUrl}
@@ -234,7 +246,10 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* Core Settings Menu */}
-        <div className="bg-chat-card border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden shadow-sm">
+        <div
+          style={{ backgroundColor: themeConfig.card }}
+          className="border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden shadow-sm transition-colors duration-200"
+        >
           {/* Edit Profile */}
           <div
             onClick={() => navigate('/profile-setup')}
@@ -259,9 +274,9 @@ export const SettingsPage: React.FC = () => {
               <Bell className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <div className="text-sm font-semibold text-white">Notifications & Sounds</div>
+              <div className="text-sm font-semibold text-white">Notifications & Device Alerts</div>
               <div className="text-xs text-chat-textMuted">
-                {soundEnabled ? 'Sound ON' : 'Muted'} • {vibrateEnabled ? 'Vibrate ON' : 'Vibrate OFF'}
+                {soundEnabled ? 'Device alerts ON' : 'Muted'} • {vibrateEnabled ? 'Vibrate ON' : 'Vibrate OFF'}
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
@@ -291,9 +306,9 @@ export const SettingsPage: React.FC = () => {
               <Palette className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <div className="text-sm font-semibold text-white">Chat Wallpaper & Appearance</div>
+              <div className="text-sm font-semibold text-white">Themes & Font Appearance</div>
               <div className="text-xs text-chat-textMuted capitalize">
-                Theme: {chatTheme} • Text: {fontSize}
+                Active Theme: <span className="text-brand-400 font-semibold">{theme}</span> • Font: {fontSize}
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
@@ -422,11 +437,14 @@ export const SettingsPage: React.FC = () => {
       {/* 1. Notifications Modal */}
       {activeModal === 'notifications' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-sky-400" />
-                <h3 className="text-base font-bold text-white">Notifications</h3>
+                <h3 className="text-base font-bold text-white">Notifications & Alerts</h3>
               </div>
               <button
                 onClick={() => setActiveModal(null)}
@@ -437,12 +455,15 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-chat-card rounded-xl">
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="flex items-center justify-between p-3 rounded-xl"
+              >
                 <div className="flex items-center gap-3">
                   <Volume2 className="w-4 h-4 text-chat-textMuted" />
                   <div>
-                    <div className="text-sm font-medium text-white">Sound Alerts</div>
-                    <div className="text-[11px] text-chat-textMuted">Play tone for incoming messages</div>
+                    <div className="text-sm font-medium text-white">Device Sound Alerts</div>
+                    <div className="text-[11px] text-chat-textMuted">Play tone on incoming message</div>
                   </div>
                 </div>
                 <button
@@ -459,11 +480,14 @@ export const SettingsPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-chat-card rounded-xl">
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="flex items-center justify-between p-3 rounded-xl"
+              >
                 <div className="flex items-center gap-3">
                   <Vibrate className="w-4 h-4 text-chat-textMuted" />
                   <div>
-                    <div className="text-sm font-medium text-white">Vibration</div>
+                    <div className="text-sm font-medium text-white">Device Vibration</div>
                     <div className="text-[11px] text-chat-textMuted">Vibrate on message received</div>
                   </div>
                 </div>
@@ -481,12 +505,15 @@ export const SettingsPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-chat-card rounded-xl">
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="flex items-center justify-between p-3 rounded-xl"
+              >
                 <div className="flex items-center gap-3">
                   <Eye className="w-4 h-4 text-chat-textMuted" />
                   <div>
                     <div className="text-sm font-medium text-white">Message Preview</div>
-                    <div className="text-[11px] text-chat-textMuted">Show sender and message text</div>
+                    <div className="text-[11px] text-chat-textMuted">Show sender and message text in banner</div>
                   </div>
                 </div>
                 <button
@@ -517,7 +544,10 @@ export const SettingsPage: React.FC = () => {
       {/* 2. Privacy & Security Modal */}
       {activeModal === 'privacy' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Lock className="w-5 h-5 text-emerald-400" />
@@ -532,7 +562,10 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-chat-card rounded-xl">
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="flex items-center justify-between p-3 rounded-xl"
+              >
                 <div>
                   <div className="text-sm font-medium text-white">Read Receipts</div>
                   <div className="text-[11px] text-chat-textMuted">Show blue double checkmarks</div>
@@ -551,7 +584,10 @@ export const SettingsPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-chat-card rounded-xl">
+              <div
+                style={{ backgroundColor: themeConfig.card }}
+                className="flex items-center justify-between p-3 rounded-xl"
+              >
                 <div>
                   <div className="text-sm font-medium text-white">Online Presence</div>
                   <div className="text-[11px] text-chat-textMuted">Show online dot & last seen</div>
@@ -573,7 +609,7 @@ export const SettingsPage: React.FC = () => {
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs mb-1">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>256-Bit Socket Tunnel Active</span>
+                  <span>256-Bit Socket Encryption Active</span>
                 </div>
                 <p className="text-[11px] text-chat-textMuted leading-relaxed">
                   Your chat stream is protected with direct WebSocket transport layer security.
@@ -594,11 +630,14 @@ export const SettingsPage: React.FC = () => {
       {/* 3. Chat Theme & Wallpaper Modal */}
       {activeModal === 'chatTheme' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Palette className="w-5 h-5 text-purple-400" />
-                <h3 className="text-base font-bold text-white">Chat Wallpaper & Style</h3>
+                <h3 className="text-base font-bold text-white">Themes & Typography</h3>
               </div>
               <button
                 onClick={() => setActiveModal(null)}
@@ -610,30 +649,32 @@ export const SettingsPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold uppercase text-chat-textMuted mb-2">
-                Wallpaper Theme
+                Live App Theme (Transforms App Instantly)
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
-                  { id: 'dark', name: 'Default Dark', color: '#0b141a' },
-                  { id: 'midnight', name: 'Midnight Slate', color: '#0f172a' },
-                  { id: 'emerald', name: 'Deep Emerald', color: '#06281e' },
-                  { id: 'navy', name: 'Royal Navy', color: '#0a192f' },
-                  { id: 'charcoal', name: 'Pure Charcoal', color: '#18181b' },
+                  { id: 'dark' as AppTheme, name: 'Default Dark', color: '#0b141a', accent: '#00a884' },
+                  { id: 'midnight' as AppTheme, name: 'Midnight Slate', color: '#0f172a', accent: '#38bdf8' },
+                  { id: 'emerald' as AppTheme, name: 'Deep Emerald', color: '#06281e', accent: '#10b981' },
+                  { id: 'navy' as AppTheme, name: 'Royal Navy', color: '#0a192f', accent: '#60a5fa' },
+                  { id: 'charcoal' as AppTheme, name: 'Pure Charcoal', color: '#18181b', accent: '#818cf8' },
                 ].map((t) => (
                   <button
                     key={t.id}
                     onClick={() => handleSelectTheme(t.id)}
                     className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all text-left ${
-                      chatTheme === t.id
-                        ? 'border-brand-400 bg-brand-500/10'
-                        : 'border-white/10 bg-chat-card hover:bg-white/5'
+                      theme === t.id
+                        ? 'border-brand-400 bg-brand-500/20 scale-[1.02]'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
                     }`}
                   >
                     <span
-                      className="w-5 h-5 rounded-full border border-white/20 flex-shrink-0"
+                      className="w-5 h-5 rounded-full border border-white/30 flex-shrink-0 flex items-center justify-center text-[10px]"
                       style={{ backgroundColor: t.color }}
-                    />
-                    <span className="text-xs font-medium text-white truncate">{t.name}</span>
+                    >
+                      {theme === t.id && '✓'}
+                    </span>
+                    <span className="text-xs font-semibold text-white truncate">{t.name}</span>
                   </button>
                 ))}
               </div>
@@ -641,20 +682,24 @@ export const SettingsPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold uppercase text-chat-textMuted mb-2">
-                Message Text Size
+                Text & Message Font Size
               </label>
               <div className="flex gap-2">
-                {['compact', 'normal', 'large'].map((s) => (
+                {[
+                  { id: 'compact' as AppFontSize, label: 'Compact' },
+                  { id: 'normal' as AppFontSize, label: 'Standard' },
+                  { id: 'large' as AppFontSize, label: 'Large' },
+                ].map((s) => (
                   <button
-                    key={s}
-                    onClick={() => handleSelectFontSize(s)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-semibold capitalize border transition-all ${
-                      fontSize === s
+                    key={s.id}
+                    onClick={() => handleSelectFontSize(s.id)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold capitalize border transition-all ${
+                      fontSize === s.id
                         ? 'bg-brand-500 border-brand-400 text-white'
-                        : 'bg-chat-card border-white/10 text-chat-textMuted hover:text-white'
+                        : 'bg-white/5 border-white/10 text-chat-textMuted hover:text-white'
                     }`}
                   >
-                    {s}
+                    {s.label}
                   </button>
                 ))}
               </div>
@@ -664,7 +709,7 @@ export const SettingsPage: React.FC = () => {
               onClick={() => setActiveModal(null)}
               className="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-2.5 rounded-xl transition-all"
             >
-              Apply Theme
+              Apply Changes
             </button>
           </div>
         </div>
@@ -673,7 +718,10 @@ export const SettingsPage: React.FC = () => {
       {/* 4. Storage & Data Modal */}
       {activeModal === 'storage' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <HardDrive className="w-5 h-5 text-amber-400" />
@@ -687,7 +735,10 @@ export const SettingsPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-4 bg-chat-card rounded-xl flex items-center justify-between">
+            <div
+              style={{ backgroundColor: themeConfig.card }}
+              className="p-4 rounded-xl flex items-center justify-between"
+            >
               <div>
                 <div className="text-xs text-chat-textMuted">Local Offline Cache</div>
                 <div className="text-lg font-bold text-white">{cacheSizeKb} KB</div>
@@ -718,7 +769,10 @@ export const SettingsPage: React.FC = () => {
       {/* 5. About Modal */}
       {activeModal === 'about' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4 text-center">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4 text-center"
+          >
             <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mx-auto text-brand-400">
               <ShieldCheck className="w-7 h-7" />
             </div>
@@ -747,7 +801,10 @@ export const SettingsPage: React.FC = () => {
       {/* 6. Logout Confirmation Modal */}
       {activeModal === 'logoutConfirm' && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-chat-panel border border-white/10 w-full max-w-xs rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4 text-center">
+          <div
+            style={{ backgroundColor: themeConfig.panel }}
+            className="border border-white/10 w-full max-w-xs rounded-2xl p-5 shadow-2xl animate-scale-up space-y-4 text-center"
+          >
             <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto text-red-400">
               <LogOut className="w-6 h-6" />
             </div>

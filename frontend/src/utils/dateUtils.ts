@@ -2,7 +2,11 @@ export function formatMessageTime(dateString?: string | Date): string {
   if (!dateString) return '';
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 export function formatChatListDate(dateString?: string | Date): string {
@@ -15,7 +19,11 @@ export function formatChatListDate(dateString?: string | Date): string {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0 && now.getDate() === date.getDate()) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
   } else if (diffDays === 1 || (diffDays === 0 && now.getDate() !== date.getDate())) {
     return 'Yesterday';
   } else if (diffDays < 7) {
@@ -31,10 +39,22 @@ export function formatLastSeen(dateString?: string | Date, isOnline?: boolean): 
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return 'Offline';
 
-  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  const dateStr = formatChatListDate(dateString);
-  if (dateStr === timeStr) {
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0 && now.getDate() === date.getDate()) {
     return `Last seen today at ${timeStr}`;
+  } else if (diffDays === 1 || (diffDays === 0 && now.getDate() !== date.getDate())) {
+    return `Last seen yesterday at ${timeStr}`;
+  } else {
+    const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `Last seen ${dateStr} at ${timeStr}`;
   }
-  return `Last seen ${dateStr} at ${timeStr}`;
 }

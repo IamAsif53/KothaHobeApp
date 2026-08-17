@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { MessageSquare, ArrowRight, ShieldCheck, Mail } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Mail } from 'lucide-react';
+import { AppLogo } from '../components/common/AppLogo';
 
 export const LoginPage: React.FC = () => {
   const [emailInput, setEmailInput] = useState('');
@@ -44,14 +45,14 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
-      <div className="pt-12">
-        <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
-          <MessageSquare className="w-7 h-7 text-brand-400" />
+    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto select-none">
+      <div className="pt-10">
+        <div className="flex justify-start mb-6">
+          <AppLogo size="md" showSubtitle={true} />
         </div>
 
         <h1 className="text-2xl font-bold text-white mb-2">Welcome</h1>
-        <p className="text-chat-textMuted text-sm leading-relaxed mb-8">
+        <p className="text-chat-textMuted text-sm leading-relaxed mb-6">
           Chat privately with friends and family. Enter your email address to get started.
         </p>
 
@@ -60,51 +61,44 @@ export const LoginPage: React.FC = () => {
             <label className="block text-xs font-semibold uppercase tracking-wider text-chat-textMuted mb-2">
               Email Address
             </label>
-
             <div className="relative">
               <input
                 type="email"
                 value={emailInput}
                 onChange={handleEmailChange}
                 placeholder="name@example.com"
-                autoFocus
+                disabled={isSubmitting}
+                className="w-full bg-chat-input text-chat-textPrimary placeholder:text-chat-textMuted px-4 py-3.5 pl-11 rounded-xl border border-white/5 focus:border-brand-500 focus:outline-none transition-colors text-sm"
                 autoComplete="email"
-                className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl py-3.5 pl-11 pr-4 text-base font-medium focus:outline-none focus:border-brand-500 transition-colors"
+                autoFocus
               />
-              <Mail className="w-5 h-5 text-chat-textMuted absolute left-3.5 top-3.5" />
+              <Mail className="w-5 h-5 text-chat-textMuted absolute left-3.5 top-1/2 -translate-y-1/2" />
             </div>
-          </div>
-
-          {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-              {error}
-            </div>
-          )}
-
-          <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-chat-textMuted leading-normal">
-            📩 We will send a secure <strong className="text-white">6-digit verification code</strong> to your inbox.
+            {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
           </div>
 
           <button
             type="submit"
-            disabled={isSubmitting || !emailInput.trim()}
-            className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-500/20 mt-4"
+            disabled={isSubmitting}
+            className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-brand-500/20 text-sm"
           >
             {isSubmitting ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <span>Send Code</span>
-                <ArrowRight className="w-5 h-5" />
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-xs text-chat-textMuted py-4">
-        <ShieldCheck className="w-4 h-4 text-brand-400" />
-        <span>Your email is protected with end-to-end authentication.</span>
+      <div className="pt-6 pb-2 text-center">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-chat-textMuted">
+          <ShieldCheck className="w-4 h-4 text-brand-400" />
+          <span>Secured with OTP email authentication</span>
+        </div>
       </div>
     </div>
   );

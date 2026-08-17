@@ -110,7 +110,13 @@ export const AppContent: React.FC = () => {
           path === '/profile-setup' ||
           path === '/otp'
         ) {
-          if (path.startsWith('/chat/')) {
+          if (path.startsWith('/chat/') && path.endsWith('/shared')) {
+            const convId = path.split('/')[2];
+            navigate(`/chat/${convId}`, { replace: true });
+          } else if (path.startsWith('/chat/') && path.endsWith('/info')) {
+            const convId = path.split('/')[2];
+            navigate(`/chat/${convId}`, { replace: true });
+          } else if (path.startsWith('/chat/')) {
             navigate('/chats', { replace: true });
           } else if (path === '/otp') {
             navigate('/login', { replace: true });

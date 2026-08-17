@@ -73,7 +73,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activeCallRef = useRef<CallSession | null>(null);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -197,23 +197,43 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 2. Remote Audio Track Received
       pc.ontrack = (event) => {
-        console.log('[WebRTC] Remote audio track received:', event.track.kind);
-        if (event.streams && event.streams[0]) {
-          if (!remoteAudioRef.current) {
-            const audio = document.createElement('audio');
+        console.log('[WebRTC] Remote audio track received:', event.track.kind, event.streams);
+        try {
+          const remoteStream =
+            event.streams && event.streams.length > 0 && event.streams[0]
+              ? event.streams[0]
+              : new MediaStream([event.track]);
+
+          let audio =
+            remoteAudioRef.current ||
+            (document.getElementById('kothahobe-remote-audio') as HTMLAudioElement);
+
+          if (!audio) {
+            audio = document.createElement('audio');
+            audio.id = 'kothahobe-remote-audio';
             audio.autoplay = true;
             audio.setAttribute('playsinline', 'true');
             (audio as any).playsInline = true;
-            remoteAudioRef.current = audio;
             document.body.appendChild(audio);
+            remoteAudioRef.current = audio;
           }
-          remoteAudioRef.current.srcObject = event.streams[0];
-          remoteAudioRef.current.play().then(() => {
-            console.log('[WebRTC] Remote audio output playing');
-            markConnected(callId);
-          }).catch((err) => {
-            console.warn('[WebRTC] Remote audio play error:', err);
-          });
+
+          audio.srcObject = remoteStream;
+          audio.muted = false;
+          audio.volume = 1.0;
+
+          audio
+            .play()
+            .then(() => {
+              console.log('[WebRTC] Remote audio output playing successfully');
+              markConnected(callId);
+            })
+            .catch((err) => {
+              console.warn('[WebRTC] Remote audio play promise catch:', err);
+              markConnected(callId);
+            });
+        } catch (err) {
+          console.error('[WebRTC] Error in ontrack handler:', err);
         }
       };
 
@@ -553,6 +573,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
               console.warn('[WebRTC] Add pending ICE candidate note:', e);
             }
           }
+        }
+
+        // Ensure receiver microphone tracks are attached to PC before creating Answer
+        if (localStreamRef.current && pc.getSenders().length === 0) {
+          console.log('[WebRTC] Attaching local stream tracks to receiver PC before creating Answer');
+          localStreamRef.current.getTracks().forEach((track) => {
+            pc.addTrack(track, localStreamRef.current!);
+          });
         }
 
         // Create SDP Answer

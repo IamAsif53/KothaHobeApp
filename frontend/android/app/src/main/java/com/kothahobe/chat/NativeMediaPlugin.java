@@ -123,9 +123,11 @@ public class NativeMediaPlugin extends Plugin {
             if (audioManager != null) {
                 audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 audioManager.setMicrophoneMute(false);
+                audioManager.setSpeakerphoneOn(true); // Default to loud & clear speaker
             }
             JSObject ret = new JSObject();
             ret.put("success", true);
+            ret.put("isSpeakerphoneOn", true);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to set call audio mode", e);

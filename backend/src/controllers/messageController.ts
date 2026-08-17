@@ -14,9 +14,9 @@ export const getMessages = async (
     }
 
     const { conversationId } = req.params;
-    const { before, limit = '30' } = req.query;
+    const { before, limit = '40' } = req.query;
 
-    const parsedLimit = Math.min(Math.max(parseInt(limit as string, 10) || 30, 1), 100);
+    const parsedLimit = Math.min(Math.max(parseInt(limit as string, 10) || 40, 1), 100);
 
     // Verify conversation membership
     const conversation = await Conversation.findOne({
@@ -29,23 +29,29 @@ export const getMessages = async (
       return;
     }
 
-    const query: any = { conversationId };
+    const query: any = {
+      conversationId,
+      deletedFor: { $ne: req.user._id },
+    };
 
     if (before && typeof before === 'string') {
       query.createdAt = { $lt: new Date(before) };
     }
 
-    // Fetch messages descending by creation date, then reverse for display
+    // Fetch messages descending (newest first)
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(parsedLimit);
 
     const hasMore = messages.length === parsedLimit;
-    const oldestCursor = messages.length > 0 ? messages[messages.length - 1].createdAt : null;
+    const oldestCursor = messages.length > 0 ? messages[messages.length - 1].createdAt.toISOString() : null;
+
+    // Reverse for chronological top-to-bottom display
+    const chronologicalMessages = [...messages].reverse();
 
     res.status(200).json({
       success: true,
-      messages: messages.reverse(),
+      messages: chronologicalMessages,
       hasMore,
       oldestCursor,
     });

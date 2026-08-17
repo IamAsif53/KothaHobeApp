@@ -13,7 +13,6 @@ import {
   CornerUpLeft,
   Trash2,
   Copy,
-  Smile,
   ExternalLink,
 } from 'lucide-react';
 
@@ -23,6 +22,7 @@ interface MessageBubbleProps {
   onRetry?: (message: IMessage) => void;
   onOpenMedia?: (message: IMessage) => void;
   onOpenDocument?: (message: IMessage) => void;
+  onDownloadDocument?: (message: IMessage) => void;
   onReply?: (message: IMessage) => void;
   onReact?: (messageId: string, emoji: string) => void;
   onDelete?: (messageId: string, deleteForEveryone: boolean) => void;
@@ -37,6 +37,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onRetry,
   onOpenMedia,
   onOpenDocument,
+  onDownloadDocument,
   onReply,
   onReact,
   onDelete,
@@ -159,13 +160,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <button
                   onClick={() => {
                     if (message.type === 'image') onOpenMedia && onOpenMedia(message);
-                    else onOpenDocument && onOpenDocument(message);
+                    else if (message.type === 'document') onOpenDocument && onOpenDocument(message);
                     setShowMenu(false);
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
                 >
-                  <Download className="w-4 h-4 text-sky-400" />
-                  <span>Open / Save Attachment</span>
+                  <ExternalLink className="w-4 h-4 text-sky-400" />
+                  <span>Open Attachment</span>
+                </button>
+              )}
+
+              {message.type === 'document' && (
+                <button
+                  onClick={() => {
+                    onDownloadDocument && onDownloadDocument(message);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Download to Device</span>
                 </button>
               )}
 
@@ -244,24 +258,40 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* 2. Document Message */}
+        {/* 2. Document Message Card with Separate Native Open & Download */}
         {message.type === 'document' && message.attachment && (
           <div
             onClick={() => onOpenDocument && onOpenDocument(message)}
-            className="flex items-center gap-3 p-2.5 rounded-xl bg-black/20 hover:bg-black/30 cursor-pointer border border-white/5 transition-colors min-w-[200px]"
+            className="flex flex-col gap-2 p-2.5 rounded-xl bg-black/20 hover:bg-black/30 cursor-pointer border border-white/5 transition-colors min-w-[220px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-white truncate">
-                {message.attachment.fileName}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5" />
               </div>
-              <div className="text-[11px] text-white/60">
-                {formatFileSize(message.attachment.size)}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-white truncate">
+                  {message.attachment.fileName}
+                </div>
+                <div className="text-[11px] text-white/60">
+                  {formatFileSize(message.attachment.size)} • Tap to open
+                </div>
               </div>
             </div>
-            <Download className="w-4 h-4 text-white/50 flex-shrink-0" />
+
+            <div className="flex items-center justify-between pt-1 border-t border-white/5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadDocument && onDownloadDocument(message);
+                }}
+                className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 font-semibold py-1 px-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download</span>
+              </button>
+              <span className="text-[10px] text-white/40">Native View</span>
+            </div>
           </div>
         )}
 

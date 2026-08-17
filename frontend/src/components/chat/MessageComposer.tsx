@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip, Image as ImageIcon, Camera, FileText, Mic, X, Trash2, StopCircle } from 'lucide-react';
+import { Send, Smile, Paperclip, Image as ImageIcon, Camera, FileText, Mic, X, Trash2, StopCircle, Settings as SettingsIcon } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import { IReplyTo, IAttachment } from '../../types';
+import { ensureAudioPermission, openSystemAppSettings } from '../../services/nativeMediaService';
 
 interface MessageComposerProps {
   onSend: (text: string, type?: 'text' | 'image' | 'audio' | 'document', attachment?: IAttachment, replyTo?: IReplyTo) => void;
@@ -31,7 +32,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   // Audio Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [permissionAlert, setPermissionAlert] = useState<{ message: string; isPermanent?: boolean } | null>(null);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const activeStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -48,6 +52,18 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
   }, [text]);
+
+  // Clean up recording tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (activeStreamRef.current) {
+        activeStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (recordTimerRef.current) {
+        clearInterval(recordTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -116,13 +132,48 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     e.target.value = '';
   };
 
-  // 3. Audio Recording
+  // 3. Real Audio Recording with Android Permission Check
+  const handleMicClick = async () => {
+    if (disabled || isRecording) return;
+
+    // Check & request runtime microphone permission
+    const perm = await ensureAudioPermission();
+    if (!perm.granted) {
+      if (perm.permanentlyDenied) {
+        setPermissionAlert({
+          message: 'Microphone permission is disabled for Kotha Hobe. Please enable it in Android Settings to record voice messages.',
+          isPermanent: true,
+        });
+      } else {
+        setPermissionAlert({
+          message: 'Microphone permission is required to record voice messages.',
+          isPermanent: false,
+        });
+      }
+      return;
+    }
+
+    startRecording();
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      activeStreamRef.current = stream;
       audioChunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream);
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+          mimeType = 'audio/aac';
+        } else {
+          mimeType = '';
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
@@ -130,13 +181,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       };
 
       recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (activeStreamRef.current) {
+          activeStreamRef.current.getTracks().forEach((track) => track.stop());
+          activeStreamRef.current = null;
+        }
+
+        const finalType = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: finalType });
 
         if (audioChunksRef.current.length > 0 && recordingSeconds >= 1) {
           setIsUploading(true);
           try {
-            const fileName = `voice_${Date.now()}.webm`;
+            const ext = finalType.includes('mp4') ? 'm4a' : 'webm';
+            const fileName = `voice_${Date.now()}.${ext}`;
             const attachment = await onUploadFile(audioBlob, fileName, 'audio');
             if (attachment) {
               attachment.duration = recordingSeconds;
@@ -157,9 +214,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       recordTimerRef.current = setInterval(() => {
         setRecordingSeconds((sec) => sec + 1);
       }, 1000);
-    } catch (err) {
-      console.error('[VoiceRecorder] Failed to start:', err);
-      alert('Microphone permission is required to record voice messages.');
+    } catch (err: any) {
+      console.error('[VoiceRecorder] Start error:', err);
+      setPermissionAlert({
+        message: 'Could not start audio recording. Please ensure microphone access is granted.',
+        isPermanent: false,
+      });
     }
   };
 
@@ -180,6 +240,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       setIsRecording(false);
       if (recordTimerRef.current) {
         clearInterval(recordTimerRef.current);
+      }
+      if (activeStreamRef.current) {
+        activeStreamRef.current.getTracks().forEach((track) => track.stop());
+        activeStreamRef.current = null;
       }
     }
   };
@@ -216,6 +280,54 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         className="hidden"
         onChange={(e) => handleFileSelect(e, 'document')}
       />
+
+      {/* Permission Alert Dialog */}
+      {permissionAlert && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#202c33] border border-white/10 rounded-2xl p-5 w-full max-w-xs shadow-2xl space-y-4 animate-scale-up text-center">
+            <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 mx-auto flex items-center justify-center">
+              <Mic className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white mb-1.5">Microphone Permission</h3>
+              <p className="text-xs text-chat-textMuted leading-relaxed">{permissionAlert.message}</p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              {permissionAlert.isPermanent ? (
+                <button
+                  onClick={() => {
+                    openSystemAppSettings();
+                    setPermissionAlert(null);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                >
+                  <SettingsIcon className="w-4 h-4" />
+                  <span>Open Android Settings</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setPermissionAlert(null);
+                    handleMicClick();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                >
+                  Try Again
+                </button>
+              )}
+
+              <button
+                onClick={() => setPermissionAlert(null)}
+                className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-chat-textMuted hover:text-white text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Replying Banner */}
       {replyingTo && (
@@ -409,7 +521,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           ) : (
             <button
               type="button"
-              onClick={startRecording}
+              onClick={handleMicClick}
               disabled={disabled}
               className="w-11 h-11 rounded-full bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white flex items-center justify-center transition-all flex-shrink-0 shadow-md active:scale-95"
               title="Record Voice Message"

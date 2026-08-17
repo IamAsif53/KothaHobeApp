@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchMessagesApi, uploadMediaApi, searchInConversationApi } from '../api/messageApi';
 import { fetchConversations } from '../api/conversationApi';
@@ -14,11 +14,17 @@ import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { MessageSkeleton } from '../components/common/Skeleton';
 import { formatLastSeen, formatChatListDate } from '../utils/dateUtils';
 import {
+  openDocumentInNativeApp,
+  downloadDocumentToDevice,
+  saveImageToDevice,
+} from '../services/nativeMediaService';
+import {
   ArrowLeft,
   WifiOff,
   Search,
   MoreVertical,
   X,
+  ChevronDown,
 } from 'lucide-react';
 
 export const ChatRoomPage: React.FC = () => {
@@ -42,7 +48,7 @@ export const ChatRoomPage: React.FC = () => {
     }
   });
 
-  // ⚡ Instant Render: Load cached messages immediately
+  // Load cached messages immediately
   const [messages, setMessages] = useState<IMessage[]>(() => {
     try {
       if (conversationId) {
@@ -65,18 +71,35 @@ export const ChatRoomPage: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
+  // New Messages while scrolled up badge
+  const [unreadNewCount, setUnreadNewCount] = useState(0);
+  const isNearBottomRef = useRef(true);
+
+  // Scroll offset preservation ref for upward pagination
+  const scrollOffsetRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+  const initialScrollDoneRef = useRef(false);
+
   // Replying & Modals
   const [replyingTo, setReplyingTo] = useState<IReplyTo | null>(null);
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
+
+  // Toast / Status Message
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // In-Chat Search
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Debounced LocalStorage save
   const persistMessages = useCallback(
@@ -92,19 +115,68 @@ export const ChatRoomPage: React.FC = () => {
     [conversationId]
   );
 
-  // Instant hardware scroll
+  // Hardware Instant Scroll to Bottom
   const scrollToBottom = useCallback((instant = false) => {
-    if (scrollContainerRef.current) {
+    const container = scrollContainerRef.current;
+    if (container) {
       if (instant) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        container.scrollTop = container.scrollHeight;
       } else {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
+        container.scrollTo({
+          top: container.scrollHeight,
           behavior: 'smooth',
         });
       }
+      isNearBottomRef.current = true;
+      setUnreadNewCount(0);
     }
   }, []);
+
+  // Monitor Scroll Position
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    isNearBottomRef.current = distanceToBottom < 130;
+
+    if (isNearBottomRef.current) {
+      setUnreadNewCount(0);
+    }
+
+    // Trigger loading older messages when near top (within 50px)
+    if (scrollTop < 50 && hasMore && !loadingMore && oldestCursor) {
+      handleLoadMore();
+    }
+  };
+
+  // Synchronize Scroll on initial render and upward pagination
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // Upward pagination scroll compensation
+    if (scrollOffsetRef.current) {
+      const { prevScrollHeight, prevScrollTop } = scrollOffsetRef.current;
+      const heightDelta = container.scrollHeight - prevScrollHeight;
+      container.scrollTop = prevScrollTop + heightDelta;
+      scrollOffsetRef.current = null;
+      return;
+    }
+
+    // Initial mount bottom pin
+    if (!initialScrollDoneRef.current && messages.length > 0) {
+      container.scrollTop = container.scrollHeight;
+      initialScrollDoneRef.current = true;
+      return;
+    }
+
+    // If already near bottom, stay pinned
+    if (isNearBottomRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages]);
 
   // Set Active Conversation ID
   useEffect(() => {
@@ -119,6 +191,7 @@ export const ChatRoomPage: React.FC = () => {
   // Load conversation details & initial messages
   useEffect(() => {
     if (!conversationId) return;
+    initialScrollDoneRef.current = false;
 
     const initChat = async () => {
       if (!localStorage.getItem(`kotha_hobe_msgs_${conversationId}`)) {
@@ -152,7 +225,7 @@ export const ChatRoomPage: React.FC = () => {
         console.warn('[ChatRoom] Background sync notice');
       } finally {
         setLoading(false);
-        setTimeout(() => scrollToBottom(true), 60);
+        requestAnimationFrame(() => scrollToBottom(true));
       }
     };
 
@@ -188,7 +261,12 @@ export const ChatRoomPage: React.FC = () => {
         });
 
         markAsRead(conversationId);
-        scrollToBottom(true);
+
+        if (isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(false));
+        } else {
+          setUnreadNewCount((cnt) => cnt + 1);
+        }
       }
     };
 
@@ -296,9 +374,17 @@ export const ChatRoomPage: React.FC = () => {
     };
   }, [socket, conversationId, recipient, persistMessages, scrollToBottom]);
 
-  // Load older messages
+  // Load older messages with zero-jump scroll anchoring
   const handleLoadMore = async () => {
     if (!conversationId || !hasMore || loadingMore || !oldestCursor) return;
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      scrollOffsetRef.current = {
+        prevScrollHeight: container.scrollHeight,
+        prevScrollTop: container.scrollTop,
+      };
+    }
 
     setLoadingMore(true);
     try {
@@ -310,6 +396,7 @@ export const ChatRoomPage: React.FC = () => {
       }
     } catch (error) {
       console.error('[ChatRoom] Failed to load older messages:', error);
+      scrollOffsetRef.current = null;
     } finally {
       setLoadingMore(false);
     }
@@ -336,7 +423,7 @@ export const ChatRoomPage: React.FC = () => {
     }
   };
 
-  // Send Message (Text / Image / Doc / Audio)
+  // Send Message
   const handleSendMessage = (
     text: string,
     type: 'text' | 'image' | 'audio' | 'document' = 'text',
@@ -367,7 +454,7 @@ export const ChatRoomPage: React.FC = () => {
       return updated;
     });
 
-    scrollToBottom(true);
+    requestAnimationFrame(() => scrollToBottom(true));
     setReplyingTo(null);
 
     // Send via socket
@@ -382,6 +469,34 @@ export const ChatRoomPage: React.FC = () => {
         replyTo,
       });
     }
+  };
+
+  // 1. Native Document Open (Default Reader App)
+  const handleOpenDocument = async (msg: IMessage) => {
+    if (!msg.attachment?.url) return;
+    const fileName = msg.attachment.fileName || 'document.pdf';
+    const mimeType = msg.attachment.mimeType || 'application/pdf';
+
+    showToast(`Opening ${fileName}...`);
+    const res = await openDocumentInNativeApp(msg.attachment.url, fileName, mimeType);
+    if (!res.success) {
+      if (res.error === 'NO_APP') {
+        setActiveDocModal(msg);
+      } else {
+        showToast(res.error || 'Could not open document');
+      }
+    }
+  };
+
+  // 2. Native Document Download
+  const handleDownloadDocument = async (msg: IMessage) => {
+    if (!msg.attachment?.url) return;
+    const fileName = msg.attachment.fileName || 'document.pdf';
+    const mimeType = msg.attachment.mimeType || 'application/pdf';
+
+    showToast(`Downloading ${fileName}...`);
+    const res = await downloadDocumentToDevice(msg.attachment.url, fileName, mimeType);
+    showToast(res.message);
   };
 
   // React to Message
@@ -430,6 +545,13 @@ export const ChatRoomPage: React.FC = () => {
       style={{ backgroundColor: themeConfig.bg }}
       className="h-full w-full flex flex-col overflow-hidden transition-colors duration-200"
     >
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl animate-fade-in">
+          {toastMessage}
+        </div>
+      )}
+
       {/* Full-Screen Media Viewer Modal */}
       {activeMediaModal && (
         <MediaViewerModal
@@ -438,7 +560,7 @@ export const ChatRoomPage: React.FC = () => {
         />
       )}
 
-      {/* Document Viewer Modal */}
+      {/* Document Viewer Modal (Fallback when no native app installed) */}
       {activeDocModal && (
         <DocumentViewerModal
           message={activeDocModal}
@@ -542,19 +664,14 @@ export const ChatRoomPage: React.FC = () => {
       {/* Messages Scroll Area */}
       <div
         ref={scrollContainerRef}
+        onScroll={handleScroll}
         style={{ backgroundColor: themeConfig.bg }}
-        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200"
+        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200 relative"
       >
-        {/* Load More Button */}
-        {hasMore && (
-          <div className="text-center py-2">
-            <button
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="text-xs text-brand-400 hover:text-brand-300 font-medium px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading older messages...' : 'Load previous messages'}
-            </button>
+        {/* Loading Older Messages Spinner */}
+        {loadingMore && (
+          <div className="flex justify-center py-2">
+            <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -593,7 +710,8 @@ export const ChatRoomPage: React.FC = () => {
                   message={msg}
                   isMe={isMine}
                   onOpenMedia={() => setActiveMediaModal(msg)}
-                  onOpenDocument={() => setActiveDocModal(msg)}
+                  onOpenDocument={() => handleOpenDocument(msg)}
+                  onDownloadDocument={() => handleDownloadDocument(msg)}
                   onReply={handleReply}
                   onReact={handleReact}
                   onDelete={handleDelete}
@@ -602,7 +720,20 @@ export const ChatRoomPage: React.FC = () => {
             );
           })
         )}
+
+        <div ref={bottomAnchorRef} className="h-0 w-0" />
       </div>
+
+      {/* Floating "↓ X New Messages" Pill */}
+      {unreadNewCount > 0 && (
+        <button
+          onClick={() => scrollToBottom(false)}
+          className="fixed bottom-20 right-6 z-30 px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xl animate-bounce-short active:scale-95 transition-all"
+        >
+          <ChevronDown className="w-4 h-4" />
+          <span>{unreadNewCount} new {unreadNewCount === 1 ? 'message' : 'messages'}</span>
+        </button>
+      )}
 
       {/* Message Composer */}
       <MessageComposer

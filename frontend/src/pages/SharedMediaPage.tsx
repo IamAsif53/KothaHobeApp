@@ -7,13 +7,17 @@ import { MediaViewerModal } from '../components/chat/MediaViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { VoiceMessagePlayer } from '../components/chat/VoiceMessagePlayer';
 import {
+  openDocumentInNativeApp,
+  downloadDocumentToDevice,
+} from '../services/nativeMediaService';
+import {
   ArrowLeft,
   Image as ImageIcon,
   FileText,
   Mic,
   Download,
   ExternalLink,
-  MessageSquare,
+  Check,
 } from 'lucide-react';
 
 export const SharedMediaPage: React.FC = () => {
@@ -24,10 +28,16 @@ export const SharedMediaPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'media' | 'documents' | 'audio'>('media');
   const [items, setItems] = useState<IMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Modals
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const loadCategory = async (tab: 'media' | 'documents' | 'audio') => {
     if (!conversationId) return;
@@ -57,11 +67,46 @@ export const SharedMediaPage: React.FC = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleOpenDoc = async (msg: IMessage) => {
+    if (!msg.attachment?.url) return;
+    const fileName = msg.attachment.fileName || 'document.pdf';
+    const mimeType = msg.attachment.mimeType || 'application/pdf';
+
+    showToast(`Opening ${fileName}...`);
+    const res = await openDocumentInNativeApp(msg.attachment.url, fileName, mimeType);
+    if (!res.success) {
+      if (res.error === 'NO_APP') {
+        setActiveDocModal(msg);
+      } else {
+        showToast(res.error || 'Failed to open document');
+      }
+    }
+  };
+
+  const handleDownloadDoc = async (e: React.MouseEvent, msg: IMessage) => {
+    e.stopPropagation();
+    if (!msg.attachment?.url) return;
+    const fileName = msg.attachment.fileName || 'document.pdf';
+    const mimeType = msg.attachment.mimeType || 'application/pdf';
+
+    showToast(`Downloading ${fileName}...`);
+    const res = await downloadDocumentToDevice(msg.attachment.url, fileName, mimeType);
+    showToast(res.message);
+  };
+
   return (
     <div
       style={{ backgroundColor: themeConfig.bg }}
       className="h-full w-full flex flex-col max-w-md mx-auto overflow-hidden select-none transition-colors duration-200"
     >
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-1.5 animate-fade-in">
+          <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Media / Doc Full-screen Modals */}
       {activeMediaModal && (
         <MediaViewerModal
@@ -171,7 +216,7 @@ export const SharedMediaPage: React.FC = () => {
                   <div
                     key={msg._id}
                     style={{ backgroundColor: themeConfig.card }}
-                    onClick={() => setActiveDocModal(msg)}
+                    onClick={() => handleOpenDoc(msg)}
                     className="border border-white/5 rounded-xl p-3 flex items-center justify-between hover:bg-white/5 cursor-pointer transition-colors shadow-sm"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -188,7 +233,13 @@ export const SharedMediaPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <Download className="w-4 h-4 text-chat-textMuted flex-shrink-0" />
+                    <button
+                      onClick={(e) => handleDownloadDoc(e, msg)}
+                      className="p-2 rounded-lg hover:bg-white/10 text-chat-textMuted hover:text-brand-400 transition-colors"
+                      title="Download to Device"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>

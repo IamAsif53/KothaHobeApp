@@ -27,12 +27,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('kotha_hobe_token'));
-  const [loading, setLoading] = useState<boolean>(true);
+  
+  // Instant App Launch: If user is already cached, loading is immediately false (0ms delay)
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cachedToken = localStorage.getItem('kotha_hobe_token');
+    const cachedUser = localStorage.getItem('kotha_hobe_user');
+    return !(cachedToken && cachedUser);
+  });
+
   const [email, setEmail] = useState<string>(() => localStorage.getItem('kotha_hobe_pending_email') || '');
 
-  // Persistent Session: Validate and sync session on app launch
+  // Background session sync (never blocks initial render or offline navigation)
   useEffect(() => {
-    const initAuth = async () => {
+    const syncAuth = async () => {
       const storedToken = localStorage.getItem('kotha_hobe_token');
       if (storedToken) {
         try {
@@ -43,8 +50,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setToken(storedToken);
           }
         } catch (error: any) {
-          console.warn('[AuthContext] Session validation:', error?.message);
-          if (error?.message?.includes('401') || error?.message?.includes('unauthorized') || error?.message?.includes('Not authenticated')) {
+          console.warn('[AuthContext] Background sync notice:', error?.message);
+          // Only clear session if explicitly rejected with 401 Unauthorized
+          if (
+            error?.message?.includes('401') ||
+            error?.message?.includes('unauthorized') ||
+            error?.message?.includes('Not authenticated')
+          ) {
             logout();
           }
         }
@@ -52,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     };
 
-    initAuth();
+    syncAuth();
   }, []);
 
   const sendOtp = async (inputEmail: string): Promise<boolean> => {
@@ -121,6 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('kotha_hobe_token');
     localStorage.removeItem('kotha_hobe_user');
     localStorage.removeItem('kotha_hobe_pending_email');
+    localStorage.removeItem('kotha_hobe_cached_conversations');
     setToken(null);
     setUser(null);
   };

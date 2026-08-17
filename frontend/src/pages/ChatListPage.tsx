@@ -9,22 +9,36 @@ import { formatChatListDate } from '../utils/dateUtils';
 import { Search, UserPlus, MessageSquare, Check, CheckCheck, WifiOff } from 'lucide-react';
 
 export const ChatListPage: React.FC = () => {
-  const [conversations, setConversations] = useState<IConversation[]>([]);
+  // ⚡ Instant Render: Initialize immediately from cached conversations
+  const [conversations, setConversations] = useState<IConversation[]>(() => {
+    try {
+      const cached = localStorage.getItem('kotha_hobe_cached_conversations');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    return !localStorage.getItem('kotha_hobe_cached_conversations');
+  });
 
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
 
   const loadConversations = async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !localStorage.getItem('kotha_hobe_cached_conversations')) {
+      setLoading(true);
+    }
     try {
       const res = await fetchConversations();
-      if (res.success) {
-        setConversations(res.conversations || []);
+      if (res.success && res.conversations) {
+        setConversations(res.conversations);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(res.conversations));
       }
     } catch (error) {
-      console.warn('[ChatList] Failed to load conversations');
+      console.warn('[ChatList] Background sync notice (offline or network pause)');
     } finally {
       setLoading(false);
     }
@@ -86,8 +100,8 @@ export const ChatListPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col overflow-hidden">
-      {/* Top Bar Header */}
-      <header className="px-4 py-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
+      {/* Top Bar Header with safe area status bar padding */}
+      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center">
             <MessageSquare className="w-4 h-4 text-brand-400" />
@@ -99,7 +113,7 @@ export const ChatListPage: React.FC = () => {
           {!isConnected && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
               <WifiOff className="w-3.5 h-3.5" />
-              <span>Connecting...</span>
+              <span>Offline</span>
             </div>
           )}
 

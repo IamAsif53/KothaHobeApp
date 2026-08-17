@@ -18,9 +18,38 @@ export const ChatRoomPage: React.FC = () => {
   const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping } = useSocket();
   const navigate = useNavigate();
 
-  const [recipient, setRecipient] = useState<IUser | null>(null);
-  const [messages, setMessages] = useState<IMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recipient, setRecipient] = useState<IUser | null>(() => {
+    try {
+      const cachedConvs = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (cachedConvs && conversationId) {
+        const parsed = JSON.parse(cachedConvs);
+        const match = parsed.find((c: any) => c._id === conversationId);
+        return match ? match.recipient : null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  // ⚡ Instant Render: Load cached messages immediately for 0ms chat opening
+  const [messages, setMessages] = useState<IMessage[]>(() => {
+    try {
+      if (conversationId) {
+        const cached = localStorage.getItem(`kotha_hobe_msgs_${conversationId}`);
+        return cached ? JSON.parse(cached) : [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (!conversationId) return false;
+    return !localStorage.getItem(`kotha_hobe_msgs_${conversationId}`);
+  });
+
   const [hasMore, setHasMore] = useState(false);
   const [oldestCursor, setOldestCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -35,11 +64,13 @@ export const ChatRoomPage: React.FC = () => {
     if (!conversationId) return;
 
     const initChat = async () => {
-      setLoading(true);
+      if (!localStorage.getItem(`kotha_hobe_msgs_${conversationId}`)) {
+        setLoading(true);
+      }
       try {
         // Fetch conversation to get recipient info
         const convsRes = await fetchConversations();
-        if (convsRes.success) {
+        if (convsRes.success && convsRes.conversations) {
           const currentConv = convsRes.conversations.find((c) => c._id === conversationId);
           if (currentConv) {
             setRecipient(currentConv.recipient);
@@ -48,17 +79,17 @@ export const ChatRoomPage: React.FC = () => {
 
         // Fetch message history
         const msgRes = await fetchMessagesApi(conversationId, undefined, 30);
-        if (msgRes.success) {
-          setMessages(msgRes.messages || []);
+        if (msgRes.success && msgRes.messages) {
+          setMessages(msgRes.messages);
           setHasMore(msgRes.hasMore);
           setOldestCursor(msgRes.oldestCursor);
+          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(msgRes.messages));
         }
       } catch (error) {
-        console.error('[ChatRoom] Failed to load chat history:', error);
+        console.warn('[ChatRoom] Background sync notice (offline or network pause)');
       } finally {
         setLoading(false);
-        // Scroll to bottom on initial load
-        setTimeout(() => scrollToBottom(), 100);
+        setTimeout(() => scrollToBottom(), 80);
       }
     };
 
@@ -85,101 +116,68 @@ export const ChatRoomPage: React.FC = () => {
     const handleNewMessage = (newMsg: IMessage) => {
       if (newMsg.conversationId === conversationId) {
         setMessages((prev) => {
-          // Prevent duplicates
           if (prev.some((m) => m._id === newMsg._id || m.clientMessageId === newMsg.clientMessageId)) {
             return prev;
           }
-          return [...prev, newMsg];
+          const updated = [...prev, newMsg];
+          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+          return updated;
         });
 
-        // Mark as read immediately since chat room is open
         markAsRead(conversationId);
         scrollToBottom();
       }
     };
 
-    // Server confirmation of sent message
-    const handleMessageSent = (data: {
-      _id: string;
-      clientMessageId: string;
-      conversationId: string;
-      status: string;
-      createdAt: string;
-    }) => {
-      if (data.conversationId === conversationId) {
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.clientMessageId === data.clientMessageId) {
-              return {
-                ...msg,
-                _id: data._id,
-                status: data.status as any,
-                createdAt: data.createdAt,
-              };
-            }
-            return msg;
-          })
-        );
+    // Message sent acknowledgement from server
+    const handleMessageSent = (sentMsg: IMessage) => {
+      if (sentMsg.conversationId === conversationId) {
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id ? sentMsg : m
+          );
+          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
       }
     };
 
-    // Delivery confirmation
-    const handleMessageDelivered = (data: {
-      _id: string;
-      clientMessageId: string;
-      conversationId: string;
-    }) => {
-      if (data.conversationId === conversationId) {
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.clientMessageId === data.clientMessageId || msg._id === data._id) {
-              return { ...msg, status: 'delivered' };
-            }
-            return msg;
-          })
-        );
-      }
+    // Delivery receipt update
+    const handleMessageDelivered = ({ messageId, deliveredAt }: { messageId: string; deliveredAt: string }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m._id === messageId ? { ...m, status: 'delivered', deliveredAt } : m))
+      );
     };
 
-    // Read receipt confirmation (blue ticks)
-    const handleMessageRead = (data: { conversationId: string; readAt: string }) => {
-      if (data.conversationId === conversationId) {
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.senderId === user?._id) {
-              return { ...msg, status: 'read', readAt: data.readAt };
-            }
-            return msg;
-          })
-        );
-      }
+    // Read receipt update
+    const handleMessageRead = ({ messageId, readAt }: { messageId: string; readAt: string }) => {
+      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, status: 'read', readAt } : m)));
     };
 
-    // Presence updates
-    const handleUserOnline = (data: { userId: string }) => {
-      if (recipient && data.userId === recipient._id) {
-        setRecipient((prev) => (prev ? { ...prev, isOnline: true } : null));
-      }
-    };
-
-    const handleUserOffline = (data: { userId: string; lastSeen: string }) => {
-      if (recipient && data.userId === recipient._id) {
-        setRecipient((prev) =>
-          prev ? { ...prev, isOnline: false, lastSeen: data.lastSeen } : null
-        );
-      }
-    };
-
-    // Typing state
-    const handleTypingStart = (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === conversationId && data.userId === recipient?._id) {
+    // Recipient typing indicator
+    const handleTypingStart = ({ userId }: { userId: string }) => {
+      if (recipient && userId === recipient._id) {
         setIsTyping(true);
       }
     };
 
-    const handleTypingStop = (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === conversationId && data.userId === recipient?._id) {
+    const handleTypingStop = ({ userId }: { userId: string }) => {
+      if (recipient && userId === recipient._id) {
         setIsTyping(false);
+      }
+    };
+
+    // User online status update
+    const handleUserOnline = ({ userId }: { userId: string }) => {
+      if (recipient && userId === recipient._id) {
+        setRecipient((prev) => (prev ? { ...prev, isOnline: true } : null));
+      }
+    };
+
+    // User offline status update
+    const handleUserOffline = ({ userId, lastSeen }: { userId: string; lastSeen: string }) => {
+      if (recipient && userId === recipient._id) {
+        setRecipient((prev) => (prev ? { ...prev, isOnline: false, lastSeen } : null));
       }
     };
 
@@ -187,180 +185,128 @@ export const ChatRoomPage: React.FC = () => {
     socket.on('message:sent', handleMessageSent);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('message:read', handleMessageRead);
-    socket.on('user:online', handleUserOnline);
-    socket.on('user:offline', handleUserOffline);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
+    socket.on('user:online', handleUserOnline);
+    socket.on('user:offline', handleUserOffline);
 
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:sent', handleMessageSent);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('message:read', handleMessageRead);
-      socket.off('user:online', handleUserOnline);
-      socket.off('user:offline', handleUserOffline);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
+      socket.off('user:online', handleUserOnline);
+      socket.off('user:offline', handleUserOffline);
     };
-  }, [socket, conversationId, recipient, user]);
+  }, [socket, conversationId, recipient]);
+
+  // Load older messages (pagination)
+  const handleLoadMore = async () => {
+    if (!conversationId || !hasMore || loadingMore || !oldestCursor) return;
+
+    setLoadingMore(true);
+    try {
+      const msgRes = await fetchMessagesApi(conversationId, oldestCursor, 30);
+      if (msgRes.success) {
+        setMessages((prev) => [...(msgRes.messages || []), ...prev]);
+        setHasMore(msgRes.hasMore);
+        setOldestCursor(msgRes.oldestCursor);
+      }
+    } catch (error) {
+      console.error('[ChatRoom] Failed to load older messages:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Pagination: Load older messages on scroll top
-  const handleScroll = async () => {
-    if (!scrollContainerRef.current || loadingMore || !hasMore || !oldestCursor || !conversationId) {
-      return;
-    }
-
-    if (scrollContainerRef.current.scrollTop === 0) {
-      setLoadingMore(true);
-      const prevScrollHeight = scrollContainerRef.current.scrollHeight;
-
-      try {
-        const res = await fetchMessagesApi(conversationId, oldestCursor, 30);
-        if (res.success && res.messages.length > 0) {
-          setMessages((prev) => [...res.messages, ...prev]);
-          setHasMore(res.hasMore);
-          setOldestCursor(res.oldestCursor);
-
-          // Preserve scroll position
-          setTimeout(() => {
-            if (scrollContainerRef.current) {
-              scrollContainerRef.current.scrollTop =
-                scrollContainerRef.current.scrollHeight - prevScrollHeight;
-            }
-          }, 50);
-        }
-      } catch (err) {
-        console.warn('[ChatRoom] Failed to load older messages');
-      } finally {
-        setLoadingMore(false);
-      }
-    }
-  };
-
-  // Optimistic Message Send Handler
   const handleSendMessage = (text: string) => {
-    if (!conversationId || !recipient || !user) return;
+    if (!conversationId || !recipient || !text.trim()) return;
 
-    // Generate unique client UUID
-    const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // 1. Optimistic local insertion
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage: IMessage = {
-      _id: clientMessageId,
+      _id: tempId,
       conversationId,
-      senderId: user._id,
+      senderId: user?._id || '',
       receiverId: recipient._id,
-      text,
+      text: text.trim(),
       type: 'text',
-      status: isConnected ? 'sending' : 'failed',
-      clientMessageId,
+      status: 'sending',
+      clientMessageId: tempId,
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, optimisticMessage]);
+    setMessages((prev) => {
+      const updated = [...prev, optimisticMessage];
+      localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
+      return updated;
+    });
     setTimeout(() => scrollToBottom(), 50);
 
-    // 2. Emit over socket if connected
-    if (isConnected) {
-      sendMessage(conversationId, recipient._id, text, clientMessageId);
-    }
-  };
-
-  const handleRetry = (msg: IMessage) => {
-    if (!recipient || !conversationId) return;
-    setMessages((prev) =>
-      prev.map((m) => (m.clientMessageId === msg.clientMessageId ? { ...m, status: 'sending' } : m))
-    );
-    sendMessage(conversationId, recipient._id, msg.text, msg.clientMessageId);
+    sendMessage(conversationId, recipient._id, text.trim(), tempId);
   };
 
   const handleTyping = () => {
-    if (conversationId && recipient) {
-      startTyping(conversationId, recipient._id);
+    if (!conversationId || !recipient) return;
+
+    startTyping(conversationId, recipient._id);
+
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
     }
-  };
 
-  // Group messages by date header
-  const renderMessageGroups = () => {
-    const groups: { dateLabel: string; msgs: IMessage[] }[] = [];
-
-    messages.forEach((msg) => {
-      const dateLabel = formatChatListDate(msg.createdAt);
-      const lastGroup = groups[groups.length - 1];
-
-      if (lastGroup && lastGroup.dateLabel === dateLabel) {
-        lastGroup.msgs.push(msg);
-      } else {
-        groups.push({ dateLabel, msgs: [msg] });
-      }
-    });
-
-    return groups.map((group, groupIdx) => (
-      <React.Fragment key={groupIdx}>
-        {/* Date separator pill */}
-        <div className="flex justify-center my-3 select-none">
-          <span className="bg-chat-card/80 border border-white/5 text-chat-textMuted font-medium text-[11px] px-3 py-1 rounded-full shadow-sm">
-            {group.dateLabel}
-          </span>
-        </div>
-
-        {group.msgs.map((msg) => (
-          <MessageBubble
-            key={msg.clientMessageId || msg._id}
-            message={msg}
-            isMe={msg.senderId === user?._id}
-            onRetry={handleRetry}
-          />
-        ))}
-      </React.Fragment>
-    ));
+    typingTimerRef.current = setTimeout(() => {
+      stopTyping(conversationId, recipient._id);
+    }, 2500);
   };
 
   return (
-    <div className="h-dvh w-full bg-chat-bg flex flex-col overflow-hidden max-w-md mx-auto relative">
-      {/* Sticky Header */}
-      <header className="px-3 py-2.5 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0 z-30 select-none">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="h-full w-full bg-chat-bg flex flex-col overflow-hidden">
+      {/* Top Header with Status Bar Safe Area Padding */}
+      <header className="px-3 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/chats')}
-            className="p-1.5 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors flex-shrink-0"
+            className="p-1.5 -ml-1 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors flex-shrink-0"
+            title="Back to Chats"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          {recipient && (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar
-                src={recipient.avatarUrl}
-                name={recipient.displayName}
-                isOnline={recipient.isOnline}
-                size="md"
-              />
+          <Avatar
+            src={recipient?.avatarUrl}
+            name={recipient?.displayName || recipient?.username || 'User'}
+            isOnline={recipient?.isOnline}
+            size="sm"
+          />
 
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-white truncate leading-tight">
-                  {recipient.displayName}
-                </h2>
-                <p className="text-[11px] text-chat-textMuted truncate">
-                  {isTyping ? (
-                    <span className="text-brand-400 font-semibold animate-pulse">typing...</span>
-                  ) : (
-                    formatLastSeen(recipient.lastSeen, recipient.isOnline)
-                  )}
-                </p>
-              </div>
-            </div>
-          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-white truncate">
+              {recipient?.displayName || recipient?.username || 'Chat'}
+            </h2>
+            <p className="text-[11px] text-chat-textMuted truncate">
+              {isTyping ? (
+                <span className="text-brand-400 font-medium animate-pulse">typing...</span>
+              ) : recipient?.isOnline ? (
+                <span className="text-emerald-400 font-medium">online</span>
+              ) : recipient?.lastSeen ? (
+                <span>last seen {formatLastSeen(recipient.lastSeen)}</span>
+              ) : (
+                <span>offline</span>
+              )}
+            </p>
+          </div>
         </div>
 
         {!isConnected && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-medium flex-shrink-0">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-medium flex-shrink-0">
             <WifiOff className="w-3 h-3" />
-            <span>Offline</span>
+            <span>Connecting</span>
           </div>
         )}
       </header>
@@ -368,44 +314,70 @@ export const ChatRoomPage: React.FC = () => {
       {/* Messages Scroll Area */}
       <div
         ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-1 py-2 bg-chat-bg space-y-1"
-        style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0)', backgroundSize: '24px 24px' }}
+        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col bg-chat-bg select-text"
       >
-        {loadingMore && (
-          <div className="text-center py-2 text-xs text-chat-textMuted">
-            <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto" />
+        {/* Load More Button */}
+        {hasMore && (
+          <div className="text-center py-2">
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="text-xs text-brand-400 hover:text-brand-300 font-medium px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading older messages...' : 'Load previous messages'}
+            </button>
           </div>
         )}
 
         {loading ? (
-          <>
+          <div className="space-y-4 py-2">
             <MessageSkeleton isMe={false} />
             <MessageSkeleton isMe={true} />
             <MessageSkeleton isMe={false} />
-            <MessageSkeleton isMe={true} />
-          </>
+          </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-6 select-none">
-            <div className="w-12 h-12 rounded-full bg-chat-card flex items-center justify-center text-brand-400 mb-3 border border-white/5">
-              🔒
-            </div>
-            <h3 className="text-sm font-semibold text-white mb-1">Start the conversation</h3>
-            <p className="text-xs text-chat-textMuted max-w-xs">
-              Messages are sent in real time with instant delivery and status receipts.
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-chat-textMuted">
+            <p className="text-xs max-w-xs">
+              No messages yet. Say hello to start the conversation!
             </p>
           </div>
         ) : (
-          renderMessageGroups()
+          messages.map((msg, index) => {
+            const isMe = msg.senderId === user?._id;
+            const prevMsg = messages[index - 1];
+
+            // Date separator check
+            const showDateHeader =
+              !prevMsg ||
+              new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+
+            return (
+              <React.Fragment key={msg._id || msg.clientMessageId}>
+                {showDateHeader && (
+                  <div className="flex justify-center my-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-chat-textMuted/80 bg-chat-card/80 px-3 py-1 rounded-full border border-white/5">
+                      {formatChatListDate(msg.createdAt)}
+                    </span>
+                  </div>
+                )}
+
+                <MessageBubble
+                  message={msg}
+                  isMe={isMe}
+                />
+              </React.Fragment>
+            );
+          })
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Multiline Message Composer */}
+      {/* Message Composer */}
       <MessageComposer
         onSend={handleSendMessage}
         onTyping={handleTyping}
+        disabled={!recipient}
       />
     </div>
   );

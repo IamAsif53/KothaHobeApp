@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
-      <div className="pt-8">
+      <div className="pt-12">
         <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
           <MessageSquare className="w-7 h-7 text-brand-400" />
         </div>

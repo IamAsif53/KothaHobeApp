@@ -64,8 +64,8 @@ export const SearchUserPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col max-w-md mx-auto overflow-hidden">
-      {/* Header */}
-      <header className="px-4 py-3 bg-chat-panel border-b border-white/10 flex items-center gap-3 flex-shrink-0">
+      {/* Header with Safe Area Status Bar Padding */}
+      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center gap-3 flex-shrink-0">
         <button
           onClick={() => navigate('/chats')}
           className="p-1.5 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors"

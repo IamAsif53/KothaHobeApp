@@ -137,7 +137,7 @@ export const OtpPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
-      <div className="pt-4">
+      <div className="pt-10">
         <button
           onClick={() => navigate('/login')}
           className="inline-flex items-center gap-2 text-xs font-medium text-chat-textMuted hover:text-white mb-6 transition-colors"

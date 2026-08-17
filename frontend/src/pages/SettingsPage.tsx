@@ -81,8 +81,8 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col max-w-md mx-auto overflow-hidden">
-      {/* Header */}
-      <header className="px-4 py-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
+      {/* Header with Safe Area Status Bar Padding */}
+      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0">
         <h1 className="text-xl font-bold text-white tracking-tight">Settings</h1>
       </header>
 

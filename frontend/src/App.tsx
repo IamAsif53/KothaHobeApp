@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { BottomNav } from './components/common/BottomNav';
@@ -10,6 +10,8 @@ import {
   ReleaseManifest,
 } from './services/appUpdateService';
 import { CURRENT_VERSION } from './config/version';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 
 import { SplashPage } from './pages/SplashPage';
 import { LoginPage } from './pages/LoginPage';
@@ -42,6 +44,59 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const AppContent: React.FC = () => {
   const [updateManifest, setUpdateManifest] = useState<ReleaseManifest | null>(null);
   const [currentVersion, setCurrentVersion] = useState<{ versionName: string; versionCode: number }>(CURRENT_VERSION);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const lastBackPressRef = useRef<number>(0);
+
+  // Android Hardware & Gesture Back Button listener
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let listenerHandle: any = null;
+
+    const setupBackButton = async () => {
+      listenerHandle = await CapApp.addListener('backButton', () => {
+        const path = window.location.pathname;
+
+        // Sub-screens navigate back to previous screen
+        if (
+          path.startsWith('/chat/') ||
+          path === '/search' ||
+          path === '/settings' ||
+          path === '/profile-setup' ||
+          path === '/otp'
+        ) {
+          if (path.startsWith('/chat/')) {
+            navigate('/chats', { replace: true });
+          } else if (path === '/otp') {
+            navigate('/login', { replace: true });
+          } else {
+            navigate(-1);
+          }
+        } else if (path === '/chats' || path === '/login' || path === '/') {
+          // On main root screen, double-tap or exit app
+          const now = Date.now();
+          if (now - lastBackPressRef.current < 2000) {
+            CapApp.exitApp();
+          } else {
+            lastBackPressRef.current = now;
+            CapApp.exitApp();
+          }
+        } else {
+          CapApp.exitApp();
+        }
+      });
+    };
+
+    setupBackButton();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const checkForUpdates = async () => {

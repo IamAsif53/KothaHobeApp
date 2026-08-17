@@ -8,6 +8,7 @@ export const SplashPage: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // If user is already cached, jump straight into chats without waiting
     if (!loading) {
       const timer = setTimeout(() => {
         if (user) {
@@ -19,14 +20,14 @@ export const SplashPage: React.FC = () => {
         } else {
           navigate('/login', { replace: true });
         }
-      }, 1000);
+      }, 250);
 
       return () => clearTimeout(timer);
     }
   }, [user, loading, navigate]);
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col items-center justify-between p-8 text-center select-none">
+    <div className="h-full w-full bg-chat-bg flex flex-col items-center justify-between p-8 pt-16 text-center select-none">
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-2xl shadow-brand-500/20 mb-6 animate-pulse">
           <MessageSquare className="w-12 h-12 text-white stroke-[2]" />
@@ -37,7 +38,7 @@ export const SplashPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="pb-6 flex flex-col items-center gap-3">
+      <div className="pb-8 flex flex-col items-center gap-3">
         <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
         <span className="text-xs text-chat-textMuted font-medium uppercase tracking-widest">
           Secured & Encrypted

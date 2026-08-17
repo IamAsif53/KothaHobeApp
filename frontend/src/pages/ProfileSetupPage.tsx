@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Avatar } from '../components/common/Avatar';
-import { Camera, CheckCircle2, User as UserIcon, AtSign } from 'lucide-react';
+import { Camera, CheckCircle2, User as UserIcon, AtSign, Image as ImageIcon, Upload } from 'lucide-react';
 
 export const ProfileSetupPage: React.FC = () => {
   const { user, updateProfile } = useAuth();
@@ -14,9 +14,10 @@ export const ProfileSetupPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  // Avatar presets
+  // Avatar presets for quick selection
   const avatarPresets = [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -25,10 +26,50 @@ export const ProfileSetupPage: React.FC = () => {
   ];
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow letters, numbers, and underscores
     const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
     setUsername(val);
     setError('');
+  };
+
+  // Device gallery / camera image upload with canvas compression (<50KB)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxSize = 256;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setAvatarUrl(compressedDataUrl);
+          setError('');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,27 +101,50 @@ export const ProfileSetupPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto overflow-y-auto">
-      <div className="pt-4">
+    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 pt-10 max-w-md mx-auto overflow-y-auto">
+      <div className="pt-2">
         <h1 className="text-2xl font-bold text-white text-center mb-1">Set Up Profile</h1>
         <p className="text-chat-textMuted text-xs text-center mb-6">
-          Choose a unique username and display name for your account.
+          Upload your photo and choose a unique username.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Avatar selector */}
+          {/* Hidden File Input for Device Image Selection */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            className="hidden"
+          />
+
+          {/* Avatar selector with Device Photo Upload */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative">
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="relative cursor-pointer group"
+              title="Tap to choose photo from gallery or camera"
+            >
               <Avatar
                 src={avatarUrl}
                 name={displayName || username || 'User'}
                 size="xl"
               />
-              <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center border-2 border-chat-bg shadow-md">
+              <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand-500 hover:bg-brand-400 active:scale-95 text-white flex items-center justify-center border-2 border-chat-bg shadow-md transition-all">
                 <Camera className="w-4 h-4" />
               </div>
             </div>
 
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 font-semibold mt-1 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Choose from Gallery</span>
+            </button>
+
+            {/* Quick avatar presets */}
             <div className="flex gap-2 mt-1">
               {avatarPresets.map((preset, idx) => (
                 <button

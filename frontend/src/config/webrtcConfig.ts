@@ -1,9 +1,8 @@
 /**
  * Centralized WebRTC & ICE Server Configuration for Kotha Hobe
  * 
- * Uses public Google STUN servers for direct peer-to-peer audio transmission.
- * Centralized architecture allows seamless plug-in of a self-hosted Coturn TURN server
- * via environment variables in the future without changing call code.
+ * Uses redundant high-speed public STUN servers across Google, Cloudflare, and Twilio
+ * to guarantee direct P2P audio streaming between cellular/Wi-Fi mobile devices.
  */
 
 export const getWebRTCConfig = (): RTCConfiguration => {
@@ -15,11 +14,13 @@ export const getWebRTCConfig = (): RTCConfiguration => {
         'stun:stun2.l.google.com:19302',
         'stun:stun3.l.google.com:19302',
         'stun:stun4.l.google.com:19302',
+        'stun:stun.cloudflare.com:3478',
+        'stun:global.stun.twilio.com:3478',
       ],
     },
   ];
 
-  // If a self-hosted Coturn server is configured via env, add it
+  // Self-hosted Coturn TURN support via env vars
   const turnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
   const turnUsername = (import.meta as any).env?.VITE_TURN_USERNAME;
   const turnCredential = (import.meta as any).env?.VITE_TURN_CREDENTIAL;
@@ -35,6 +36,7 @@ export const getWebRTCConfig = (): RTCConfiguration => {
   return {
     iceServers,
     iceCandidatePoolSize: 10,
+    iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };

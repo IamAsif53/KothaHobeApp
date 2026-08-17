@@ -53,6 +53,52 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
           return;
         }
 
+        // Auto-clean any stale hanging calls for caller or receiver older than 30s
+        const thirtySecsAgo = new Date(Date.now() - 30000);
+        await Call.updateMany(
+          {
+            $or: [
+              { callerId: userId },
+              { receiverId: userId },
+              { callerId: receiverId },
+              { receiverId: receiverId },
+            ],
+            status: { $in: ['calling', 'ringing', 'accepted'] },
+            updatedAt: { $lt: thirtySecsAgo },
+          },
+          { $set: { status: 'ended', endedAt: new Date() } }
+        );
+
+        // Also clean any previous hanging call specifically between these two users
+        await Call.updateMany(
+          {
+            $or: [
+              { callerId: userId, receiverId: receiverId },
+              { callerId: receiverId, receiverId: userId },
+            ],
+            status: { $in: ['calling', 'ringing', 'accepted', 'connected'] },
+          },
+          { $set: { status: 'ended', endedAt: new Date() } }
+        );
+
+        // Check if receiver is currently genuinely in an active call with SOMEONE ELSE
+        const activeCallWithOther = await Call.findOne({
+          $or: [{ callerId: receiverId }, { receiverId: receiverId }],
+          callerId: { $ne: userId },
+          receiverId: { $ne: userId },
+          status: 'connected',
+          updatedAt: { $gte: new Date(Date.now() - 120000) }, // within last 2 mins
+        });
+
+        if (activeCallWithOther) {
+          const otherUser = await User.findById(receiverId).select('displayName');
+          socket.emit('call:busy', {
+            receiverId,
+            message: `${otherUser?.displayName || 'User'} is currently in another call`,
+          });
+          return;
+        }
+
         // Verify caller and receiver exist
         const [callerUser, receiverUser] = await Promise.all([
           User.findById(userId).select('_id displayName avatarUrl username'),
@@ -61,20 +107,6 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
         if (!callerUser || !receiverUser) {
           socket.emit('call:error', { message: 'User profile not found' });
-          return;
-        }
-
-        // Check if receiver is currently in an active call
-        const activeReceiverCall = await Call.findOne({
-          $or: [{ callerId: receiverId }, { receiverId: receiverId }],
-          status: { $in: ['calling', 'ringing', 'accepted', 'connected'] },
-        });
-
-        if (activeReceiverCall) {
-          socket.emit('call:busy', {
-            receiverId,
-            message: `${receiverUser.displayName || 'User'} is currently in another call`,
-          });
           return;
         }
 
@@ -226,9 +258,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       call.answeredAt = new Date();
       await call.save();
 
-      console.log(`[Call] Call ${callId} accepted. Signaling WebRTC negotiation...`);
+      console.log(`[Call] Call ${callId} accepted by receiver. Signaling caller to start WebRTC offer...`);
 
-      // Notify caller that receiver accepted -> start WebRTC Offer/Answer
+      // Forward to caller that receiver accepted
       io.to(`user:${call.callerId.toString()}`).emit('call:accepted', { callId });
       socket.emit('call:accepted', { callId });
     } catch (err) {
@@ -249,7 +281,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         call.status = 'connected';
         call.connectedAt = new Date();
         await call.save();
-        console.log(`[Call] Call ${callId} WebRTC peer connection is now LIVE CONNECTED!`);
+        console.log(`[Call] Call ${callId} WebRTC audio stream verified LIVE CONNECTED!`);
 
         io.to(`user:${call.callerId.toString()}`).emit('call:connected', {
           callId,
@@ -277,6 +309,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const targetId =
         call.callerId.toString() === userId ? call.receiverId.toString() : call.callerId.toString();
 
+      console.log(`[Call] Relaying SDP offer for call ${callId} to user ${targetId}`);
       io.to(`user:${targetId}`).emit('call:offer', { callId, sdp });
     } catch (err) {
       console.error('[Call] Offer error:', err);
@@ -295,6 +328,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const targetId =
         call.callerId.toString() === userId ? call.receiverId.toString() : call.callerId.toString();
 
+      console.log(`[Call] Relaying SDP answer for call ${callId} to user ${targetId}`);
       io.to(`user:${targetId}`).emit('call:answer', { callId, sdp });
     } catch (err) {
       console.error('[Call] Answer error:', err);
@@ -480,6 +514,42 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
     } catch (err) {
       console.error('[Call] End error:', err);
+    }
+  });
+
+  // 11. Client Reports WebRTC Connection Failed
+  socket.on('call:failed', async (data: { callId: string }) => {
+    try {
+      const { callId } = data;
+      if (!callId) return;
+
+      const call = await Call.findOne({ callId });
+      if (!call) return;
+
+      call.status = 'failed';
+      call.endedAt = new Date();
+      await call.save();
+
+      console.log(`[Call] Call ${callId} marked as failed by client`);
+      io.to(`user:${call.callerId.toString()}`).emit('call:failed', { callId });
+      io.to(`user:${call.receiverId.toString()}`).emit('call:failed', { callId });
+    } catch (err) {
+      console.error('[Call] Failed handler error:', err);
+    }
+  });
+
+  // 12. Socket Disconnect Auto-Cleanup
+  socket.on('disconnect', async () => {
+    try {
+      await Call.updateMany(
+        {
+          $or: [{ callerId: userId }, { receiverId: userId }],
+          status: { $in: ['calling', 'ringing', 'accepted'] },
+        },
+        { $set: { status: 'ended', endedAt: new Date() } }
+      );
+    } catch (err) {
+      // Ignore during disconnect
     }
   });
 }

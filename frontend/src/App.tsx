@@ -23,6 +23,8 @@ import { ProfileSetupPage } from './pages/ProfileSetupPage';
 import { ChatListPage } from './pages/ChatListPage';
 import { SearchUserPage } from './pages/SearchUserPage';
 import { ChatRoomPage } from './pages/ChatRoomPage';
+import { ChatInfoPage } from './pages/ChatInfoPage';
+import { SharedMediaPage } from './pages/SharedMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 // Protected Route wrapper requiring user authentication
@@ -211,6 +213,22 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ChatRoomPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat/:conversationId/info"
+            element={
+              <ProtectedRoute>
+                <ChatInfoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat/:conversationId/shared"
+            element={
+              <ProtectedRoute>
+                <SharedMediaPage />
               </ProtectedRoute>
             }
           />

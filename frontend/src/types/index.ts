@@ -10,7 +10,33 @@ export interface IUser {
   phoneNumber?: string;
 }
 
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface IAttachment {
+  url: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  thumbnailUrl?: string;
+}
+
+export interface IReplyTo {
+  messageId: string;
+  text: string;
+  senderName: string;
+  type: MessageType;
+  fileName?: string;
+}
+
+export interface IReaction {
+  userId: string;
+  emoji: string;
+  createdAt: string;
+}
 
 export interface IMessage {
   _id: string;
@@ -18,9 +44,15 @@ export interface IMessage {
   senderId: string;
   receiverId: string;
   text: string;
-  type: 'text' | 'image' | 'video' | 'audio';
+  type: MessageType;
   status: MessageStatus;
   clientMessageId: string;
+  attachment?: IAttachment;
+  replyTo?: IReplyTo;
+  reactions?: IReaction[];
+  isDeletedForEveryone?: boolean;
+  deletedFor?: string[];
+  serverSequence?: number;
   createdAt: string;
   deliveredAt?: string;
   readAt?: string;
@@ -36,5 +68,5 @@ export interface IConversation {
     status: MessageStatus;
   };
   lastMessageAt: string;
-  unreadCount: number;
+  unreadCount?: number;
 }

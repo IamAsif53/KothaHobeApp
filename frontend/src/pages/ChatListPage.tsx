@@ -212,7 +212,7 @@ export const ChatListPage: React.FC = () => {
                     {conv.lastMessage?.text || 'Started conversation'}
                   </p>
 
-                  {conv.unreadCount > 0 && (
+                  {(conv.unreadCount ?? 0) > 0 && (
                     <span className="bg-brand-500 text-white font-bold text-[10px] min-w-[20px] h-[20px] px-1.5 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm animate-pulse-subtle">
                       {conv.unreadCount}
                     </span>

@@ -2,7 +2,7 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
 import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
-import { Message, MessageStatus } from '../models/Message';
+import { Message, MessageStatus, IAttachment, IReplyTo } from '../models/Message';
 import { sendPushNotification } from '../services/notificationService';
 
 interface AuthenticatedSocket extends Socket {
@@ -24,150 +24,283 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
 
       const decoded = verifyToken(token);
-      if (!decoded) {
-        return next(new Error('Invalid or expired authentication token'));
+      if (!decoded || !decoded.userId) {
+        return next(new Error('Invalid or expired token'));
       }
 
       socket.userId = decoded.userId;
-      socket.phoneNumber = decoded.phoneNumber;
       next();
     } catch (err) {
-      next(new Error('Socket authentication error'));
+      next(new Error('Authentication failed'));
     }
   });
 
   io.on('connection', async (socket: AuthenticatedSocket) => {
     const userId = socket.userId;
-    if (!userId) return;
+    if (!userId) {
+      socket.disconnect();
+      return;
+    }
 
     console.log(`[Socket] Connected: user ${userId} (socket ID: ${socket.id})`);
 
-    // Join user's personal room for direct notifications
+    // Join personal user room for private messages
     socket.join(`user:${userId}`);
 
-    // Update online status in database
-    await User.findByIdAndUpdate(userId, {
-      isOnline: true,
-      lastSeen: new Date(),
-    });
+    // Update user online status
+    try {
+      await User.findByIdAndUpdate(userId, {
+        isOnline: true,
+        lastSeen: new Date(),
+      });
 
-    // Broadcast online presence
-    socket.broadcast.emit('user:online', { userId, isOnline: true });
+      socket.broadcast.emit('user:online', { userId, isOnline: true });
+    } catch (err) {
+      console.error('[Socket] Failed to update online status:', err);
+    }
 
-    // Join conversation rooms requested by client
+    // Join / Leave conversation rooms
     socket.on('conversation:join', (conversationId: string) => {
       if (conversationId) {
-        socket.join(`conversation:${conversationId}`);
+        socket.join(`conv:${conversationId}`);
       }
     });
 
-    // Leave conversation room
     socket.on('conversation:leave', (conversationId: string) => {
       if (conversationId) {
-        socket.leave(`conversation:${conversationId}`);
+        socket.leave(`conv:${conversationId}`);
       }
     });
 
-    // Real-Time Message Sending
-    socket.on('message:send', async (data: {
-      conversationId: string;
-      receiverId: string;
-      text: string;
-      clientMessageId: string;
-      type?: string;
-    }) => {
-      try {
-        const { conversationId, receiverId, text, clientMessageId, type = 'text' } = data;
-
-        if (!conversationId || !receiverId || !text || !clientMessageId) {
-          socket.emit('message:error', {
-            clientMessageId,
-            message: 'Missing required message parameters',
-          });
-          return;
-        }
-
-        // Validate conversation membership
-        const conversation = await Conversation.findOne({
-          _id: conversationId,
-          participants: userId,
-        });
-
-        if (!conversation) {
-          socket.emit('message:error', {
-            clientMessageId,
-            message: 'Unauthorized conversation access',
-          });
-          return;
-        }
-
-        // Idempotency check: Return existing message if retried
-        let message = await Message.findOne({ clientMessageId });
-
-        if (!message) {
-          // Check if recipient is connected online
-          const recipientSockets = await io.in(`user:${receiverId}`).fetchSockets();
-          const initialStatus: MessageStatus = recipientSockets.length > 0 ? 'delivered' : 'sent';
-
-          message = await Message.create({
+    // Send Message (Text / Image / Document / Audio)
+    socket.on(
+      'message:send',
+      async (data: {
+        conversationId: string;
+        receiverId: string;
+        text?: string;
+        clientMessageId: string;
+        type?: 'text' | 'image' | 'video' | 'audio' | 'document';
+        attachment?: IAttachment;
+        replyTo?: IReplyTo;
+      }) => {
+        try {
+          const {
             conversationId,
-            senderId: userId,
             receiverId,
-            text: text.trim(),
-            type,
-            status: initialStatus,
+            text = '',
             clientMessageId,
-            deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
+            type = 'text',
+            attachment,
+            replyTo,
+          } = data;
+
+          if (!conversationId || !receiverId || !clientMessageId) {
+            socket.emit('message:error', {
+              clientMessageId,
+              message: 'Missing required message parameters',
+            });
+            return;
+          }
+
+          // Validate conversation membership
+          const conversation = await Conversation.findOne({
+            _id: conversationId,
+            participants: userId,
           });
 
-          // Update Conversation last message snippet
-          await Conversation.findByIdAndUpdate(conversationId, {
-            lastMessage: {
-              text: text.trim(),
-              senderId: userId,
-              createdAt: message.createdAt,
-              status: initialStatus,
-            },
-            lastMessageAt: message.createdAt,
-          });
-        }
+          if (!conversation) {
+            socket.emit('message:error', {
+              clientMessageId,
+              message: 'Unauthorized conversation access',
+            });
+            return;
+          }
 
-        // 1. Confirm to sender with full message data
-        socket.emit('message:sent', message);
+          // Idempotency check: Return existing message if already saved
+          let message = await Message.findOne({ clientMessageId });
 
-        // 2. Emit to recipient in real time
-        io.to(`user:${receiverId}`).emit('message:new', message);
+          if (!message) {
+            // Count total messages for server sequence
+            const count = await Message.countDocuments({ conversationId });
+            const serverSequence = count + 1;
 
-        // 3. Dispatch FCM Push Notification (arrives even if app is closed or phone is locked!)
-        User.findById(userId)
-          .select('displayName username')
-          .then((senderUser) => {
-            sendPushNotification({
-              recipientId: receiverId,
-              senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
-              messageText: text.trim(),
+            // Check if recipient is connected online
+            const recipientSockets = await io.in(`user:${receiverId}`).fetchSockets();
+            const initialStatus: MessageStatus = recipientSockets.length > 0 ? 'delivered' : 'sent';
+
+            message = await Message.create({
               conversationId,
-            }).catch((err) => console.warn('[Push] Dispatch notice:', err));
-          })
-          .catch(() => {});
+              senderId: userId,
+              receiverId,
+              text: text.trim(),
+              type,
+              status: initialStatus,
+              clientMessageId,
+              attachment: attachment || undefined,
+              replyTo: replyTo || undefined,
+              serverSequence,
+              deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
+            });
 
-        // 3. If delivered instantly, inform sender
-        if (message.status === 'delivered') {
-          socket.emit('message:delivered', {
-            _id: message._id,
-            clientMessageId: message.clientMessageId,
-            conversationId: message.conversationId,
-            deliveredAt: message.deliveredAt,
+            // Format last message snippet for chat list
+            let previewText = text.trim();
+            if (type === 'image') previewText = '📷 Photo';
+            else if (type === 'audio') previewText = '🎤 Voice message';
+            else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
+
+            await Conversation.findByIdAndUpdate(conversationId, {
+              lastMessage: {
+                text: previewText,
+                senderId: userId,
+                createdAt: message.createdAt,
+                status: initialStatus,
+              },
+              lastMessageAt: message.createdAt,
+            });
+          }
+
+          // 1. Confirm to sender with full message data
+          socket.emit('message:sent', message);
+
+          // 2. Emit to recipient in real time
+          io.to(`user:${receiverId}`).emit('message:new', message);
+
+          // 3. Dispatch FCM Push Notification (works when app is closed / screen is locked)
+          User.findById(userId)
+            .select('displayName username')
+            .then((senderUser) => {
+              let notifBody = text.trim();
+              if (type === 'image') notifBody = '📷 Photo';
+              else if (type === 'audio') notifBody = '🎤 Voice message';
+              else if (type === 'document') notifBody = `📄 ${attachment?.fileName || 'Document'}`;
+
+              sendPushNotification({
+                recipientId: receiverId,
+                senderId: userId,
+                messageId: message._id.toString(),
+                senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+                messageText: notifBody,
+                conversationId,
+              }).catch((err) => console.warn('[Push] Dispatch notice:', err));
+            })
+            .catch(() => {});
+
+          // 4. If delivered instantly, inform sender
+          if (message.status === 'delivered') {
+            socket.emit('message:delivered', {
+              _id: message._id,
+              clientMessageId: message.clientMessageId,
+              conversationId: message.conversationId,
+              deliveredAt: message.deliveredAt,
+            });
+          }
+        } catch (error) {
+          console.error('[Socket] message:send error:', error);
+          socket.emit('message:error', {
+            clientMessageId: data?.clientMessageId,
+            message: 'Failed to process message',
           });
         }
-      } catch (error) {
-        console.error('[Socket] message:send error:', error);
-        socket.emit('message:error', {
-          clientMessageId: data?.clientMessageId,
-          message: 'Failed to process message',
-        });
       }
-    });
+    );
+
+    // Toggle Reaction on Message
+    socket.on(
+      'message:react',
+      async (data: { messageId: string; conversationId: string; emoji: string }) => {
+        try {
+          const { messageId, conversationId, emoji } = data;
+          if (!messageId || !conversationId || !emoji) return;
+
+          const msg = await Message.findById(messageId);
+          if (!msg) return;
+
+          const existingIndex = msg.reactions.findIndex(
+            (r) => r.userId.toString() === userId && r.emoji === emoji
+          );
+
+          if (existingIndex > -1) {
+            // Remove reaction if tapped again
+            msg.reactions.splice(existingIndex, 1);
+          } else {
+            // Add or replace reaction from this user
+            msg.reactions = msg.reactions.filter((r) => r.userId.toString() !== userId);
+            msg.reactions.push({
+              userId,
+              emoji,
+              createdAt: new Date(),
+            });
+          }
+
+          await msg.save();
+
+          // Broadcast reaction update to conversation participants
+          io.to(`conv:${conversationId}`).emit('message:reaction_updated', {
+            messageId,
+            conversationId,
+            reactions: msg.reactions,
+          });
+
+          // Also inform direct recipient
+          const otherId = msg.senderId.toString() === userId ? msg.receiverId.toString() : msg.senderId.toString();
+          io.to(`user:${otherId}`).emit('message:reaction_updated', {
+            messageId,
+            conversationId,
+            reactions: msg.reactions,
+          });
+        } catch (error) {
+          console.error('[Socket] message:react error:', error);
+        }
+      }
+    );
+
+    // Delete Message (Delete for me / Delete for everyone)
+    socket.on(
+      'message:delete',
+      async (data: { messageId: string; conversationId: string; deleteForEveryone: boolean }) => {
+        try {
+          const { messageId, conversationId, deleteForEveryone } = data;
+          if (!messageId || !conversationId) return;
+
+          const msg = await Message.findById(messageId);
+          if (!msg) return;
+
+          if (deleteForEveryone && msg.senderId.toString() === userId) {
+            msg.isDeletedForEveryone = true;
+            msg.text = 'This message was deleted';
+            msg.attachment = undefined;
+            await msg.save();
+
+            io.to(`conv:${conversationId}`).emit('message:deleted', {
+              messageId,
+              conversationId,
+              deleteForEveryone: true,
+            });
+
+            const otherId = msg.receiverId.toString();
+            io.to(`user:${otherId}`).emit('message:deleted', {
+              messageId,
+              conversationId,
+              deleteForEveryone: true,
+            });
+          } else {
+            // Delete for me only
+            await Message.findByIdAndUpdate(messageId, {
+              $addToSet: { deletedFor: userId },
+            });
+
+            socket.emit('message:deleted', {
+              messageId,
+              conversationId,
+              deleteForEveryone: false,
+            });
+          }
+        } catch (error) {
+          console.error('[Socket] message:delete error:', error);
+        }
+      }
+    );
 
     // Mark Messages as Read
     socket.on('message:read', async (data: { conversationId: string }) => {
@@ -177,12 +310,11 @@ export function setupSocketIO(io: SocketIOServer): void {
 
         const now = new Date();
 
-        // Update unread messages sent to this user
         const result = await Message.updateMany(
           {
             conversationId,
             receiverId: userId,
-            status: { $ne: 'read' },
+            status: { $in: ['sent', 'delivered'] },
           },
           {
             $set: { status: 'read', readAt: now },
@@ -190,7 +322,6 @@ export function setupSocketIO(io: SocketIOServer): void {
         );
 
         if (result.modifiedCount > 0) {
-          // Find the sender user ID for this conversation
           const conv = await Conversation.findById(conversationId);
           if (conv) {
             const otherParticipantId = conv.participants.find(
@@ -198,7 +329,6 @@ export function setupSocketIO(io: SocketIOServer): void {
             );
 
             if (otherParticipantId) {
-              // Notify sender that their messages have been read (blue ticks)
               io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
                 conversationId,
                 readBy: userId,
@@ -212,7 +342,7 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
-    // Typing Indicators (Throttled by client)
+    // Typing Indicators (Throttled)
     socket.on('typing:start', (data: { conversationId: string; receiverId: string }) => {
       if (data?.receiverId && data?.conversationId) {
         io.to(`user:${data.receiverId}`).emit('typing:start', {
@@ -247,7 +377,7 @@ export function setupSocketIO(io: SocketIOServer): void {
           socket.broadcast.emit('user:offline', { userId, isOnline: false, lastSeen });
         }
       } catch (err) {
-        // Ignored during server teardown
+        // Ignore during teardown
       }
     });
   });

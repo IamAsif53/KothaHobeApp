@@ -176,7 +176,7 @@ export const verifyEmailOtp = async (req: Request, res: Response): Promise<void>
       email: user.email,
     });
 
-    const hasProfile = Boolean(user.username && user.displayName && user.displayName !== 'New User');
+    const hasProfile = Boolean(user.username && user.username.trim().length >= 3);
 
     console.log(`[Auth] User authenticated: ${user.email} (hasProfile: ${hasProfile})`);
 

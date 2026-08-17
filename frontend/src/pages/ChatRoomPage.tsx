@@ -18,6 +18,9 @@ export const ChatRoomPage: React.FC = () => {
   const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping } = useSocket();
   const navigate = useNavigate();
 
+  // Chat Wallpaper Theme from Settings
+  const [chatTheme] = useState(() => localStorage.getItem('kotha_hobe_chat_theme') || 'dark');
+
   const [recipient, setRecipient] = useState<IUser | null>(() => {
     try {
       const cachedConvs = localStorage.getItem('kotha_hobe_cached_conversations');
@@ -80,10 +83,17 @@ export const ChatRoomPage: React.FC = () => {
         // Fetch message history
         const msgRes = await fetchMessagesApi(conversationId, undefined, 30);
         if (msgRes.success && msgRes.messages) {
-          setMessages(msgRes.messages);
+          setMessages((prev) => {
+            // Keep any pending optimistic messages that have not yet arrived on server
+            const pendingOptimistic = prev.filter(
+              (m) => m._id.startsWith('temp_') && !msgRes.messages.some((serverM) => serverM.clientMessageId === m.clientMessageId)
+            );
+            const merged = [...msgRes.messages, ...pendingOptimistic];
+            localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(merged));
+            return merged;
+          });
           setHasMore(msgRes.hasMore);
           setOldestCursor(msgRes.oldestCursor);
-          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(msgRes.messages));
         }
       } catch (error) {
         console.warn('[ChatRoom] Background sync notice (offline or network pause)');
@@ -129,12 +139,14 @@ export const ChatRoomPage: React.FC = () => {
       }
     };
 
-    // Message sent acknowledgement from server
+    // Message sent acknowledgement from server (safe merge preserving text & optimistic fields)
     const handleMessageSent = (sentMsg: IMessage) => {
       if (sentMsg.conversationId === conversationId) {
         setMessages((prev) => {
           const updated = prev.map((m) =>
-            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id ? sentMsg : m
+            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id
+              ? { ...m, ...sentMsg, text: sentMsg.text || m.text, status: sentMsg.status || 'sent' }
+              : m
           );
           localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
           return updated;
@@ -209,7 +221,7 @@ export const ChatRoomPage: React.FC = () => {
     setLoadingMore(true);
     try {
       const msgRes = await fetchMessagesApi(conversationId, oldestCursor, 30);
-      if (msgRes.success) {
+      if (msgRes.success && msgRes.messages) {
         setMessages((prev) => [...(msgRes.messages || []), ...prev]);
         setHasMore(msgRes.hasMore);
         setOldestCursor(msgRes.oldestCursor);
@@ -241,12 +253,13 @@ export const ChatRoomPage: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
+    // ⚡ Instant Optimistic Message Render with Zero Disappearance
     setMessages((prev) => {
       const updated = [...prev, optimisticMessage];
       localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(updated));
       return updated;
     });
-    setTimeout(() => scrollToBottom(), 50);
+    setTimeout(() => scrollToBottom(), 40);
 
     sendMessage(conversationId, recipient._id, text.trim(), tempId);
   };
@@ -265,8 +278,24 @@ export const ChatRoomPage: React.FC = () => {
     }, 2500);
   };
 
+  // Chat Theme Background Class
+  const getThemeBg = () => {
+    switch (chatTheme) {
+      case 'midnight':
+        return 'bg-[#0f172a]';
+      case 'emerald':
+        return 'bg-[#06281e]';
+      case 'navy':
+        return 'bg-[#0a192f]';
+      case 'charcoal':
+        return 'bg-[#18181b]';
+      default:
+        return 'bg-chat-bg';
+    }
+  };
+
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col overflow-hidden">
+    <div className={`h-full w-full ${getThemeBg()} flex flex-col overflow-hidden`}>
       {/* Top Header with Status Bar Safe Area Padding */}
       <header className="px-3 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-3 min-w-0">
@@ -314,7 +343,7 @@ export const ChatRoomPage: React.FC = () => {
       {/* Messages Scroll Area */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col bg-chat-bg select-text"
+        className={`flex-1 overflow-y-auto p-4 space-y-3 flex flex-col ${getThemeBg()} select-text`}
       >
         {/* Load More Button */}
         {hasMore && (
@@ -343,7 +372,7 @@ export const ChatRoomPage: React.FC = () => {
           </div>
         ) : (
           messages.map((msg, index) => {
-            const isMe = msg.senderId === user?._id;
+            const isMine = msg.senderId === user?._id;
             const prevMsg = messages[index - 1];
 
             // Date separator check
@@ -363,7 +392,7 @@ export const ChatRoomPage: React.FC = () => {
 
                 <MessageBubble
                   message={msg}
-                  isMe={isMe}
+                  isMe={isMine}
                 />
               </React.Fragment>
             );

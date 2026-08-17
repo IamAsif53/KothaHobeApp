@@ -1,14 +1,15 @@
 {
-  "versionCode": 14,
-  "versionName": "1.0.13",
+  "versionCode": 15,
+  "versionName": "1.0.14",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "9bdad597515c62bd46856ff5a7defe1dbc42266c505fb2b07534f0a3a7af025a",
+  "sha256": "3d1a4efac22ba8ee2426211f85d1321ab774f7e89b86603da80c27d831d5ab6b",
   "releaseNotes": [
-    "Release v1.0.13 (Build 14)",
-    "📸 Custom device image upload from gallery/camera for profile picture",
-    "⚡ Instant app launch & 0ms offline conversation caching",
-    "📐 Fixed top header status bar & camera notch clipping",
-    "🔙 Android hardware & gesture back button support to navigate or exit app"
+    "Release v1.0.14 (Build 15)",
+    "⚡ Fixed message send flicker: messages appear instantly with zero delay",
+    "🛡️ Guaranteed 1 Gmail = 1 User account continuity across logouts",
+    "⚙️ Complete interactive Settings suite (Sounds, Privacy, Themes, Storage)",
+    "🎨 5 Customizable Chat Wallpaper themes & text sizing",
+    "💾 Storage & offline cache management with instant clear action"
   ],
   "mandatory": false
 }

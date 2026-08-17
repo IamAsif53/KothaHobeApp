@@ -131,14 +131,8 @@ export function setupSocketIO(io: SocketIOServer): void {
           });
         }
 
-        // 1. Confirm to sender
-        socket.emit('message:sent', {
-          _id: message._id,
-          clientMessageId: message.clientMessageId,
-          conversationId: message.conversationId,
-          status: message.status,
-          createdAt: message.createdAt,
-        });
+        // 1. Confirm to sender with full message data
+        socket.emit('message:sent', message);
 
         // 2. Emit to recipient in real time
         io.to(`user:${receiverId}`).emit('message:new', message);

@@ -9,6 +9,15 @@ interface AuthenticatedSocket extends Socket {
   userId?: string;
 }
 
+interface ActiveCallMemory {
+  callId: string;
+  callerId: string;
+  receiverId: string;
+  conversationId: string;
+}
+
+// In-Memory map for 0ms latency WebRTC signaling & ICE candidate relay
+const activeCallsMap = new Map<string, ActiveCallMemory>();
 // Active timeouts map: callId -> NodeJS.Timeout
 const callTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -81,13 +90,13 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
           { $set: { status: 'ended', endedAt: new Date() } }
         );
 
-        // Check if receiver is currently genuinely in an active call with SOMEONE ELSE
+        // Check if receiver is currently genuinely in an active call with someone else
         const activeCallWithOther = await Call.findOne({
           $or: [{ callerId: receiverId }, { receiverId: receiverId }],
           callerId: { $ne: userId },
           receiverId: { $ne: userId },
           status: 'connected',
-          updatedAt: { $gte: new Date(Date.now() - 120000) }, // within last 2 mins
+          updatedAt: { $gte: new Date(Date.now() - 120000) },
         });
 
         if (activeCallWithOther) {
@@ -123,6 +132,14 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
           startedAt: new Date(),
         });
         await newCall.save();
+
+        // Store in fast memory map
+        activeCallsMap.set(callId, {
+          callId,
+          callerId: userId,
+          receiverId,
+          conversationId,
+        });
 
         console.log(`[Call] ${callerUser.displayName} initiated call ${callId} to ${receiverUser.displayName}`);
 
@@ -174,6 +191,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
               currentCall.endedAt = new Date();
               await currentCall.save();
 
+              activeCallsMap.delete(callId);
+
               io.to(`user:${userId}`).emit('call:timeout', { callId });
               io.to(`user:${receiverId}`).emit('call:timeout', { callId });
 
@@ -222,13 +241,12 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const { callId } = data;
       if (!callId) return;
 
-      const call = await Call.findOne({ callId });
-      if (!call || call.status !== 'calling') return;
+      const mem = activeCallsMap.get(callId);
+      if (mem) {
+        io.to(`user:${mem.callerId}`).emit('call:ringing', { callId });
+      }
 
-      call.status = 'ringing';
-      await call.save();
-
-      io.to(`user:${call.callerId.toString()}`).emit('call:ringing', { callId });
+      Call.updateOne({ callId, status: 'calling' }, { status: 'ringing' }).catch(() => {});
     } catch (err) {
       console.error('[Call] Ringing error:', err);
     }
@@ -246,23 +264,32 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         callTimeouts.delete(callId);
       }
 
-      const call = await Call.findOne({ callId });
-      if (!call || (call.status !== 'calling' && call.status !== 'ringing')) return;
+      let mem = activeCallsMap.get(callId);
+      if (!mem) {
+        const call = await Call.findOne({ callId });
+        if (call) {
+          mem = {
+            callId,
+            callerId: call.callerId.toString(),
+            receiverId: call.receiverId.toString(),
+            conversationId: call.conversationId.toString(),
+          };
+          activeCallsMap.set(callId, mem);
+        }
+      }
 
-      if (call.receiverId.toString() !== userId) {
+      if (!mem || mem.receiverId !== userId) {
         socket.emit('call:error', { message: 'Unauthorized call accept' });
         return;
       }
 
-      call.status = 'accepted';
-      call.answeredAt = new Date();
-      await call.save();
-
       console.log(`[Call] Call ${callId} accepted by receiver. Signaling caller to start WebRTC offer...`);
 
-      // Forward to caller that receiver accepted
-      io.to(`user:${call.callerId.toString()}`).emit('call:accepted', { callId });
+      // Forward immediately to caller that receiver accepted
+      io.to(`user:${mem.callerId}`).emit('call:accepted', { callId });
       socket.emit('call:accepted', { callId });
+
+      Call.updateOne({ callId }, { status: 'accepted', answeredAt: new Date() }).catch(() => {});
     } catch (err) {
       console.error('[Call] Accept error:', err);
     }
@@ -274,79 +301,103 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const { callId } = data;
       if (!callId) return;
 
-      const call = await Call.findOne({ callId });
-      if (!call) return;
+      const mem = activeCallsMap.get(callId);
+      const connectedAt = new Date();
 
-      if (call.status !== 'connected') {
-        call.status = 'connected';
-        call.connectedAt = new Date();
-        await call.save();
-        console.log(`[Call] Call ${callId} WebRTC audio stream verified LIVE CONNECTED!`);
-
-        io.to(`user:${call.callerId.toString()}`).emit('call:connected', {
-          callId,
-          connectedAt: call.connectedAt,
-        });
-        io.to(`user:${call.receiverId.toString()}`).emit('call:connected', {
-          callId,
-          connectedAt: call.connectedAt,
-        });
+      if (mem) {
+        io.to(`user:${mem.callerId}`).emit('call:connected', { callId, connectedAt });
+        io.to(`user:${mem.receiverId}`).emit('call:connected', { callId, connectedAt });
       }
+
+      Call.updateOne({ callId, status: { $ne: 'connected' } }, { status: 'connected', connectedAt }).catch(() => {});
     } catch (err) {
       console.error('[Call] Connected handler error:', err);
     }
   });
 
-  // 5. WebRTC SDP Offer Relay
+  // 5. Fast WebRTC SDP Offer Relay
   socket.on('call:offer', async (data: { callId: string; sdp: any }) => {
     try {
       const { callId, sdp } = data;
       if (!callId || !sdp) return;
 
-      const call = await Call.findOne({ callId });
-      if (!call) return;
+      let mem = activeCallsMap.get(callId);
+      if (!mem) {
+        const call = await Call.findOne({ callId });
+        if (call) {
+          mem = {
+            callId,
+            callerId: call.callerId.toString(),
+            receiverId: call.receiverId.toString(),
+            conversationId: call.conversationId.toString(),
+          };
+          activeCallsMap.set(callId, mem);
+        }
+      }
 
-      const targetId =
-        call.callerId.toString() === userId ? call.receiverId.toString() : call.callerId.toString();
+      if (!mem) return;
 
-      console.log(`[Call] Relaying SDP offer for call ${callId} to user ${targetId}`);
+      const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
+      console.log(`[Call] ⚡ Relaying SDP offer for call ${callId} to user ${targetId}`);
       io.to(`user:${targetId}`).emit('call:offer', { callId, sdp });
     } catch (err) {
       console.error('[Call] Offer error:', err);
     }
   });
 
-  // 6. WebRTC SDP Answer Relay
+  // 6. Fast WebRTC SDP Answer Relay
   socket.on('call:answer', async (data: { callId: string; sdp: any }) => {
     try {
       const { callId, sdp } = data;
       if (!callId || !sdp) return;
 
-      const call = await Call.findOne({ callId });
-      if (!call) return;
+      let mem = activeCallsMap.get(callId);
+      if (!mem) {
+        const call = await Call.findOne({ callId });
+        if (call) {
+          mem = {
+            callId,
+            callerId: call.callerId.toString(),
+            receiverId: call.receiverId.toString(),
+            conversationId: call.conversationId.toString(),
+          };
+          activeCallsMap.set(callId, mem);
+        }
+      }
 
-      const targetId =
-        call.callerId.toString() === userId ? call.receiverId.toString() : call.callerId.toString();
+      if (!mem) return;
 
-      console.log(`[Call] Relaying SDP answer for call ${callId} to user ${targetId}`);
+      const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
+      console.log(`[Call] ⚡ Relaying SDP answer for call ${callId} to user ${targetId}`);
       io.to(`user:${targetId}`).emit('call:answer', { callId, sdp });
     } catch (err) {
       console.error('[Call] Answer error:', err);
     }
   });
 
-  // 7. WebRTC ICE Candidate Relay
+  // 7. Fast WebRTC ICE Candidate Relay (0ms latency, zero database blocking)
   socket.on('call:ice-candidate', async (data: { callId: string; candidate: any }) => {
     try {
       const { callId, candidate } = data;
       if (!callId || !candidate) return;
 
-      const call = await Call.findOne({ callId });
-      if (!call) return;
+      let mem = activeCallsMap.get(callId);
+      if (!mem) {
+        const call = await Call.findOne({ callId });
+        if (call) {
+          mem = {
+            callId,
+            callerId: call.callerId.toString(),
+            receiverId: call.receiverId.toString(),
+            conversationId: call.conversationId.toString(),
+          };
+          activeCallsMap.set(callId, mem);
+        }
+      }
 
-      const targetId =
-        call.callerId.toString() === userId ? call.receiverId.toString() : call.callerId.toString();
+      if (!mem) return;
 
+      const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
       io.to(`user:${targetId}`).emit('call:ice-candidate', { callId, candidate });
     } catch (err) {
       console.error('[Call] ICE candidate error:', err);
@@ -364,6 +415,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         clearTimeout(timeout);
         callTimeouts.delete(callId);
       }
+
+      const mem = activeCallsMap.get(callId);
+      activeCallsMap.delete(callId);
 
       const call = await Call.findOne({ callId });
       if (!call) return;
@@ -417,6 +471,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         callTimeouts.delete(callId);
       }
 
+      activeCallsMap.delete(callId);
+
       const call = await Call.findOne({ callId });
       if (!call) return;
 
@@ -468,6 +524,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         clearTimeout(timeout);
         callTimeouts.delete(callId);
       }
+
+      activeCallsMap.delete(callId);
 
       const call = await Call.findOne({ callId });
       if (!call) return;
@@ -523,6 +581,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const { callId } = data;
       if (!callId) return;
 
+      activeCallsMap.delete(callId);
+
       const call = await Call.findOne({ callId });
       if (!call) return;
 
@@ -541,6 +601,12 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   // 12. Socket Disconnect Auto-Cleanup
   socket.on('disconnect', async () => {
     try {
+      for (const [cId, mem] of activeCallsMap.entries()) {
+        if (mem.callerId === userId || mem.receiverId === userId) {
+          activeCallsMap.delete(cId);
+        }
+      }
+
       await Call.updateMany(
         {
           $or: [{ callerId: userId }, { receiverId: userId }],

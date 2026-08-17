@@ -1,10 +1,10 @@
 {
-  "versionCode": 29,
-  "versionName": "1.0.28",
+  "versionCode": 30,
+  "versionName": "1.0.29",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "8a4ed9014edd6a1cb1513480677282900b7f03bfc555e31aefbaa6d9cf18890a",
+  "sha256": "94bc1fee9781cc6f86e1d617e18e69baa6445911991cbb120fb35a6691dfe05d",
   "releaseNotes": [
-    "Release v1.0.28 (Build 29)",
+    "Release v1.0.29 (Build 30)",
     "✨ Added release badge & in-app APK auto-updater",
     "Enhanced real-time connection & message delivery",
     "UI polish & stability improvements"

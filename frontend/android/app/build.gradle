@@ -27,9 +27,15 @@ android {
             storePassword 'kothahobe2026'
             keyAlias 'kothahobe-release'
             keyPassword 'kothahobe2026'
+            v1SigningEnabled true
+            v2SigningEnabled true
         }
     }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+            debuggable true
+        }
         release {
             signingConfig signingConfigs.release
             minifyEnabled false

@@ -1,15 +1,13 @@
 {
-  "versionCode": 18,
-  "versionName": "1.0.17",
+  "versionCode": 20,
+  "versionName": "1.0.19",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "9d10fba2343e8b43869e36d9765a9c455ef72b81025ce02eb0030169c646d652",
+  "sha256": "1c43bb61caa53c1e7bd40e4406aee41f61279d20ad47edef4159aa166f9ec94c",
   "releaseNotes": [
-    "Release v1.0.17 (Build 18)",
-    "🔔 Added POST_NOTIFICATIONS, VIBRATE, WAKE_LOCK permissions in AndroidManifest.xml",
-    "⚡ Initialized Android HIGH importance 'chat_messages' notification channel",
-    "🧪 Added Direct Test Push Diagnostic in Settings for instant device testing",
-    "📡 Server-side FCM HTTP v1 dispatch pipeline with direct diagnostic status",
-    "💬 1-Tap system push notification navigation directly into conversation"
+    "Release v1.0.19 (Build 20)",
+    "✨ Added release badge & in-app APK auto-updater",
+    "Enhanced real-time connection & message delivery",
+    "UI polish & stability improvements"
   ],
   "mandatory": false
 }

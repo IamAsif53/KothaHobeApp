@@ -29,6 +29,7 @@ import { ChatRoomPage } from './pages/ChatRoomPage';
 import { ChatInfoPage } from './pages/ChatInfoPage';
 import { SharedMediaPage } from './pages/SharedMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { BlockedUsersPage } from './pages/BlockedUsersPage';
 
 // Protected Route wrapper requiring user authentication
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -246,6 +247,14 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings/blocked"
+            element={
+              <ProtectedRoute>
+                <BlockedUsersPage />
               </ProtectedRoute>
             }
           />

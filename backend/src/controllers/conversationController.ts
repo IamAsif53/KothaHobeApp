@@ -39,26 +39,34 @@ export const getOrCreateConversation = async (
     // Atomically find or create
     let conversation = await Conversation.findOne({ participantsKey }).populate({
       path: 'participants',
-      select: '_id phoneNumber displayName avatarUrl isOnline lastSeen',
+      select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
     });
 
-    if (!conversation) {
+    if (conversation) {
+      // If user had previously deleted this chat, restore it cleanly for fresh communication
+      if (conversation.deletedFor && conversation.deletedFor.some((id) => id.toString() === currentUserId)) {
+        await Conversation.findByIdAndUpdate(conversation._id, {
+          $pull: { deletedFor: req.user._id },
+        });
+      }
+    } else {
       try {
         const newConv = await Conversation.create({
           participants: [req.user._id, recipient._id],
           participantsKey,
           lastMessageAt: new Date(),
+          deletedFor: [],
         });
         conversation = await Conversation.findById(newConv._id).populate({
           path: 'participants',
-          select: '_id phoneNumber displayName avatarUrl isOnline lastSeen',
+          select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
         });
       } catch (err: any) {
         // If race condition happens, query again
         if (err.code === 11000) {
           conversation = await Conversation.findOne({ participantsKey }).populate({
             path: 'participants',
-            select: '_id phoneNumber displayName avatarUrl isOnline lastSeen',
+            select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
           });
         } else {
           throw err;
@@ -93,24 +101,38 @@ export const listConversations = async (
 
     const userId = req.user._id;
 
-    // Find all conversations where current user is participant
-    const conversations = await Conversation.find({ participants: userId })
+    // Fetch user's blocked list
+    const currentUser = await User.findById(userId).select('blockedUsers');
+    const blockedUserIds = (currentUser?.blockedUsers || []).map((id) => id.toString());
+
+    // Find all conversations where current user is participant and NOT deleted for user
+    const conversations = await Conversation.find({
+      participants: userId,
+      deletedFor: { $ne: userId },
+    })
       .sort({ lastMessageAt: -1 })
       .populate({
         path: 'participants',
-        select: '_id phoneNumber displayName avatarUrl isOnline lastSeen',
+        select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
       });
 
-    // Calculate unread count for each conversation
+    // Filter out conversations with blocked users & calculate unread count
+    const validConversations = conversations.filter((conv) => {
+      const recipient = conv.participants.find(
+        (p: any) => p._id.toString() !== userId.toString()
+      );
+      if (!recipient) return false;
+      return !blockedUserIds.includes(recipient._id.toString());
+    });
+
     const result = await Promise.all(
-      conversations.map(async (conv) => {
+      validConversations.map(async (conv) => {
         const unreadCount = await Message.countDocuments({
           conversationId: conv._id,
           receiverId: userId,
           status: { $in: ['sending', 'sent', 'delivered'] },
         });
 
-        // Find recipient details (the other user)
         const recipient = conv.participants.find(
           (p: any) => p._id.toString() !== userId.toString()
         );
@@ -134,5 +156,101 @@ export const listConversations = async (
   } catch (error) {
     console.error('[Conversation] list error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch conversations' });
+  }
+};
+
+export const clearChatHistory = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const conversationId = req.params.conversationId as string;
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+      res.status(400).json({ success: false, message: 'Invalid conversationId' });
+      return;
+    }
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      res.status(404).json({ success: false, message: 'Conversation not found' });
+      return;
+    }
+
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === req.user!._id.toString()
+    );
+    if (!isParticipant) {
+      res.status(403).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    // Delete all messages in this conversation
+    await Message.deleteMany({ conversationId });
+
+    // Reset last message
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: {
+        text: '',
+        status: 'sent',
+        createdAt: new Date(),
+      },
+    });
+
+    console.log(`[Conversation] Cleared chat history for conversation ${conversationId}`);
+    res.status(200).json({ success: true, message: 'Chat history cleared successfully' });
+  } catch (error) {
+    console.error('[Conversation] clear history error:', error);
+    res.status(500).json({ success: false, message: 'Failed to clear chat history' });
+  }
+};
+
+export const deleteConversation = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const conversationId = req.params.conversationId as string;
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+      res.status(400).json({ success: false, message: 'Invalid conversationId' });
+      return;
+    }
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      res.status(404).json({ success: false, message: 'Conversation not found' });
+      return;
+    }
+
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === req.user!._id.toString()
+    );
+    if (!isParticipant) {
+      res.status(403).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    // Mark conversation as deleted for this user
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $addToSet: { deletedFor: req.user._id },
+    });
+
+    // Also delete all messages in this conversation for cleanliness
+    await Message.deleteMany({ conversationId });
+
+    console.log(`[Conversation] Deleted conversation ${conversationId} for user ${req.user._id}`);
+    res.status(200).json({ success: true, message: 'Conversation deleted successfully' });
+  } catch (error) {
+    console.error('[Conversation] delete error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete conversation' });
   }
 };

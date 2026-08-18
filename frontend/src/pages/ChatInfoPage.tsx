@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchConversations } from '../api/conversationApi';
+import { fetchConversations, clearChatHistoryApi } from '../api/conversationApi';
 import { IUser } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { Avatar } from '../components/common/Avatar';
@@ -48,9 +48,14 @@ export const ChatInfoPage: React.FC = () => {
     }
   };
 
-  const handleClearChat = () => {
-    if (confirm('Clear all messages for this chat on this device?')) {
+  const handleClearChat = async () => {
+    if (confirm('Clear entire chat history? All messages will be permanently removed.')) {
       if (conversationId) {
+        try {
+          await clearChatHistoryApi(conversationId);
+        } catch (e) {
+          console.warn('[ClearChat] Backend clear failed:', e);
+        }
         localStorage.removeItem(`kotha_hobe_msgs_${conversationId}`);
         navigate(`/chat/${conversationId}`, { replace: true });
       }
@@ -160,7 +165,7 @@ export const ChatInfoPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Clear Chat */}
+          {/* Clear Chat History */}
           <div
             onClick={handleClearChat}
             className="flex items-center gap-3.5 p-4 hover:bg-red-500/10 cursor-pointer transition-colors text-red-400"
@@ -169,8 +174,8 @@ export const ChatInfoPage: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-red-400">Clear Local Messages</div>
-              <div className="text-xs text-chat-textMuted">Delete message cache from this phone</div>
+              <div className="text-sm font-semibold text-red-400">Clear Chat History</div>
+              <div className="text-xs text-chat-textMuted">Delete all messages in this conversation</div>
             </div>
           </div>
         </div>

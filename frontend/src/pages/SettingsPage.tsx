@@ -23,6 +23,7 @@ import {
   Eye,
   Trash2,
   Send,
+  ShieldAlert,
 } from 'lucide-react';
 import { sendTestPushApi } from '../api/userApi';
 import {
@@ -295,6 +296,21 @@ export const SettingsPage: React.FC = () => {
             <div className="flex-1">
               <div className="text-sm font-semibold text-white">Privacy & Security</div>
               <div className="text-xs text-chat-textMuted">Read receipts, online presence & encryption</div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+          </div>
+
+          {/* Blocked Accounts */}
+          <div
+            onClick={() => navigate('/settings/blocked')}
+            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+          >
+            <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-white">Blocked Accounts</div>
+              <div className="text-xs text-chat-textMuted">Manage and unblock restricted contacts</div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
           </div>

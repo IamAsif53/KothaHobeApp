@@ -1,13 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchConversations } from '../api/conversationApi';
+import { fetchConversations, deleteConversationApi } from '../api/conversationApi';
+import { blockUserApi } from '../api/userApi';
 import { IConversation } from '../types';
 import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
 import { ConversationSkeleton } from '../components/common/Skeleton';
 import { formatChatListDate } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
-import { Search, UserPlus, MessageSquare, Check, CheckCheck, WifiOff } from 'lucide-react';
+import {
+  Search,
+  UserPlus,
+  MessageSquare,
+  Check,
+  CheckCheck,
+  WifiOff,
+  MoreVertical,
+  Trash2,
+  Ban,
+  X,
+} from 'lucide-react';
 
 export const ChatListPage: React.FC = () => {
   const { themeConfig } = useTheme();
@@ -26,6 +38,15 @@ export const ChatListPage: React.FC = () => {
     return !localStorage.getItem('kotha_hobe_cached_conversations');
   });
 
+  // Action Menu State (Block / Delete Chat)
+  const [selectedConvForAction, setSelectedConvForAction] = useState<IConversation | null>(null);
+  const [actionToast, setActionToast] = useState<string | null>(null);
+
+  const showActionToast = (msg: string) => {
+    setActionToast(msg);
+    setTimeout(() => setActionToast(null), 3000);
+  };
+
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
 
@@ -39,10 +60,10 @@ export const ChatListPage: React.FC = () => {
         setConversations(res.conversations);
         localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(res.conversations));
       }
-    } catch (error) {
-      console.warn('[ChatList] Background sync notice (offline or network pause)');
+    } catch (err) {
+      console.warn('[ChatList] Failed to fetch:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -50,62 +71,111 @@ export const ChatListPage: React.FC = () => {
     loadConversations();
   }, []);
 
-  // Socket real-time listeners for instant conversation list updates
+  // Listen for real-time conversation updates
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewMessage = () => {
-      loadConversations(true);
-    };
-
-    const handleUserPresence = () => {
-      loadConversations(true);
+    const handleNewMessage = (data: any) => {
+      setConversations((prev) => {
+        const index = prev.findIndex((c) => c._id === data.conversationId);
+        if (index > -1) {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            lastMessage: {
+              text: data.text,
+              senderId: data.senderId,
+              createdAt: data.createdAt,
+              status: data.status,
+            },
+            lastMessageAt: data.createdAt,
+            unreadCount: (updated[index].unreadCount || 0) + 1,
+          };
+          const sorted = updated.sort(
+            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+          );
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(sorted));
+          return sorted;
+        } else {
+          loadConversations(true);
+          return prev;
+        }
+      });
     };
 
     socket.on('message:new', handleNewMessage);
-    socket.on('message:sent', handleNewMessage);
-    socket.on('message:delivered', handleNewMessage);
-    socket.on('message:read', handleNewMessage);
-    socket.on('user:online', handleUserPresence);
-    socket.on('user:offline', handleUserPresence);
+    socket.on('conversation:update', () => loadConversations(true));
 
     return () => {
       socket.off('message:new', handleNewMessage);
-      socket.off('message:sent', handleNewMessage);
-      socket.off('message:delivered', handleNewMessage);
-      socket.off('message:read', handleNewMessage);
-      socket.off('user:online', handleUserPresence);
-      socket.off('user:offline', handleUserPresence);
+      socket.off('conversation:update');
     };
   }, [socket]);
 
-  const filteredConversations = conversations.filter((conv) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    const nameMatch = conv.recipient?.displayName?.toLowerCase().includes(q);
-    const userMatch = conv.recipient?.username?.toLowerCase().includes(q);
-    const emailMatch = conv.recipient?.email?.toLowerCase().includes(q);
-    const msgMatch = conv.lastMessage?.text?.toLowerCase().includes(q);
-    return nameMatch || userMatch || emailMatch || msgMatch;
+  const filteredConversations = conversations.filter((c) => {
+    const name = c.recipient?.displayName || c.recipient?.username || '';
+    return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const renderStatusCheck = (status?: string) => {
     if (!status) return null;
-    if (status === 'read') {
-      return <CheckCheck className="w-3.5 h-3.5 text-sky-400 inline mr-1 stroke-[2.5]" />;
+    if (status === 'sending') return <span className="text-[10px] text-chat-textMuted mr-1">🕒</span>;
+    if (status === 'sent') return <Check className="w-3.5 h-3.5 text-chat-textMuted inline mr-1" />;
+    if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-chat-textMuted inline mr-1" />;
+    if (status === 'read') return <CheckCheck className="w-3.5 h-3.5 text-sky-400 inline mr-1" />;
+    return null;
+  };
+
+  // 1. Handle Delete Chat
+  const handleDeleteChat = async (conv: IConversation) => {
+    const name = conv.recipient?.displayName || conv.recipient?.username || 'this user';
+    if (confirm(`Delete chat history with ${name}? All previous messages will be removed.`)) {
+      try {
+        await deleteConversationApi(conv._id);
+        const updated = conversations.filter((c) => c._id !== conv._id);
+        setConversations(updated);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        localStorage.removeItem(`kotha_hobe_msgs_${conv._id}`);
+        setSelectedConvForAction(null);
+        showActionToast(`Chat with ${name} deleted`);
+      } catch (err: any) {
+        showActionToast(err?.message || 'Failed to delete chat');
+      }
     }
-    if (status === 'delivered') {
-      return <CheckCheck className="w-3.5 h-3.5 text-chat-textMuted inline mr-1" />;
+  };
+
+  // 2. Handle Block User
+  const handleBlockUser = async (conv: IConversation) => {
+    if (!conv.recipient?._id) return;
+    const name = conv.recipient?.displayName || conv.recipient?.username || 'this user';
+    if (confirm(`Block ${name}? They will be removed from your chats and cannot find you in search.`)) {
+      try {
+        await blockUserApi(conv.recipient._id);
+        const updated = conversations.filter((c) => c._id !== conv._id);
+        setConversations(updated);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        localStorage.removeItem(`kotha_hobe_msgs_${conv._id}`);
+        setSelectedConvForAction(null);
+        showActionToast(`${name} has been blocked`);
+      } catch (err: any) {
+        showActionToast(err?.message || 'Failed to block user');
+      }
     }
-    return <Check className="w-3.5 h-3.5 text-chat-textMuted inline mr-1" />;
   };
 
   return (
     <div
       style={{ backgroundColor: themeConfig.bg }}
-      className="h-full w-full flex flex-col overflow-hidden transition-colors duration-200"
+      className="h-full w-full flex flex-col max-w-md mx-auto relative overflow-hidden transition-colors duration-200"
     >
-      {/* Top Bar Header with safe area status bar padding */}
+      {/* Toast Notification */}
+      {actionToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs px-4 py-2 rounded-full shadow-2xl animate-fade-in pointer-events-none">
+          {actionToast}
+        </div>
+      )}
+
+      {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
         className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 transition-colors duration-200"
@@ -133,10 +203,10 @@ export const ChatListPage: React.FC = () => {
 
           <button
             onClick={() => navigate('/search')}
-            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-chat-textMuted hover:text-white transition-colors"
-            title="Search User by Username"
+            className="p-2 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
+            title="Find User"
           >
-            <UserPlus className="w-5 h-5" />
+            <Search className="w-5 h-5" />
           </button>
         </div>
       </header>
@@ -190,41 +260,59 @@ export const ChatListPage: React.FC = () => {
           filteredConversations.map((conv) => (
             <div
               key={conv._id}
-              onClick={() => navigate(`/chat/${conv._id}`)}
-              className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none"
+              className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none relative group"
             >
-              <Avatar
-                src={conv.recipient?.avatarUrl}
-                name={conv.recipient?.displayName || conv.recipient?.username || 'User'}
-                isOnline={conv.recipient?.isOnline}
-                size="md"
-              />
+              {/* Click to open chat */}
+              <div
+                onClick={() => navigate(`/chat/${conv._id}`)}
+                className="flex items-center gap-3.5 flex-1 min-w-0"
+              >
+                <Avatar
+                  src={conv.recipient?.avatarUrl}
+                  name={conv.recipient?.displayName || conv.recipient?.username || 'User'}
+                  isOnline={conv.recipient?.isOnline}
+                  size="md"
+                />
 
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline mb-1">
-                  <h2 className="text-sm font-semibold text-white truncate">
-                    {conv.recipient?.displayName || conv.recipient?.username || 'User'}
-                  </h2>
-                  {conv.lastMessageAt && (
-                    <span className="text-[11px] text-chat-textMuted flex-shrink-0 ml-2 font-medium">
-                      {formatChatListDate(conv.lastMessageAt)}
-                    </span>
-                  )}
-                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <h2 className="text-sm font-semibold text-white truncate">
+                      {conv.recipient?.displayName || conv.recipient?.username || 'User'}
+                    </h2>
+                    {conv.lastMessageAt && (
+                      <span className="text-[11px] text-chat-textMuted flex-shrink-0 ml-2 font-medium">
+                        {formatChatListDate(conv.lastMessageAt)}
+                      </span>
+                    )}
+                  </div>
 
-                <div className="flex justify-between items-center">
-                  <p className="text-xs text-chat-textMuted truncate pr-2">
-                    {renderStatusCheck(conv.lastMessage?.status)}
-                    {conv.lastMessage?.text || 'Started conversation'}
-                  </p>
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs text-chat-textMuted truncate pr-2">
+                      {renderStatusCheck(conv.lastMessage?.status)}
+                      {conv.lastMessage?.text || 'Started conversation'}
+                    </p>
 
-                  {(conv.unreadCount ?? 0) > 0 && (
-                    <span className="bg-brand-500 text-white font-bold text-[10px] min-w-[20px] h-[20px] px-1.5 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm animate-pulse-subtle">
-                      {conv.unreadCount}
-                    </span>
-                  )}
+                    {(conv.unreadCount ?? 0) > 0 && (
+                      <span className="bg-brand-500 text-white font-bold text-[10px] min-w-[20px] h-[20px] px-1.5 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm animate-pulse-subtle">
+                        {conv.unreadCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* 3-Dots Options Action Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedConvForAction(conv);
+                }}
+                className="p-2 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 active:scale-95 transition-all flex-shrink-0"
+                title="Chat Options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
             </div>
           ))
         )}
@@ -238,6 +326,93 @@ export const ChatListPage: React.FC = () => {
       >
         <UserPlus className="w-6 h-6" />
       </button>
+
+      {/* Action Bottom Sheet Modal (Block User / Delete Chat) */}
+      {selectedConvForAction && (
+        <div
+          onClick={() => setSelectedConvForAction(null)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: themeConfig.card }}
+            className="w-full max-w-sm rounded-3xl border border-white/10 overflow-hidden shadow-2xl p-5 space-y-4 animate-slide-up"
+          >
+            {/* Header info */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3">
+                <Avatar
+                  src={selectedConvForAction.recipient?.avatarUrl}
+                  name={selectedConvForAction.recipient?.displayName || 'User'}
+                  size="sm"
+                />
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {selectedConvForAction.recipient?.displayName || 'User'}
+                  </h3>
+                  {selectedConvForAction.recipient?.username && (
+                    <p className="text-xs text-chat-textMuted">
+                      @{selectedConvForAction.recipient.username}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedConvForAction(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              {/* Delete Chat */}
+              <button
+                type="button"
+                onClick={() => handleDeleteChat(selectedConvForAction)}
+                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-white text-sm font-semibold transition-all text-left"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-chat-textMuted">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div>Delete Chat</div>
+                  <div className="text-[11px] text-chat-textMuted font-normal">
+                    Remove conversation and all messages
+                  </div>
+                </div>
+              </button>
+
+              {/* Block User in Prominent Red Font */}
+              <button
+                type="button"
+                onClick={() => handleBlockUser(selectedConvForAction)}
+                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/15 active:scale-[0.98] text-red-500 text-sm font-bold transition-all text-left border border-red-500/20"
+              >
+                <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+                  <Ban className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-red-500 font-bold">Block User</div>
+                  <div className="text-[11px] text-red-400/80 font-normal">
+                    Hide from chats and search completely
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Cancel Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedConvForAction(null)}
+              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-chat-textMuted hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

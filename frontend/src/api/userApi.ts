@@ -60,4 +60,22 @@ export async function getPushStatusApi(): Promise<{
   }>('/dev/push-status');
 }
 
+export async function blockUserApi(targetUserId: string): Promise<{ success: boolean; message?: string }> {
+  return apiFetch<{ success: boolean; message?: string }>('/users/block', {
+    method: 'POST',
+    body: JSON.stringify({ targetUserId }),
+  });
+}
+
+export async function unblockUserApi(targetUserId: string): Promise<{ success: boolean; message?: string }> {
+  return apiFetch<{ success: boolean; message?: string }>('/users/unblock', {
+    method: 'POST',
+    body: JSON.stringify({ targetUserId }),
+  });
+}
+
+export async function getBlockedUsersApi(): Promise<{ success: boolean; blockedUsers: IUser[] }> {
+  return apiFetch<{ success: boolean; blockedUsers: IUser[] }>('/users/blocked');
+}
+
 

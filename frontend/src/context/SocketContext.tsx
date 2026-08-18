@@ -12,6 +12,9 @@ interface OutboxItem {
   receiverId: string;
   text: string;
   clientMessageId: string;
+  type?: string;
+  attachment?: any;
+  replyTo?: any;
   timestamp: number;
 }
 
@@ -23,8 +26,12 @@ interface SocketContextType {
     conversationId: string,
     receiverId: string,
     text: string,
-    clientMessageId: string
+    clientMessageId: string,
+    type?: string,
+    attachment?: any,
+    replyTo?: any
   ) => void;
+  flushPendingOutbox: () => void;
   markAsRead: (conversationId: string) => void;
   startTyping: (conversationId: string, receiverId: string) => void;
   stopTyping: (conversationId: string, receiverId: string) => void;
@@ -170,19 +177,31 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Helper to remove acknowledged messages from outbox
+  const removeSentFromOutbox = (clientMessageId?: string) => {
+    if (!clientMessageId) return;
+    const current = getStoredOutbox();
+    const filtered = current.filter((item) => item.clientMessageId !== clientMessageId);
+    if (filtered.length !== current.length) {
+      saveOutbox(filtered);
+    }
+  };
+
   // Flush Outbox when socket or internet reconnects
   const flushOutbox = (targetSocket: Socket) => {
     const pending = getStoredOutbox();
     if (pending.length === 0) return;
 
-    console.log(`[Outbox] Flushing ${pending.length} pending offline messages...`);
+    console.log(`[Outbox] ⚡ Flushing ${pending.length} pending offline message(s)...`);
     pending.forEach((item) => {
       targetSocket.emit('message:send', {
         conversationId: item.conversationId,
         receiverId: item.receiverId,
         text: item.text,
         clientMessageId: item.clientMessageId,
-        type: 'text',
+        type: item.type || 'text',
+        attachment: item.attachment,
+        replyTo: item.replyTo,
       });
     });
   };
@@ -315,7 +334,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     conversationId: string,
     receiverId: string,
     text: string,
-    clientMessageId: string
+    clientMessageId: string,
+    type: string = 'text',
+    attachment?: any,
+    replyTo?: any
   ) => {
     const outbox = getStoredOutbox();
     if (!outbox.some((item) => item.clientMessageId === clientMessageId)) {
@@ -324,6 +346,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         receiverId,
         text,
         clientMessageId,
+        type,
+        attachment,
+        replyTo,
         timestamp: Date.now(),
       });
       saveOutbox(outbox);
@@ -335,8 +360,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         receiverId,
         text,
         clientMessageId,
-        type: 'text',
+        type,
+        attachment,
+        replyTo,
       });
+    }
+  };
+
+  const flushPendingOutbox = () => {
+    if (socket && isConnected) {
+      flushOutbox(socket);
     }
   };
 
@@ -376,6 +409,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isConnected,
         isReconnecting,
         sendMessage,
+        flushPendingOutbox,
         markAsRead,
         startTyping,
         stopTyping,

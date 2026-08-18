@@ -34,10 +34,10 @@ export function formatChatListDate(dateString?: string | Date): string {
 }
 
 export function formatLastSeen(dateString?: string | Date, isOnline?: boolean): string {
-  if (isOnline) return 'Online';
-  if (!dateString) return 'Offline';
+  if (isOnline) return 'online';
+  if (!dateString) return 'offline';
   const date = new Date(dateString);
-  if (isNaN(date.getTime())) return 'Offline';
+  if (isNaN(date.getTime())) return 'offline';
 
   const timeStr = date.toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -50,11 +50,11 @@ export function formatLastSeen(dateString?: string | Date, isOnline?: boolean): 
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0 && now.getDate() === date.getDate()) {
-    return `Last seen today at ${timeStr}`;
+    return `last seen today at ${timeStr}`;
   } else if (diffDays === 1 || (diffDays === 0 && now.getDate() !== date.getDate())) {
-    return `Last seen yesterday at ${timeStr}`;
+    return `last seen yesterday at ${timeStr}`;
   } else {
     const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    return `Last seen ${dateStr} at ${timeStr}`;
+    return `last seen ${dateStr} at ${timeStr}`;
   }
 }

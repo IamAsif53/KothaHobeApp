@@ -460,18 +460,16 @@ export const ChatRoomPage: React.FC = () => {
               return updated;
             });
 
-            // Dispatch socket event to recipient
-            if (socket && isConnected) {
-              socket.emit('message:send', {
-                conversationId,
-                receiverId: recipient._id,
-                text: text.trim(),
-                clientMessageId: tempId,
-                type,
-                attachment: serverAttachment,
-                replyTo,
-              });
-            }
+            // Dispatch message via centralized sendMessage engine (handles live socket and offline outbox)
+            sendMessage(
+              conversationId,
+              recipient._id,
+              text.trim(),
+              tempId,
+              type,
+              serverAttachment,
+              replyTo
+            );
           } else {
             // Mark failed on server error
             setMessages((prev) => {
@@ -498,18 +496,16 @@ export const ChatRoomPage: React.FC = () => {
       return;
     }
 
-    // 3. Regular text message dispatch
-    if (socket && isConnected) {
-      socket.emit('message:send', {
-        conversationId,
-        receiverId: recipient._id,
-        text: text.trim(),
-        clientMessageId: tempId,
-        type,
-        attachment,
-        replyTo,
-      });
-    }
+    // 3. Regular text message dispatch via centralized sendMessage engine
+    sendMessage(
+      conversationId,
+      recipient._id,
+      text.trim(),
+      tempId,
+      type,
+      attachment,
+      replyTo
+    );
   };
 
   // 1. Native Document Open (Default Reader App)
@@ -644,7 +640,7 @@ export const ChatRoomPage: React.FC = () => {
                 ) : recipient?.isOnline ? (
                   <span className="text-emerald-400 font-medium">online</span>
                 ) : recipient?.lastSeen ? (
-                  <span>last seen {formatLastSeen(recipient.lastSeen)}</span>
+                  <span>{formatLastSeen(recipient.lastSeen)}</span>
                 ) : (
                   <span>offline</span>
                 )}

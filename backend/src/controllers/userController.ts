@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { User } from '../models/User';
+import { Conversation } from '../models/Conversation';
+import mongoose from 'mongoose';
 
 const RESERVED_USERNAMES = new Set([
   'admin',
@@ -177,6 +179,22 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    // Do not show blocked users or users who have blocked current user
+    if (req.user) {
+      const currentUser = await User.findById(req.user._id).select('blockedUsers');
+      const isBlockedByMe = currentUser?.blockedUsers?.some(
+        (id: any) => id.toString() === foundUser!._id.toString()
+      );
+      const hasBlockedMe = foundUser.blockedUsers?.some(
+        (id: any) => id.toString() === req.user!._id.toString()
+      );
+
+      if (isBlockedByMe || hasBlockedMe) {
+        res.status(200).json({ success: true, user: null, message: 'No user found with this username' });
+        return;
+      }
+    }
+
     // Return sanitized public user data (never expose email or private tokens)
     res.status(200).json({
       success: true,
@@ -192,6 +210,84 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
   } catch (error) {
     console.error('[User Search] Error:', error);
     res.status(500).json({ success: false, message: 'Failed to search user' });
+  }
+};
+
+export const blockUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+    const { targetUserId } = req.body;
+    if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+      res.status(400).json({ success: false, message: 'Valid targetUserId is required' });
+      return;
+    }
+    if (req.user._id.toString() === targetUserId.toString()) {
+      res.status(400).json({ success: false, message: 'Cannot block yourself' });
+      return;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { blockedUsers: targetUserId },
+    });
+
+    // Also mark conversation as deletedFor current user so it disappears from chat list
+    await Conversation.updateMany(
+      { participants: { $all: [req.user._id, targetUserId] } },
+      { $addToSet: { deletedFor: req.user._id } }
+    );
+
+    res.status(200).json({ success: true, message: 'User blocked successfully' });
+  } catch (error) {
+    console.error('[User Block] Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to block user' });
+  }
+};
+
+export const unblockUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+    const { targetUserId } = req.body;
+    if (!targetUserId || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+      res.status(400).json({ success: false, message: 'Valid targetUserId is required' });
+      return;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { blockedUsers: targetUserId },
+    });
+
+    res.status(200).json({ success: true, message: 'User unblocked successfully' });
+  } catch (error) {
+    console.error('[User Unblock] Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unblock user' });
+  }
+};
+
+export const getBlockedUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const currentUser = await User.findById(req.user._id).populate({
+      path: 'blockedUsers',
+      select: '_id displayName username avatarUrl isOnline lastSeen',
+    });
+
+    res.status(200).json({
+      success: true,
+      blockedUsers: currentUser?.blockedUsers || [],
+    });
+  } catch (error) {
+    console.error('[Get Blocked Users] Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch blocked users' });
   }
 };
 

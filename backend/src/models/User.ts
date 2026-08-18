@@ -13,6 +13,7 @@ export interface IUser extends Document {
   phoneVerified?: boolean;
   firebaseUid?: string;
   fcmTokens: string[];
+  blockedUsers: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,6 +77,13 @@ const UserSchema: Schema = new Schema(
       type: [String],
       default: [],
     },
+    blockedUsers: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: [],
+      },
+    ],
   },
   {
     timestamps: true,

@@ -21,3 +21,15 @@ export async function getOrCreateConversationApi(recipientId: string): Promise<C
     body: JSON.stringify({ recipientId }),
   });
 }
+
+export async function clearChatHistoryApi(conversationId: string): Promise<{ success: boolean; message?: string }> {
+  return apiFetch<{ success: boolean; message?: string }>(`/conversations/${conversationId}/clear`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteConversationApi(conversationId: string): Promise<{ success: boolean; message?: string }> {
+  return apiFetch<{ success: boolean; message?: string }>(`/conversations/${conversationId}`, {
+    method: 'DELETE',
+  });
+}

@@ -128,11 +128,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [cleanupCall]
   );
 
-  // Transition to CONNECTED state
+  // Transition to CONNECTED state (Strictly on genuine WebRTC connection)
   const markConnected = useCallback(
     (callId: string) => {
       if (callStateRef.current !== 'CONNECTED') {
-        console.log('[CallContext] Transitioning to CONNECTED state!');
+        console.log('[WebRTC DIAGNOSTIC] 🎉 Transitioning to CONNECTED state (WebRTC transport established)!');
         callStateRef.current = 'CONNECTED';
         setCallState('CONNECTED');
         soundService.stopAll();
@@ -152,25 +152,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCallDuration((prev) => prev + 1);
           }, 1000);
         }
-
-        // Start Live Audio Stats monitor (every 2 seconds)
-        if (!statsIntervalRef.current) {
-          statsIntervalRef.current = setInterval(async () => {
-            const stats = await webrtcVoiceService.getAudioStats();
-            setAudioStats(stats);
-            console.log(
-              `[WebRTC Stats] 📤 Out: ${stats.packetsSent} pkts (${stats.bytesSent} bytes) | 📥 In: ${stats.packetsReceived} pkts (${stats.bytesReceived} bytes)`
-            );
-          }, 2000);
-        }
       }
     },
     [socket]
   );
 
-  // Setup WebRTC Engine with Callbacks
+  // Setup WebRTC Engine with Callbacks & 1-second live diagnostics polling
   const setupWebRTC = useCallback(
     (callId: string) => {
+      // Start 1-second continuous diagnostics stats polling
+      if (!statsIntervalRef.current) {
+        statsIntervalRef.current = setInterval(async () => {
+          const stats = await webrtcVoiceService.getAudioStats();
+          setAudioStats(stats);
+          if (callStateRef.current === 'CONNECTED' || callStateRef.current === 'CONNECTING') {
+            console.log(
+              `[WebRTC DIAGNOSTIC] 📊 Out: ${stats.packetsSent} pkts | In: ${stats.packetsReceived} pkts | ICE: ${stats.iceState} | PC: ${stats.connectionState} | Candidate: ${stats.selectedCandidatePair?.localCandidateType || 'none'}`
+            );
+          }
+        }, 1000);
+      }
+
       webrtcVoiceService.createPeerConnection(
         callId,
         // On local ICE candidate
@@ -181,15 +183,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         // On remote track received
         (track, stream) => {
-          console.log('[CallContext] Remote track callback received:', track.id);
-          markConnected(callId);
+          console.log('[WebRTC DIAGNOSTIC] 📡 Remote track callback received in CallContext:', track.id);
         },
         // On connection state change
         (state, iceState) => {
-          console.log(`[CallContext] WebRTC State Changed: ${state}, ICE: ${iceState}`);
+          console.log(`[WebRTC DIAGNOSTIC] Connection state: ${state}, ICE state: ${iceState}`);
           if (state === 'connected' || iceState === 'connected' || iceState === 'completed') {
             markConnected(callId);
-          } else if (state === 'failed') {
+          } else if (state === 'failed' || iceState === 'failed') {
+            console.error('[WebRTC DIAGNOSTIC] ❌ Call failed due to WebRTC state:', state, 'ICE:', iceState);
             soundService.playCallEndTone();
             setCallState('FAILED');
             callStateRef.current = 'FAILED';

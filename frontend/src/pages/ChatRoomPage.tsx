@@ -577,6 +577,28 @@ export const ChatRoomPage: React.FC = () => {
     }, 2500);
   };
 
+  const handleRetryMessage = (msg: IMessage) => {
+    if (!conversationId || !recipient) return;
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        (m._id === msg._id || m.clientMessageId === msg.clientMessageId)
+          ? { ...m, status: 'sending' as const }
+          : m
+      )
+    );
+
+    sendMessage(
+      conversationId,
+      recipient._id,
+      msg.text || '',
+      msg.clientMessageId || msg._id,
+      msg.type,
+      msg.attachment,
+      msg.replyTo
+    );
+  };
+
   const filteredMessages = showSearch && searchQuery.trim()
     ? messages.filter(
         (m) =>
@@ -782,6 +804,7 @@ export const ChatRoomPage: React.FC = () => {
                   onReply={handleReply}
                   onReact={handleReact}
                   onDelete={handleDelete}
+                  onRetry={handleRetryMessage}
                 />
               </React.Fragment>
             );

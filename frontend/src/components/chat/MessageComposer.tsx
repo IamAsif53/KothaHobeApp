@@ -3,6 +3,7 @@ import { Send, Smile, Paperclip, Image as ImageIcon, Camera, FileText, Mic, X, T
 import { EmojiPicker } from './EmojiPicker';
 import { IReplyTo, IAttachment } from '../../types';
 import { ensureAudioPermission, openSystemAppSettings } from '../../services/nativeMediaService';
+import { compressImageForUpload } from '../../utils/imageCompressor';
 
 interface MessageComposerProps {
   onSend: (
@@ -91,22 +92,39 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     if (disabled) return;
 
     if (pendingFile) {
-      const file = pendingFile.file;
-      const previewUrl = pendingFile.previewUrl || URL.createObjectURL(file);
-      const mimeType = file.type || (pendingFile.type === 'image' ? 'image/jpeg' : 'application/pdf');
+      const originalFile = pendingFile.file;
+      const previewUrl = pendingFile.previewUrl || URL.createObjectURL(originalFile);
+      const mimeType = originalFile.type || (pendingFile.type === 'image' ? 'image/jpeg' : 'application/pdf');
 
-      onSend(
-        text.trim(),
-        pendingFile.type,
-        {
-          url: previewUrl,
-          fileName: file.name,
-          mimeType,
-          size: file.size,
-        },
-        replyingTo || undefined,
-        file
-      );
+      if (pendingFile.type === 'image') {
+        compressImageForUpload(originalFile).then((compressedFile) => {
+          onSend(
+            text.trim(),
+            'image',
+            {
+              url: previewUrl,
+              fileName: compressedFile instanceof File ? compressedFile.name : originalFile.name,
+              mimeType: 'image/jpeg',
+              size: compressedFile.size,
+            },
+            replyingTo || undefined,
+            compressedFile
+          );
+        });
+      } else {
+        onSend(
+          text.trim(),
+          pendingFile.type,
+          {
+            url: previewUrl,
+            fileName: originalFile.name,
+            mimeType,
+            size: originalFile.size,
+          },
+          replyingTo || undefined,
+          originalFile
+        );
+      }
 
       setPendingFile(null);
       setText('');

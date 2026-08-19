@@ -5,9 +5,13 @@ let mongoMemoryServer: any = null;
 
 export const connectDB = async (): Promise<void> => {
   try {
-    // Attempt connection to MongoDB Atlas
+    // Attempt connection to MongoDB Atlas with high-performance pooling
     await mongoose.connect(ENV.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 50,
+      minPoolSize: 10,
+      family: 4, // Force IPv4 to avoid slow IPv6 DNS lookups on cloud containers
     });
     const maskedUri = ENV.MONGODB_URI.replace(/:([^:@]+)@/, ':****@');
     console.log(`[Database] Connected to MongoDB Atlas at: ${maskedUri}`);

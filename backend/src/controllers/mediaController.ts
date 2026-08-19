@@ -69,6 +69,7 @@ function getGridFSBucket(): mongoose.mongo.GridFSBucket {
     }
     gridFSBucket = new mongoose.mongo.GridFSBucket(db, {
       bucketName: 'mediaFiles',
+      chunkSizeBytes: 4 * 1024 * 1024, // 4MB chunk size to eliminate multi-roundtrip chunking overhead
     });
   }
   return gridFSBucket;

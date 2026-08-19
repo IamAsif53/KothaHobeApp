@@ -96,31 +96,30 @@ export const CallScreen: React.FC = () => {
     setTimeout(() => setDiagnosticMsg(null), 3500);
   };
 
-  // Diagnostic Candidate Type helper
-  const candidateType = audioStats?.selectedCandidatePair?.localCandidateType || 'pending';
-  const candidateColor =
-    candidateType === 'relay'
-      ? 'text-amber-400 font-bold'
-      : candidateType === 'srflx'
-      ? 'text-sky-400 font-bold'
-      : candidateType === 'host'
-      ? 'text-emerald-400 font-bold'
-      : 'text-gray-400';
+  // Candidate Counts & Pair Helpers
+  const counts = audioStats?.candidateCounts || { total: 0, host: 0, srflx: 0, relay: 0, prflx: 0 };
+  const gatheringState = audioStats?.iceGatheringState || 'new';
+  const selectedPair = audioStats?.selectedCandidatePair;
+  const pairDisplay = selectedPair
+    ? `${selectedPair.localCandidateType.toUpperCase()} ↔ ${selectedPair.remoteCandidateType.toUpperCase()} (${selectedPair.protocol.toUpperCase()}${selectedPair.rtt ? `, ${selectedPair.rtt}ms` : ''})`
+    : counts.total > 0
+    ? 'PENDING'
+    : 'GATHERING';
 
   return (
-    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-[#0B141A] via-[#111B21] to-[#0B141A] flex flex-col justify-between p-4 select-none animate-fadeIn overflow-y-auto">
+    <div className="fixed inset-0 z-[100] bg-gradient-to-b from-[#0B141A] via-[#111B21] to-[#0B141A] flex flex-col justify-between p-3 select-none animate-fadeIn overflow-y-auto">
       {/* Top Header */}
-      <div className="pt-8 text-center flex-shrink-0">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/5 border border-white/10 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
+      <div className="pt-6 text-center flex-shrink-0">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/5 border border-white/10 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-1.5">
           <Phone className="w-3.5 h-3.5" />
           <span>Kotha Hobe Voice Call</span>
         </div>
-        <h2 className="text-xl font-bold text-white tracking-tight">{displayName}</h2>
+        <h2 className="text-lg font-bold text-white tracking-tight">{displayName}</h2>
         {otherParticipant?.username && (
-          <p className="text-xs text-chat-textMuted mt-0.5">@{otherParticipant.username}</p>
+          <p className="text-xs text-chat-textMuted">@{otherParticipant.username}</p>
         )}
         <p
-          className={`text-sm font-medium mt-1.5 transition-colors ${
+          className={`text-sm font-medium mt-1 transition-colors ${
             isConnected ? 'text-emerald-400 font-mono text-base font-bold' : 'text-chat-textMuted'
           }`}
         >
@@ -129,45 +128,45 @@ export const CallScreen: React.FC = () => {
 
         {/* Diagnostic Pop-up Message */}
         {diagnosticMsg && (
-          <div className="mt-2 text-xs font-medium text-amber-300 bg-amber-950/80 border border-amber-500/40 px-3 py-1 rounded-lg inline-block animate-fade-in shadow-lg">
+          <div className="mt-1.5 text-xs font-medium text-amber-300 bg-amber-950/80 border border-amber-500/40 px-3 py-1 rounded-lg inline-block animate-fade-in shadow-lg">
             {diagnosticMsg}
           </div>
         )}
       </div>
 
       {/* =========================================================================
-          PROMINENT REAL-TIME WEBRTC DIAGNOSTIC HUD (ALL 9 REQUIRED METRICS)
+          REAL-TIME WEBRTC DIAGNOSTIC HUD (ALL 15 REQUIRED METRICS)
          ========================================================================= */}
-      <div className="my-2 bg-black/75 border border-emerald-500/30 rounded-2xl p-3 shadow-2xl backdrop-blur-md text-left max-w-sm mx-auto w-full transition-all">
+      <div className="my-1.5 bg-black/85 border border-emerald-500/30 rounded-xl p-2.5 shadow-2xl backdrop-blur-md text-left max-w-sm mx-auto w-full transition-all">
         <div
           onClick={() => setHudExpanded(!hudExpanded)}
-          className="flex items-center justify-between cursor-pointer border-b border-white/10 pb-1.5"
+          className="flex items-center justify-between cursor-pointer border-b border-white/10 pb-1"
         >
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
+          <div className="flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide">
               WebRTC Diagnostic HUD
             </span>
           </div>
           <button
             type="button"
-            className="text-[11px] text-chat-textMuted hover:text-white flex items-center gap-1"
+            className="text-[10px] text-chat-textMuted hover:text-white flex items-center gap-1"
           >
             <span>{hudExpanded ? 'Collapse' : 'Expand'}</span>
-            {hudExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {hudExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>
 
         {hudExpanded && (
-          <div className="pt-2 space-y-1.5 font-mono text-[11px] text-gray-300">
+          <div className="pt-1.5 space-y-1 font-mono text-[10px] text-gray-300">
             {/* 1, 2, 3: States */}
-            <div className="grid grid-cols-2 gap-1 pb-1 border-b border-white/5">
+            <div className="grid grid-cols-3 gap-1 pb-1 border-b border-white/5">
               <div>
-                <span className="text-gray-400">1. Call:</span>{' '}
+                <span className="text-gray-400">CALL:</span>{' '}
                 <span className="text-white font-bold">{callState}</span>
               </div>
               <div>
-                <span className="text-gray-400">2. ICE:</span>{' '}
+                <span className="text-gray-400">ICE:</span>{' '}
                 <span
                   className={
                     audioStats?.iceState === 'connected' || audioStats?.iceState === 'completed'
@@ -181,7 +180,7 @@ export const CallScreen: React.FC = () => {
                 </span>
               </div>
               <div>
-                <span className="text-gray-400">3. Conn:</span>{' '}
+                <span className="text-gray-400">CONN:</span>{' '}
                 <span
                   className={
                     audioStats?.connectionState === 'connected'
@@ -194,16 +193,38 @@ export const CallScreen: React.FC = () => {
                   {audioStats?.connectionState || 'idle'}
                 </span>
               </div>
-              <div>
-                <span className="text-gray-400">8. Candidate:</span>{' '}
-                <span className={candidateColor}>{candidateType.toUpperCase()}</span>
+            </div>
+
+            {/* Candidate Counts & Gathering State */}
+            <div className="pb-1 border-b border-white/5 space-y-0.5">
+              <div className="flex justify-between">
+                <span className="text-gray-400">ICE Gathering:</span>
+                <span className="text-sky-300 font-semibold">{gatheringState.toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Candidates Total:</span>
+                <span className="text-white font-bold">{counts.total} (Host: {counts.host}, SRFLX: {counts.srflx}, Relay: {counts.relay})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">TURN Relay:</span>
+                <span className={counts.relay > 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                  {counts.relay > 0 ? `AVAILABLE (${counts.relay} relay candidates)` : 'UNAVAILABLE (0 relay)'}
+                </span>
               </div>
             </div>
 
-            {/* 4 & 5: Audio Tracks */}
-            <div className="space-y-1 pb-1 border-b border-white/5">
+            {/* Selected Candidate Pair */}
+            <div className="pb-1 border-b border-white/5">
+              <span className="text-gray-400">Selected Pair:</span>{' '}
+              <span className={selectedPair ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                {pairDisplay}
+              </span>
+            </div>
+
+            {/* Local & Remote Audio Track State */}
+            <div className="space-y-0.5 pb-1 border-b border-white/5">
               <div className="truncate">
-                <span className="text-gray-400">4. Local Mic:</span>{' '}
+                <span className="text-gray-400">Local Mic:</span>{' '}
                 {audioStats?.localTrackStatus ? (
                   <span
                     className={
@@ -220,7 +241,7 @@ export const CallScreen: React.FC = () => {
                 )}
               </div>
               <div className="truncate">
-                <span className="text-gray-400">5. Remote Audio:</span>{' '}
+                <span className="text-gray-400">Remote Track:</span>{' '}
                 {audioStats?.remoteTrackStatus ? (
                   <span
                     className={
@@ -238,31 +259,31 @@ export const CallScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* 6 & 7: RTP Packet Counters */}
+            {/* RTP Packet Counters */}
             <div className="grid grid-cols-2 gap-1 pb-1 border-b border-white/5">
-              <div className="bg-white/5 p-1.5 rounded-lg">
-                <div className="text-[10px] text-gray-400">6. Outbound RTP</div>
-                <div className="text-xs text-emerald-400 font-bold">
+              <div className="bg-white/5 p-1 rounded">
+                <div className="text-[9px] text-gray-400">Outbound RTP</div>
+                <div className="text-[11px] text-emerald-400 font-bold">
                   {audioStats?.packetsSent ?? 0} pkts
                 </div>
-                <div className="text-[9px] text-gray-400">
+                <div className="text-[8px] text-gray-400">
                   {((audioStats?.bytesSent ?? 0) / 1024).toFixed(1)} KB
                 </div>
               </div>
-              <div className="bg-white/5 p-1.5 rounded-lg">
-                <div className="text-[10px] text-gray-400">7. Inbound RTP</div>
-                <div className="text-xs text-sky-400 font-bold">
+              <div className="bg-white/5 p-1 rounded">
+                <div className="text-[9px] text-gray-400">Inbound RTP</div>
+                <div className="text-[11px] text-sky-400 font-bold">
                   {audioStats?.packetsReceived ?? 0} pkts
                 </div>
-                <div className="text-[9px] text-gray-400">
+                <div className="text-[8px] text-gray-400">
                   {((audioStats?.bytesReceived ?? 0) / 1024).toFixed(1)} KB (Lost: {audioStats?.packetsLost ?? 0})
                 </div>
               </div>
             </div>
 
-            {/* 9: Remote Audio Element Playback State */}
-            <div className="text-[10px] bg-white/5 p-1.5 rounded-lg flex items-center justify-between">
-              <span className="text-gray-400">9. Audio Element:</span>
+            {/* Remote Audio Element Playback State */}
+            <div className="text-[9px] bg-white/5 p-1 rounded flex items-center justify-between">
+              <span className="text-gray-400">Audio Element:</span>
               <span
                 className={
                   audioStats?.remoteAudioElementStatus?.playbackState === 'PLAYING'
@@ -272,7 +293,8 @@ export const CallScreen: React.FC = () => {
               >
                 {audioStats?.remoteAudioElementStatus?.playbackState || 'NOT_MOUNTED'} (Src:{' '}
                 {audioStats?.remoteAudioElementStatus?.srcObjectPresent ? 'YES' : 'NO'}, Vol:{' '}
-                {audioStats?.remoteAudioElementStatus?.volume ?? 1})
+                {audioStats?.remoteAudioElementStatus?.volume ?? 1}, Muted:{' '}
+                {audioStats?.remoteAudioElementStatus?.muted ? 'YES' : 'NO'})
               </span>
             </div>
           </div>
@@ -284,16 +306,16 @@ export const CallScreen: React.FC = () => {
         <div className="relative flex items-center justify-center">
           {!isEnding && (
             <>
-              <div className="absolute w-36 h-36 rounded-full bg-emerald-500/10 animate-ping duration-1000" />
-              <div className="absolute w-32 h-32 rounded-full bg-emerald-500/20 animate-pulse" />
+              <div className="absolute w-32 h-32 rounded-full bg-emerald-500/10 animate-ping duration-1000" />
+              <div className="absolute w-28 h-28 rounded-full bg-emerald-500/20 animate-pulse" />
             </>
           )}
 
-          <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-emerald-500/40 shadow-2xl relative z-10 bg-[#202C33] flex items-center justify-center">
+          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-emerald-500/40 shadow-2xl relative z-10 bg-[#202C33] flex items-center justify-center">
             {avatarUrl ? (
               <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-emerald-700 flex items-center justify-center text-white text-2xl font-bold">
+              <div className="w-full h-full bg-emerald-700 flex items-center justify-center text-white text-xl font-bold">
                 {displayName.charAt(0).toUpperCase()}
               </div>
             )}
@@ -301,7 +323,7 @@ export const CallScreen: React.FC = () => {
         </div>
 
         {/* Quick Diagnostic Test Buttons */}
-        <div className="flex items-center gap-2 mt-4">
+        <div className="flex items-center gap-2 mt-3">
           <button
             type="button"
             onClick={handleTestMic}
@@ -320,20 +342,20 @@ export const CallScreen: React.FC = () => {
       </div>
 
       {/* Bottom Floating Control Bar */}
-      <div className="pb-6 pt-2 flex flex-col items-center gap-4 flex-shrink-0">
-        <div className="flex items-center justify-center gap-6 bg-white/5 border border-white/10 backdrop-blur-md px-6 py-3 rounded-3xl shadow-2xl">
+      <div className="pb-4 pt-1 flex flex-col items-center gap-3 flex-shrink-0">
+        <div className="flex items-center justify-center gap-5 bg-white/5 border border-white/10 backdrop-blur-md px-5 py-2.5 rounded-3xl shadow-2xl">
           {/* Mute Button */}
           <button
             type="button"
             onClick={toggleMute}
             disabled={!isConnected}
-            className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all ${
+            className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center transition-all ${
               isMuted
                 ? 'bg-red-500/20 text-red-400 border border-red-500/40'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
             } disabled:opacity-40 active:scale-95`}
           >
-            {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
           {/* Speakerphone Button */}
@@ -341,13 +363,13 @@ export const CallScreen: React.FC = () => {
             type="button"
             onClick={toggleSpeaker}
             disabled={!isConnected}
-            className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all ${
+            className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center transition-all ${
               isSpeakerOn
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
             } disabled:opacity-40 active:scale-95`}
           >
-            {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            {isSpeakerOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
           {/* End / Cancel Call Button */}
@@ -355,9 +377,9 @@ export const CallScreen: React.FC = () => {
             type="button"
             onClick={isConnected ? endCall : cancelCall}
             disabled={isEnding}
-            className="w-14 h-14 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-red-600/40 transition-transform"
+            className="w-12 h-12 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-red-600/40 transition-transform"
           >
-            <PhoneOff className="w-6 h-6" />
+            <PhoneOff className="w-5 h-5" />
           </button>
         </div>
       </div>

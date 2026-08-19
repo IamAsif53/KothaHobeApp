@@ -58,3 +58,15 @@ export const getWebRTCConfig = (): RTCConfiguration => {
     rtcpMuxPolicy: 'require',
   };
 };
+
+export const getSanitizedWebRTCConfig = () => {
+  const config = getWebRTCConfig();
+  return {
+    ...config,
+    iceServers: config.iceServers?.map((s) => ({
+      urls: s.urls,
+      username: s.username ? '***' : undefined,
+      credential: s.credential ? '***' : undefined,
+    })),
+  };
+};

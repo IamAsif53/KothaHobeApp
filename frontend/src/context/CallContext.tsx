@@ -176,9 +176,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       webrtcVoiceService.createPeerConnection(
         callId,
         // On local ICE candidate
-        (candidate) => {
+        (candidate, traceId) => {
           if (socket) {
-            socket.emit('call:ice-candidate', { callId, candidate });
+            socket.emit('call:ice-candidate', { callId, candidate, traceId });
           }
         },
         // On remote track received
@@ -456,14 +456,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 7. ICE Candidate Relay
-    const handleIceCandidate = async (data: { callId: string; candidate: any }) => {
-      await webrtcVoiceService.addIceCandidate(data.candidate);
+    const handleIceCandidate = async (data: { callId: string; candidate: any; traceId?: string }) => {
+      console.log(`[ICE_RECEIVED] callId=${data.callId} traceId=${data.traceId || 'none'}`);
+      await webrtcVoiceService.addIceCandidate(data.candidate, data.traceId);
     };
 
-    // 8. Call Connected confirmation from server
+    // 8. Call Connected confirmation from server (Informational; actual connection driven by WebRTC state)
     const handleCallConnected = (data: { callId: string }) => {
-      console.log('[Signaling] Server confirmed call connected:', data.callId);
-      markConnected(data.callId);
+      console.log('[Signaling] Server confirmed call session established:', data.callId);
     };
 
     // 9. Call Rejection

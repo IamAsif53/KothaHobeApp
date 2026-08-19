@@ -6,7 +6,15 @@
  * remote audio playback, and live RTP audio statistics & diagnostics.
  */
 
-import { getWebRTCConfig } from '../config/webrtcConfig';
+import { getWebRTCConfig, getSanitizedWebRTCConfig } from '../config/webrtcConfig';
+
+export interface CandidateCounts {
+  total: number;
+  host: number;
+  srflx: number;
+  relay: number;
+  prflx: number;
+}
 
 export interface CandidatePairInfo {
   localCandidateType: string;
@@ -27,6 +35,9 @@ export interface AudioStats {
   selectedCandidatePair?: CandidatePairInfo;
   iceState?: string;
   connectionState?: string;
+  iceGatheringState?: string;
+  candidateCounts?: CandidateCounts;
+  turnAvailable?: boolean;
   localTrackStatus?: {
     id: string;
     label: string;
@@ -56,11 +67,20 @@ class WebRTCVoiceService {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private remoteAudioElement: HTMLAudioElement | null = null;
-  private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private pendingIceCandidates: Array<{ candidate: RTCIceCandidateInit; traceId?: string }> = [];
   private currentCallId: string | null = null;
 
+  // Local candidate counters
+  private candidateCounts: CandidateCounts = {
+    total: 0,
+    host: 0,
+    srflx: 0,
+    relay: 0,
+    prflx: 0,
+  };
+
   // Diagnostic callbacks
-  private onIceCandidateCallback: ((candidate: RTCIceCandidateInit) => void) | null = null;
+  private onIceCandidateCallback: ((candidate: RTCIceCandidateInit, traceId: string) => void) | null = null;
   private onRemoteTrackCallback: ((track: MediaStreamTrack, stream: MediaStream) => void) | null = null;
   private onConnectionStateChangeCallback: ((state: RTCPeerConnectionState, iceState: RTCIceConnectionState) => void) | null = null;
 
@@ -134,76 +154,77 @@ class WebRTCVoiceService {
    */
   public createPeerConnection(
     callId: string,
-    onIceCandidate: (candidate: RTCIceCandidateInit) => void,
+    onIceCandidate: (candidate: RTCIceCandidateInit, traceId: string) => void,
     onRemoteTrack: (track: MediaStreamTrack, stream: MediaStream) => void,
     onConnectionStateChange: (state: RTCPeerConnectionState, iceState: RTCIceConnectionState) => void
   ): RTCPeerConnection {
     this.cleanupPeerConnection();
 
     this.currentCallId = callId;
+    this.candidateCounts = { total: 0, host: 0, srflx: 0, relay: 0, prflx: 0 };
     this.onIceCandidateCallback = onIceCandidate;
     this.onRemoteTrackCallback = onRemoteTrack;
     this.onConnectionStateChangeCallback = onConnectionStateChange;
 
+    const sanitizedConfig = getSanitizedWebRTCConfig();
+    console.log('[WebRTC DIAGNOSTIC] 🚀 Runtime RTCPeerConnection ICE Configuration:', JSON.stringify(sanitizedConfig, null, 2));
+
     const config = getWebRTCConfig();
-    console.log('[WebRTC DIAGNOSTIC] 🚀 Initializing RTCPeerConnection with ICE config:', config);
     const pc = new RTCPeerConnection(config);
     this.pc = pc;
 
-    // A. ICE Candidate Generation
+    // A. ICE Candidate Generation & Classification
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('[WebRTC DIAGNOSTIC] 🧊 Local ICE Candidate generated:', {
-          type: event.candidate.type,
-          protocol: event.candidate.protocol,
-          address: event.candidate.address,
-          port: event.candidate.port,
-          candidate: event.candidate.candidate,
-        });
+        const raw = event.candidate.candidate;
+        let type: 'host' | 'srflx' | 'relay' | 'prflx' = 'host';
+        if (raw.includes('typ srflx')) type = 'srflx';
+        else if (raw.includes('typ relay')) type = 'relay';
+        else if (raw.includes('typ prflx')) type = 'prflx';
+        else if (raw.includes('typ host')) type = 'host';
+
+        this.candidateCounts.total += 1;
+        this.candidateCounts[type] += 1;
+
+        const traceId = Math.random().toString(36).substring(2, 9);
+        console.log(`[ICE_SEND] callId=${callId} traceId=${traceId} type=${type} protocol=${event.candidate.protocol} addr=${event.candidate.address}:${event.candidate.port} totalCount=${this.candidateCounts.total} (H:${this.candidateCounts.host}, S:${this.candidateCounts.srflx}, R:${this.candidateCounts.relay})`);
+
         if (this.onIceCandidateCallback) {
-          this.onIceCandidateCallback(event.candidate.toJSON());
+          this.onIceCandidateCallback(event.candidate.toJSON(), traceId);
         }
       } else {
-        console.log('[WebRTC DIAGNOSTIC] 🧊 Local ICE gathering completed.');
+        console.log(`[ICE_GATHERING] callId=${callId} Local ICE gathering completed. Total candidates generated: ${this.candidateCounts.total} (Host: ${this.candidateCounts.host}, SRFLX: ${this.candidateCounts.srflx}, Relay: ${this.candidateCounts.relay})`);
       }
     };
 
-    // B. ICE Candidate Error Logging
-    pc.onicecandidateerror = (event: any) => {
-      console.warn('[WebRTC DIAGNOSTIC] ⚠️ onicecandidateerror:', {
-        errorCode: event.errorCode,
-        errorText: event.errorText,
-        url: event.url,
-        address: event.address,
-        port: event.port,
-      });
+    // B. ICE Gathering State Monitoring
+    pc.onicegatheringstatechange = () => {
+      console.log(`[ICE_GATHERING_STATE] callId=${callId} gatheringState=${pc.iceGatheringState}`);
     };
 
-    // C. Connection State Monitoring
+    // C. ICE Candidate Error Logging (TURN auth/STUN unreachable)
+    pc.onicecandidateerror = (event: any) => {
+      console.warn(`[ICE_CANDIDATE_ERROR] callId=${callId} code=${event.errorCode} text="${event.errorText}" url=${event.url} address=${event.address}:${event.port}`);
+    };
+
+    // D. Connection & ICE State Monitoring
     pc.onconnectionstatechange = () => {
-      console.log(`[WebRTC DIAGNOSTIC] 🔌 Connection State changed: ${pc.connectionState} (ICE State: ${pc.iceConnectionState})`);
+      console.log(`[CONN_STATE_CHANGE] callId=${callId} connectionState=${pc.connectionState} (iceConnectionState=${pc.iceConnectionState})`);
       if (this.onConnectionStateChangeCallback) {
         this.onConnectionStateChangeCallback(pc.connectionState, pc.iceConnectionState);
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log(`[WebRTC DIAGNOSTIC] 🧊 ICE Connection State changed: ${pc.iceConnectionState} (PC State: ${pc.connectionState})`);
+      console.log(`[ICE_STATE_CHANGE] callId=${callId} iceConnectionState=${pc.iceConnectionState} (connectionState=${pc.connectionState})`);
       if (this.onConnectionStateChangeCallback) {
         this.onConnectionStateChangeCallback(pc.connectionState, pc.iceConnectionState);
       }
     };
 
-    // D. Remote Audio Track Received (ontrack)
+    // E. Remote Audio Track Received (ontrack)
     pc.ontrack = (event) => {
-      console.log('[WebRTC DIAGNOSTIC] 📡 ontrack fired:', {
-        kind: event.track.kind,
-        id: event.track.id,
-        readyState: event.track.readyState,
-        enabled: event.track.enabled,
-        muted: event.track.muted,
-        streamsCount: event.streams ? event.streams.length : 0,
-      });
+      console.log(`[REMOTE_TRACK_RECEIVED] callId=${callId} kind=${event.track.kind} id=${event.track.id} readyState=${event.track.readyState} enabled=${event.track.enabled} muted=${event.track.muted}`);
 
       if (event.track.kind === 'audio') {
         const stream =
@@ -220,34 +241,48 @@ class WebRTCVoiceService {
       }
     };
 
-    // E. Attach Local Audio Track
+    // F. Attach Local Audio Track
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach((track) => {
-        console.log('[WebRTC DIAGNOSTIC] ➕ Adding local track to PeerConnection:', {
-          id: track.id,
-          label: track.label,
-          enabled: track.enabled,
-          readyState: track.readyState,
-        });
+        console.log(`[LOCAL_TRACK_ATTACHED] callId=${callId} id=${track.id} label="${track.label}" readyState=${track.readyState}`);
         pc.addTrack(track, this.localStream!);
       });
     } else {
-      console.warn('[WebRTC DIAGNOSTIC] ⚠️ Warning: createPeerConnection called without localStream ready!');
+      console.warn(`[LOCAL_TRACK_WARN] callId=${callId} createPeerConnection called without localStream ready!`);
     }
 
-    // Verify Senders
+    // G. Verify Senders
     const senders = pc.getSenders();
-    console.log(`[WebRTC DIAGNOSTIC] 📤 Local Senders count: ${senders.length}`);
+    console.log(`[SENDERS_VERIFIED] callId=${callId} count=${senders.length}`);
     senders.forEach((s, idx) => {
-      console.log(`[WebRTC DIAGNOSTIC] RTCRtpSender #${idx}:`, {
-        trackId: s.track?.id,
-        trackKind: s.track?.kind,
-        trackEnabled: s.track?.enabled,
-        trackReadyState: s.track?.readyState,
-      });
+      console.log(`[SENDER_INFO] #${idx} kind=${s.track?.kind} id=${s.track?.id} enabled=${s.track?.enabled} readyState=${s.track?.readyState}`);
     });
 
     return pc;
+  }
+
+  /**
+   * Helper: Detailed SDP Diagnostic Inspection
+   */
+  private inspectSDP(type: 'Offer' | 'Answer', sdpText: string | undefined): {
+    hasAudio: boolean;
+    direction: string;
+    hasUfrag: boolean;
+    hasPwd: boolean;
+  } {
+    const sdp = sdpText || '';
+    const hasAudio = sdp.includes('m=audio');
+    let direction = 'unknown';
+    if (sdp.includes('a=sendrecv')) direction = 'sendrecv';
+    else if (sdp.includes('a=sendonly')) direction = 'sendonly';
+    else if (sdp.includes('a=recvonly')) direction = 'recvonly';
+    else if (sdp.includes('a=inactive')) direction = 'inactive';
+
+    const hasUfrag = sdp.includes('a=ice-ufrag:');
+    const hasPwd = sdp.includes('a=ice-pwd:');
+
+    console.log(`[SDP_VALIDATION] ${type}: hasAudio=${hasAudio}, direction=${direction}, hasIceUfrag=${hasUfrag}, hasIcePwd=${hasPwd}`);
+    return { hasAudio, direction, hasUfrag, hasPwd };
   }
 
   /**
@@ -256,7 +291,7 @@ class WebRTCVoiceService {
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
 
-    console.log('[WebRTC DIAGNOSTIC] 📝 Creating SDP Offer...');
+    console.log(`[SDP_OFFER_CREATE] callId=${this.currentCallId} Creating SDP Offer...`);
     const senders = this.pc.getSenders();
     if (senders.length === 0 && this.localStream) {
       this.localStream.getAudioTracks().forEach((track) => {
@@ -269,15 +304,14 @@ class WebRTCVoiceService {
       offerToReceiveVideo: false,
     });
 
-    console.log('[WebRTC DIAGNOSTIC] SDP Offer created. Checking m=audio section...');
-    if (!offer.sdp || !offer.sdp.includes('m=audio')) {
-      console.error('[WebRTC DIAGNOSTIC] ❌ FATAL: SDP Offer does not contain m=audio!', offer.sdp);
+    const validation = this.inspectSDP('Offer', offer.sdp);
+    if (!validation.hasAudio) {
+      console.error('[SDP_OFFER_ERROR] ❌ FATAL: SDP Offer does not contain m=audio!', offer.sdp);
       throw new Error('Generated SDP offer lacks audio media descriptor');
     }
-    console.log('[WebRTC DIAGNOSTIC] ✅ SDP Offer contains valid m=audio section');
 
     await this.pc.setLocalDescription(offer);
-    console.log('[WebRTC DIAGNOSTIC] Local description set for Offer');
+    console.log(`[SDP_OFFER_LOCAL_SET] callId=${this.currentCallId} Local description set for Offer successfully.`);
     return offer;
   }
 
@@ -287,9 +321,11 @@ class WebRTCVoiceService {
   public async handleOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
 
-    console.log('[WebRTC DIAGNOSTIC] 📥 Setting remote description from Offer...');
+    console.log(`[SDP_OFFER_REMOTE_SET] callId=${this.currentCallId} Setting remote description from Offer...`);
+    this.inspectSDP('Offer', sdp.sdp);
+
     await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    console.log('[WebRTC DIAGNOSTIC] ✅ Remote Offer description set successfully.');
+    console.log(`[SDP_OFFER_REMOTE_SUCCESS] callId=${this.currentCallId} Remote Offer description set.`);
 
     await this.drainPendingIceCandidates();
   }
@@ -304,24 +340,23 @@ class WebRTCVoiceService {
     const hasAudioSender = senders.some((s) => s.track && s.track.kind === 'audio');
 
     if (!hasAudioSender && this.localStream) {
-      console.log('[WebRTC DIAGNOSTIC] ➕ Attaching local stream track to Receiver PC before createAnswer');
+      console.log(`[LOCAL_TRACK_ATTACH_ANSWER] callId=${this.currentCallId} Attaching local stream track to Receiver PC before createAnswer`);
       this.localStream.getAudioTracks().forEach((track) => {
         this.pc!.addTrack(track, this.localStream!);
       });
     }
 
-    console.log('[WebRTC DIAGNOSTIC] 📝 Creating SDP Answer...');
+    console.log(`[SDP_ANSWER_CREATE] callId=${this.currentCallId} Creating SDP Answer...`);
     const answer = await this.pc.createAnswer();
 
-    console.log('[WebRTC DIAGNOSTIC] SDP Answer created. Checking m=audio section...');
-    if (!answer.sdp || !answer.sdp.includes('m=audio')) {
-      console.error('[WebRTC DIAGNOSTIC] ❌ FATAL: SDP Answer does not contain m=audio!', answer.sdp);
+    const validation = this.inspectSDP('Answer', answer.sdp);
+    if (!validation.hasAudio) {
+      console.error('[SDP_ANSWER_ERROR] ❌ FATAL: SDP Answer does not contain m=audio!', answer.sdp);
       throw new Error('Generated SDP answer lacks audio media descriptor');
     }
-    console.log('[WebRTC DIAGNOSTIC] ✅ SDP Answer contains valid m=audio section');
 
     await this.pc.setLocalDescription(answer);
-    console.log('[WebRTC DIAGNOSTIC] Local description set for Answer');
+    console.log(`[SDP_ANSWER_LOCAL_SET] callId=${this.currentCallId} Local description set for Answer successfully.`);
     return answer;
   }
 
@@ -331,44 +366,58 @@ class WebRTCVoiceService {
   public async handleAnswer(sdp: RTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
 
-    console.log('[WebRTC DIAGNOSTIC] 📥 Setting remote description from Answer...');
+    console.log(`[SDP_ANSWER_REMOTE_SET] callId=${this.currentCallId} Setting remote description from Answer...`);
+    this.inspectSDP('Answer', sdp.sdp);
+
     await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    console.log('[WebRTC DIAGNOSTIC] ✅ Remote Answer description set successfully.');
+    console.log(`[SDP_ANSWER_REMOTE_SUCCESS] callId=${this.currentCallId} Remote Answer description set.`);
 
     await this.drainPendingIceCandidates();
   }
 
   /**
-   * 7. Add Remote ICE Candidate with buffering
+   * 7. Add Remote ICE Candidate with robust buffering & individual error isolation
    */
-  public async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+  public async addIceCandidate(candidate: RTCIceCandidateInit, traceId?: string): Promise<void> {
+    if (!candidate) return;
+
     if (!this.pc || !this.pc.remoteDescription || !this.pc.remoteDescription.type) {
-      console.log('[WebRTC DIAGNOSTIC] ⏳ Buffering ICE candidate (remoteDescription not set yet)');
-      this.pendingIceCandidates.push(candidate);
+      console.log(`[ICE_BUFFERED] callId=${this.currentCallId} traceId=${traceId || 'none'} Buffering candidate (remoteDescription not set yet)`);
+      this.pendingIceCandidates.push({ candidate, traceId });
       return;
     }
 
     try {
+      if (candidate.candidate === '' || candidate.candidate === null) {
+        console.log(`[ICE_END_OF_CANDIDATES] callId=${this.currentCallId} End-of-candidates candidate received`);
+        return;
+      }
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('[WebRTC DIAGNOSTIC] 📥 ICE candidate added to PeerConnection');
-    } catch (err) {
-      console.warn('[WebRTC DIAGNOSTIC] ⚠️ Error adding ICE candidate:', err);
+      console.log(`[ICE_ADDED] callId=${this.currentCallId} traceId=${traceId || 'none'} Successfully added candidate to PeerConnection`);
+    } catch (err: any) {
+      console.warn(`[ICE_ADD_ERROR] callId=${this.currentCallId} traceId=${traceId || 'none'} Error adding candidate: ${err?.message || err}`);
     }
   }
 
   private async drainPendingIceCandidates(): Promise<void> {
-    if (!this.pc) return;
-    console.log(`[WebRTC DIAGNOSTIC] ⏳ Draining ${this.pendingIceCandidates.length} queued ICE candidate(s)...`);
+    if (!this.pc || !this.pc.remoteDescription) return;
+    const count = this.pendingIceCandidates.length;
+    if (count === 0) return;
+
+    console.log(`[ICE_DRAIN_START] callId=${this.currentCallId} Draining ${count} queued ICE candidate(s)...`);
     while (this.pendingIceCandidates.length > 0) {
-      const candidate = this.pendingIceCandidates.shift();
-      if (candidate) {
+      const item = this.pendingIceCandidates.shift();
+      if (item && item.candidate) {
         try {
-          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-          console.warn('[WebRTC DIAGNOSTIC] ⚠️ Error adding buffered ICE candidate:', e);
+          if (item.candidate.candidate === '' || item.candidate.candidate === null) continue;
+          await this.pc.addIceCandidate(new RTCIceCandidate(item.candidate));
+          console.log(`[ICE_DRAINED] callId=${this.currentCallId} traceId=${item.traceId || 'none'} Buffered candidate applied`);
+        } catch (e: any) {
+          console.warn(`[ICE_DRAIN_ERROR] callId=${this.currentCallId} traceId=${item.traceId || 'none'} Failed applying buffered candidate: ${e?.message || e}`);
         }
       }
     }
+    console.log(`[ICE_DRAIN_COMPLETE] callId=${this.currentCallId} All buffered candidates processed.`);
   }
 
   /**
@@ -425,7 +474,7 @@ class WebRTCVoiceService {
   }
 
   /**
-   * 9. Query Real-Time WebRTC Audio Stats & Selected Candidate Pair
+   * 9. Query Real-Time WebRTC Audio Stats, Candidate Counts & Selected Candidate Pair
    */
   public async getAudioStats(): Promise<AudioStats> {
     const stats: AudioStats = {
@@ -437,6 +486,9 @@ class WebRTCVoiceService {
       jitter: 0,
       iceState: this.pc?.iceConnectionState || 'idle',
       connectionState: this.pc?.connectionState || 'idle',
+      iceGatheringState: this.pc?.iceGatheringState || 'new',
+      candidateCounts: { ...this.candidateCounts },
+      turnAvailable: this.candidateCounts.relay > 0,
     };
 
     // Track local track status
@@ -621,6 +673,7 @@ class WebRTCVoiceService {
     if (this.pc) {
       try {
         this.pc.onicecandidate = null;
+        this.pc.onicegatheringstatechange = null;
         this.pc.ontrack = null;
         this.pc.onconnectionstatechange = null;
         this.pc.oniceconnectionstatechange = null;
@@ -654,6 +707,7 @@ class WebRTCVoiceService {
     }
 
     this.currentCallId = null;
+    this.candidateCounts = { total: 0, host: 0, srflx: 0, relay: 0, prflx: 0 };
     this.onIceCandidateCallback = null;
     this.onRemoteTrackCallback = null;
     this.onConnectionStateChangeCallback = null;

@@ -376,10 +376,14 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   });
 
   // 7. Fast WebRTC ICE Candidate Relay (0ms latency, zero database blocking)
-  socket.on('call:ice-candidate', async (data: { callId: string; candidate: any }) => {
+  socket.on('call:ice-candidate', async (data: { callId: string; candidate: any; traceId?: string }) => {
     try {
-      const { callId, candidate } = data;
+      const { callId, candidate, traceId } = data;
       if (!callId || !candidate) return;
+
+      const raw = candidate?.candidate || '';
+      const type = raw.includes('typ srflx') ? 'srflx' : raw.includes('typ relay') ? 'relay' : raw.includes('typ host') ? 'host' : 'other';
+      console.log(`[ICE_SERVER_RECEIVED] callId=${callId} traceId=${traceId || 'none'} from=${userId} type=${type}`);
 
       let mem = activeCallsMap.get(callId);
       if (!mem) {
@@ -395,10 +399,14 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         }
       }
 
-      if (!mem) return;
+      if (!mem) {
+        console.warn(`[ICE_SERVER_DROP] callId=${callId} active call memory not found for candidate`);
+        return;
+      }
 
       const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
-      io.to(`user:${targetId}`).emit('call:ice-candidate', { callId, candidate });
+      console.log(`[ICE_SERVER_FORWARDED] callId=${callId} traceId=${traceId || 'none'} to user=${targetId} type=${type}`);
+      io.to(`user:${targetId}`).emit('call:ice-candidate', { callId, candidate, traceId });
     } catch (err) {
       console.error('[Call] ICE candidate error:', err);
     }

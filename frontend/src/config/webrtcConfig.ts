@@ -13,9 +13,9 @@ export interface RTCIceServerConfig {
   credential?: string;
 }
 
-// Default verified STUN & Active Metered Relay servers
+// Default verified STUN & Active Metered Relay servers (TCP & TLS prioritized for mobile cellular DTLS stability)
 const DEFAULT_ICE_SERVERS: RTCIceServerConfig[] = [
-  // 1. Google & Cloudflare STUN
+  // 1. Google & Cloudflare Public STUN
   {
     urls: [
       'stun:stun.l.google.com:19302',
@@ -24,18 +24,17 @@ const DEFAULT_ICE_SERVERS: RTCIceServerConfig[] = [
       'stun:stun3.l.google.com:19302',
       'stun:stun4.l.google.com:19302',
       'stun:stun.cloudflare.com:3478',
+      'stun:stun.relay.metered.ca:80',
     ],
   },
-  // 2. Active Metered STUN & TURN Relay
-  {
-    urls: 'stun:stun.relay.metered.ca:80',
-  },
+  // 2. Active Metered TURN Relay (TCP and TLS turns prioritized to guarantee DTLS handshake on 4G/5G)
   {
     urls: [
-      'turn:global.relay.metered.ca:80',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+      'turn:global.relay.metered.ca:443?transport=tcp',
       'turn:global.relay.metered.ca:80?transport=tcp',
       'turn:global.relay.metered.ca:443',
-      'turns:global.relay.metered.ca:443?transport=tcp',
+      'turn:global.relay.metered.ca:80',
     ],
     username: '874d803c45754bbe76c457cb',
     credential: 'Fs8qsX58ywG3HFHc',

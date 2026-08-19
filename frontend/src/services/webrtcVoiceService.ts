@@ -35,6 +35,7 @@ export interface AudioStats {
   selectedCandidatePair?: CandidatePairInfo;
   iceState?: string;
   connectionState?: string;
+  dtlsState?: string;
   iceGatheringState?: string;
   candidateCounts?: CandidateCounts;
   turnAvailable?: boolean;
@@ -269,6 +270,7 @@ class WebRTCVoiceService {
     direction: string;
     hasUfrag: boolean;
     hasPwd: boolean;
+    dtlsSetup: string;
   } {
     const sdp = sdpText || '';
     const hasAudio = sdp.includes('m=audio');
@@ -281,17 +283,22 @@ class WebRTCVoiceService {
     const hasUfrag = sdp.includes('a=ice-ufrag:');
     const hasPwd = sdp.includes('a=ice-pwd:');
 
-    console.log(`[SDP_VALIDATION] ${type}: hasAudio=${hasAudio}, direction=${direction}, hasIceUfrag=${hasUfrag}, hasIcePwd=${hasPwd}`);
-    return { hasAudio, direction, hasUfrag, hasPwd };
+    let dtlsSetup = 'none';
+    if (sdp.includes('a=setup:actpass')) dtlsSetup = 'actpass';
+    else if (sdp.includes('a=setup:active')) dtlsSetup = 'active';
+    else if (sdp.includes('a=setup:passive')) dtlsSetup = 'passive';
+
+    console.log(`[SDP_VALIDATION] ${type}: hasAudio=${hasAudio}, direction=${direction}, dtlsSetup=${dtlsSetup}, hasIceUfrag=${hasUfrag}, hasIcePwd=${hasPwd}`);
+    return { hasAudio, direction, hasUfrag, hasPwd, dtlsSetup };
   }
 
   /**
-   * 3. Create SDP Offer (Caller side)
+   * 3. Create SDP Offer (Caller side) - Clean Unified Plan
    */
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
 
-    console.log(`[SDP_OFFER_CREATE] callId=${this.currentCallId} Creating SDP Offer...`);
+    console.log(`[SDP_OFFER_CREATE] callId=${this.currentCallId} Creating SDP Offer (Unified Plan)...`);
     const senders = this.pc.getSenders();
     if (senders.length === 0 && this.localStream) {
       this.localStream.getAudioTracks().forEach((track) => {
@@ -299,10 +306,7 @@ class WebRTCVoiceService {
       });
     }
 
-    const offer = await this.pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: false,
-    });
+    const offer = await this.pc.createOffer();
 
     const validation = this.inspectSDP('Offer', offer.sdp);
     if (!validation.hasAudio) {
@@ -331,7 +335,7 @@ class WebRTCVoiceService {
   }
 
   /**
-   * 5. Create SDP Answer (Receiver side)
+   * 5. Create SDP Answer (Receiver side) - Clean Unified Plan
    */
   public async createAnswer(): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
@@ -346,7 +350,7 @@ class WebRTCVoiceService {
       });
     }
 
-    console.log(`[SDP_ANSWER_CREATE] callId=${this.currentCallId} Creating SDP Answer...`);
+    console.log(`[SDP_ANSWER_CREATE] callId=${this.currentCallId} Creating SDP Answer (Unified Plan)...`);
     const answer = await this.pc.createAnswer();
 
     const validation = this.inspectSDP('Answer', answer.sdp);
@@ -474,7 +478,7 @@ class WebRTCVoiceService {
   }
 
   /**
-   * 9. Query Real-Time WebRTC Audio Stats, Candidate Counts & Selected Candidate Pair
+   * 9. Query Real-Time WebRTC Audio Stats, Candidate Counts, DTLS State & Selected Candidate Pair
    */
   public async getAudioStats(): Promise<AudioStats> {
     const stats: AudioStats = {
@@ -486,6 +490,7 @@ class WebRTCVoiceService {
       jitter: 0,
       iceState: this.pc?.iceConnectionState || 'idle',
       connectionState: this.pc?.connectionState || 'idle',
+      dtlsState: 'idle',
       iceGatheringState: this.pc?.iceGatheringState || 'new',
       candidateCounts: { ...this.candidateCounts },
       turnAvailable: this.candidateCounts.relay > 0,
@@ -566,9 +571,14 @@ class WebRTCVoiceService {
           stats.audioInputLevel = stat.audioLevel;
         }
 
-        // Candidate pair analysis
-        if (stat.type === 'transport' && stat.selectedCandidatePairId) {
-          activeCandidatePairId = stat.selectedCandidatePairId;
+        // Candidate pair & DTLS transport analysis
+        if (stat.type === 'transport') {
+          if (stat.dtlsState) {
+            stats.dtlsState = stat.dtlsState;
+          }
+          if (stat.selectedCandidatePairId) {
+            activeCandidatePairId = stat.selectedCandidatePairId;
+          }
         }
         if (stat.type === 'candidate-pair') {
           candidatePairs.push(stat);

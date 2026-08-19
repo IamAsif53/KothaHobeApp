@@ -159,11 +159,13 @@ export const CallScreen: React.FC = () => {
 
         {hudExpanded && (
           <div className="pt-1.5 space-y-1 font-mono text-[10px] text-gray-300">
-            {/* 1, 2, 3: States */}
-            <div className="grid grid-cols-3 gap-1 pb-1 border-b border-white/5">
+            {/* Top Status Bar: Call State, ICE State, Conn State, DTLS State */}
+            <div className="grid grid-cols-4 gap-1 pb-1 border-b border-white/5">
               <div>
                 <span className="text-gray-400">CALL:</span>{' '}
-                <span className="text-white font-bold">{callState}</span>
+                <span className={callState === 'CONNECTED' ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                  {callState}
+                </span>
               </div>
               <div>
                 <span className="text-gray-400">ICE:</span>{' '}
@@ -171,7 +173,7 @@ export const CallScreen: React.FC = () => {
                   className={
                     audioStats?.iceState === 'connected' || audioStats?.iceState === 'completed'
                       ? 'text-emerald-400 font-bold'
-                      : audioStats?.iceState === 'failed'
+                      : audioStats?.iceState === 'failed' || audioStats?.iceState === 'disconnected'
                       ? 'text-red-400 font-bold'
                       : 'text-amber-400'
                   }
@@ -191,6 +193,20 @@ export const CallScreen: React.FC = () => {
                   }
                 >
                   {audioStats?.connectionState || 'idle'}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">DTLS:</span>{' '}
+                <span
+                  className={
+                    audioStats?.dtlsState === 'connected'
+                      ? 'text-emerald-400 font-bold'
+                      : audioStats?.dtlsState === 'failed'
+                      ? 'text-red-400 font-bold'
+                      : 'text-amber-400'
+                  }
+                >
+                  {audioStats?.dtlsState || 'idle'}
                 </span>
               </div>
             </div>

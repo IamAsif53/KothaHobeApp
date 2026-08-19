@@ -285,9 +285,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       console.log(`[Call] Call ${callId} accepted by receiver. Signaling caller to start WebRTC offer...`);
 
-      // Forward immediately to caller that receiver accepted
+      // Forward immediately to caller ONLY so only caller creates SDP Offer (prevents DTLS role glare)
       io.to(`user:${mem.callerId}`).emit('call:accepted', { callId });
-      socket.emit('call:accepted', { callId });
 
       Call.updateOne({ callId }, { status: 'accepted', answeredAt: new Date() }).catch(() => {});
     } catch (err) {

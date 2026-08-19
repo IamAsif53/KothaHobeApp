@@ -415,6 +415,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 4. Caller notified that receiver accepted -> create WebRTC Offer
     const handleCallAccepted = async (data: { callId: string }) => {
+      // Guard: If this device is the receiver, never create an offer (receiver only answers)
+      if (activeCallRef.current?.isIncoming) {
+        console.log('[Signaling] Receiver received call:accepted acknowledgement (waiting for Caller SDP Offer)');
+        return;
+      }
+
       console.log('[Signaling] Receiver accepted call:', data.callId, 'Generating SDP Offer...');
       soundService.stopAll();
       setCallState('CONNECTING');

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, AlertCircle, Loader2 } from 'lucide-react';
 import { getMediaUrl } from '../../api/messageApi';
 
 interface VoiceMessagePlayerProps {
@@ -21,6 +21,8 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
   const safeInitialDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState<number>(safeInitialDuration);
 
@@ -59,17 +61,23 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
 
   const handleTogglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !fullUrl) {
+      setHasError(true);
+      return;
+    }
 
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
+      setIsLoading(false);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (currentlyPlayingAudio === audio) {
         currentlyPlayingAudio = null;
         stopCurrentAudioCallback = null;
       }
     } else {
+      setHasError(false);
+
       // If was completed at the end, restart from 0
       if (currentTime >= totalDuration && totalDuration > 0) {
         audio.currentTime = 0;
@@ -85,18 +93,39 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       currentlyPlayingAudio = audio;
       stopCurrentAudioCallback = () => {
         setIsPlaying(false);
+        setIsLoading(false);
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       };
+
+      // Ensure audio source is loaded if readyState is 0
+      if (audio.readyState === 0) {
+        setIsLoading(true);
+        audio.load();
+      }
+
+      console.log('[VoicePlayer] Playback attempt:', {
+        url: fullUrl,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+      });
 
       audio
         .play()
         .then(() => {
           setIsPlaying(true);
+          setIsLoading(false);
+          setHasError(false);
           animationFrameRef.current = requestAnimationFrame(updateProgress);
         })
         .catch((err) => {
-          console.warn('[VoicePlayer] Playback error:', err);
+          console.warn('[VoicePlayer] Playback error:', err?.message || err, {
+            url: fullUrl,
+            error: audio.error,
+            readyState: audio.readyState,
+          });
           setIsPlaying(false);
+          setIsLoading(false);
+          setHasError(true);
         });
     }
   };
@@ -123,6 +152,15 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration < 86400) {
         setTotalDuration(audio.duration);
       }
+      setIsLoading(false);
+    };
+
+    const handleCanPlay = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration < 86400) {
+        setTotalDuration((prev) => (prev > 0 ? prev : audio.duration));
+      }
+      setIsLoading(false);
+      setHasError(false);
     };
 
     const handleTimeUpdate = () => {
@@ -134,6 +172,7 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
 
     const handleEnded = () => {
       setIsPlaying(false);
+      setIsLoading(false);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       // Keep playhead at 100% (right end) until played again
       setCurrentTime(totalDuration || audio.currentTime);
@@ -143,15 +182,24 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       }
     };
 
-    const handleCanPlay = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration < 86400) {
-        setTotalDuration((prev) => (prev > 0 ? prev : audio.duration));
-      }
+    const handleError = () => {
+      console.warn('[VoicePlayer] Audio load error:', {
+        url: fullUrl,
+        error: audio.error,
+      });
+      setIsPlaying(false);
+      setIsLoading(false);
+      setHasError(true);
     };
 
-    const handleError = () => {
-      console.warn('[VoicePlayer] Audio load error for url:', fullUrl);
-      setIsPlaying(false);
+    const handleWaiting = () => {
+      setIsLoading(true);
+    };
+
+    const handlePlaying = () => {
+      setIsLoading(false);
+      setIsPlaying(true);
+      setHasError(false);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -159,6 +207,8 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('playing', handlePlaying);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -166,6 +216,8 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('playing', handlePlaying);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (currentlyPlayingAudio === audio) {
         currentlyPlayingAudio = null;
@@ -178,14 +230,44 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
   const effectiveDuration = totalDuration > 0 ? totalDuration : 1;
   const progressPercent = Math.min(100, Math.max(0, (currentTime / effectiveDuration) * 100));
 
+  if (!fullUrl || hasError) {
+    return (
+      <div className="flex items-center gap-2.5 py-1.5 px-3 rounded-xl bg-red-950/40 border border-red-500/20 text-red-300 text-xs select-none">
+        <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+        <div className="flex-1 truncate">
+          <p className="font-semibold">Audio unavailable</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setHasError(false);
+            if (audioRef.current) {
+              audioRef.current.load();
+              handleTogglePlay();
+            }
+          }}
+          className="text-[11px] underline text-red-300 hover:text-white"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3 py-1 min-w-[220px] max-w-[280px] select-none">
-      <audio ref={audioRef} src={fullUrl} preload="metadata" />
+      <audio
+        ref={audioRef}
+        src={fullUrl}
+        preload="metadata"
+        playsInline
+      />
 
       {/* Play / Pause Circular Button */}
       <button
         type="button"
         onClick={handleTogglePlay}
+        disabled={isLoading}
         className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md active:scale-95 ${
           isMe
             ? 'bg-white text-emerald-800 hover:bg-white/90'
@@ -193,7 +275,9 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
         }`}
         title={isPlaying ? 'Pause' : 'Play Voice Message'}
       >
-        {isPlaying ? (
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : isPlaying ? (
           <Pause className="w-5 h-5 fill-current" />
         ) : (
           <Play className="w-5 h-5 fill-current ml-0.5" />
@@ -231,7 +315,7 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
         {/* Timestamps: Elapsed & Safe Total Duration */}
         <div className="flex items-center justify-between text-[11px] text-white/80 font-mono font-medium -mt-1">
           <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(totalDuration)}</span>
+          <span>{isLoading ? 'Loading...' : formatTime(totalDuration)}</span>
         </div>
       </div>
     </div>

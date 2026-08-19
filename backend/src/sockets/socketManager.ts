@@ -322,20 +322,24 @@ export function setupSocketIO(io: SocketIOServer): void {
           }
         );
 
-        if (result.modifiedCount > 0) {
-          const conv = await Conversation.findById(conversationId);
-          if (conv) {
-            const otherParticipantId = conv.participants.find(
-              (p) => p.toString() !== userId
-            );
+        // Update Conversation.lastMessage.status to read in MongoDB
+        await Conversation.updateOne(
+          { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
+          { $set: { 'lastMessage.status': 'read' } }
+        );
 
-            if (otherParticipantId) {
-              io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
-                conversationId,
-                readBy: userId,
-                readAt: now,
-              });
-            }
+        const conv = await Conversation.findById(conversationId);
+        if (conv) {
+          const otherParticipantId = conv.participants.find(
+            (p) => p.toString() !== userId
+          );
+
+          if (otherParticipantId) {
+            io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+              conversationId,
+              readBy: userId,
+              readAt: now,
+            });
           }
         }
       } catch (error) {

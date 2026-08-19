@@ -201,15 +201,23 @@ export const ChatRoomPage: React.FC = () => {
         setLoading(true);
       }
       try {
-        const convsRes = await fetchConversations();
+        const [convsRes, msgRes] = await Promise.all([
+          fetchConversations().catch(() => ({ success: false, conversations: [] })),
+          fetchMessagesApi(conversationId, undefined, 40).catch(() => ({
+            success: false,
+            messages: [],
+            hasMore: false,
+            oldestCursor: null,
+          })),
+        ]);
+
         if (convsRes.success && convsRes.conversations) {
-          const currentConv = convsRes.conversations.find((c) => c._id === conversationId);
+          const currentConv = convsRes.conversations.find((c: any) => c._id === conversationId);
           if (currentConv) {
             setRecipient(currentConv.recipient);
           }
         }
 
-        const msgRes = await fetchMessagesApi(conversationId, undefined, 40);
         if (msgRes.success && msgRes.messages) {
           setMessages((prev) => {
             const pendingOptimistic = prev.filter(
@@ -225,7 +233,7 @@ export const ChatRoomPage: React.FC = () => {
           setOldestCursor(msgRes.oldestCursor);
         }
       } catch (error) {
-        console.warn('[ChatRoom] Background sync notice');
+        console.warn('[ChatRoom] Background sync notice:', error);
       } finally {
         setLoading(false);
         requestAnimationFrame(() => scrollToBottom(true));

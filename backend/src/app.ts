@@ -81,12 +81,14 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 import devRoutes from './routes/devRoutes';
+import callRoutes from './routes/callRoutes';
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/calls', callRoutes);
 app.use('/api/dev', devRoutes);
 
 // 404 handler

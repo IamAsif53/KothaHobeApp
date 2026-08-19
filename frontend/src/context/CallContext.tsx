@@ -3,6 +3,7 @@ import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
 import { soundService } from '../services/soundService';
 import { webrtcVoiceService, AudioStats } from '../services/webrtcVoiceService';
+import { fetchAndSetIceServers } from '../config/webrtcConfig';
 import {
   ensureAudioPermission,
   openSystemAppSettings,
@@ -231,7 +232,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 2. Start local microphone stream
+      // 2. Refresh dynamic ICE servers & start local microphone stream
+      await fetchAndSetIceServers();
       await webrtcVoiceService.startLocalMicrophone();
 
       // 3. Set Outgoing Call State
@@ -293,7 +295,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 2. Start local microphone stream
+      // 2. Refresh dynamic ICE servers & start local microphone stream
+      await fetchAndSetIceServers();
       await webrtcVoiceService.startLocalMicrophone();
 
       // 3. Setup WebRTC PeerConnection
@@ -418,6 +421,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callStateRef.current = 'CONNECTING';
 
       try {
+        await fetchAndSetIceServers();
         setupWebRTC(data.callId);
         const offer = await webrtcVoiceService.createOffer();
         socket.emit('call:offer', {

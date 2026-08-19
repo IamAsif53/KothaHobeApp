@@ -1,57 +1,83 @@
 /**
  * Centralized WebRTC ICE Server Configuration for Kotha Hobe
  * 
- * Includes high-availability global STUN servers AND free OpenRelay TURN fallback servers
- * to guarantee 100% connectivity and live 2-way audio across 4G/5G cellular CGNAT,
- * mobile firewalls, and Symmetric NAT networks.
+ * Supports dynamic secure backend retrieval, Coturn RFC 5766 HMAC auth,
+ * Metered managed TURN, custom env configuration, and high-availability public STUN.
  */
 
-export const getWebRTCConfig = (): RTCConfiguration => {
-  const iceServers: RTCIceServer[] = [
-    // 1. Primary Public STUN Servers (Low Latency Direct P2P)
-    {
-      urls: [
-        'stun:stun.l.google.com:19302',
-        'stun:stun1.l.google.com:19302',
-        'stun:stun2.l.google.com:19302',
-        'stun:stun3.l.google.com:19302',
-        'stun:stun4.l.google.com:19302',
-        'stun:stun.cloudflare.com:3478',
-        'stun:global.stun.twilio.com:3478',
-      ],
-    },
-    // 2. OpenRelay Free Global TURN Servers (Guaranteed Relay through 4G/5G Carrier Firewalls)
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: [
-        'stun:openrelay.metered.ca:80',
-      ],
-    },
-  ];
+import { apiFetch } from '../api/client';
 
-  // 3. Custom Self-Hosted Coturn Server (if set in env)
-  const turnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
-  const turnUsername = (import.meta as any).env?.VITE_TURN_USERNAME;
-  const turnCredential = (import.meta as any).env?.VITE_TURN_CREDENTIAL;
+export interface RTCIceServerConfig {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
 
-  if (turnUrl && turnUsername && turnCredential) {
-    iceServers.push({
-      urls: turnUrl,
-      username: turnUsername,
-      credential: turnCredential,
-    });
+// Default verified STUN servers
+const DEFAULT_STUN_SERVERS: RTCIceServerConfig[] = [
+  {
+    urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+      'stun:stun3.l.google.com:19302',
+      'stun:stun4.l.google.com:19302',
+      'stun:stun.cloudflare.com:3478',
+    ],
+  },
+];
+
+let cachedIceServers: RTCIceServerConfig[] = [...DEFAULT_STUN_SERVERS];
+let isTurnAvailable = false;
+
+/**
+ * Dynamically fetch latest verified ICE servers from backend
+ */
+export const fetchAndSetIceServers = async (): Promise<RTCIceServerConfig[]> => {
+  try {
+    const res = await apiFetch<{
+      success: boolean;
+      turnConfigured: boolean;
+      iceServers: RTCIceServerConfig[];
+    }>('/calls/ice-servers');
+
+    if (res.success && Array.isArray(res.iceServers) && res.iceServers.length > 0) {
+      cachedIceServers = res.iceServers;
+      isTurnAvailable = !!res.turnConfigured;
+      console.log(
+        `[WebRTC Config] Dynamic ICE servers updated from backend (TURN configured: ${isTurnAvailable})`
+      );
+    }
+  } catch (err: any) {
+    console.warn('[WebRTC Config] Failed to fetch dynamic ICE servers, falling back to STUN/cached config:', err?.message || err);
   }
 
+  // Also append client-side build environment TURN if provided
+  const clientTurnUrl = (import.meta as any).env?.VITE_TURN_SERVER_URL;
+  const clientTurnUser = (import.meta as any).env?.VITE_TURN_USERNAME;
+  const clientTurnCred = (import.meta as any).env?.VITE_TURN_CREDENTIAL;
+
+  if (clientTurnUrl && clientTurnUser && clientTurnCred) {
+    const alreadyExists = cachedIceServers.some(
+      (s) => s.username === clientTurnUser && JSON.stringify(s.urls).includes(clientTurnUrl)
+    );
+    if (!alreadyExists) {
+      cachedIceServers.push({
+        urls: clientTurnUrl.includes(',') ? clientTurnUrl.split(',').map((u: string) => u.trim()) : clientTurnUrl,
+        username: clientTurnUser,
+        credential: clientTurnCred,
+      });
+      isTurnAvailable = true;
+      console.log('[WebRTC Config] Appended client-side build environment TURN server');
+    }
+  }
+
+  return cachedIceServers;
+};
+
+export const getWebRTCConfig = (): RTCConfiguration => {
   return {
-    iceServers,
+    iceServers: cachedIceServers as RTCIceServer[],
     iceCandidatePoolSize: 10,
     iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',

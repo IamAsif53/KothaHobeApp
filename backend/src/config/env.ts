@@ -18,4 +18,15 @@ export const ENV = {
   GMAIL_USER: process.env.GMAIL_USER || '',
   GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
+
+  // TURN Server Configuration (Secure Backend Injection)
+  TURN_URL: process.env.TURN_URL || '',
+  TURN_USERNAME: process.env.TURN_USERNAME || '',
+  TURN_CREDENTIAL: process.env.TURN_CREDENTIAL || '',
+  // Metered.ca Managed WebRTC Relay Integration
+  METERED_DOMAIN: process.env.METERED_DOMAIN || '',
+  METERED_API_KEY: process.env.METERED_API_KEY || '',
+  // Coturn RFC 5766 Ephemeral Token Secret
+  COTURN_URL: process.env.COTURN_URL || '',
+  COTURN_SECRET: process.env.COTURN_SECRET || '',
 };

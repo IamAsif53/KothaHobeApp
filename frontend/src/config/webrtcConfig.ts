@@ -13,8 +13,9 @@ export interface RTCIceServerConfig {
   credential?: string;
 }
 
-// Default verified STUN servers
-const DEFAULT_STUN_SERVERS: RTCIceServerConfig[] = [
+// Default verified STUN & Active Metered Relay servers
+const DEFAULT_ICE_SERVERS: RTCIceServerConfig[] = [
+  // 1. Google & Cloudflare STUN
   {
     urls: [
       'stun:stun.l.google.com:19302',
@@ -25,10 +26,24 @@ const DEFAULT_STUN_SERVERS: RTCIceServerConfig[] = [
       'stun:stun.cloudflare.com:3478',
     ],
   },
+  // 2. Active Metered STUN & TURN Relay
+  {
+    urls: 'stun:stun.relay.metered.ca:80',
+  },
+  {
+    urls: [
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+    ],
+    username: '874d803c45754bbe76c457cb',
+    credential: 'Fs8qsX58ywG3HFHc',
+  },
 ];
 
-let cachedIceServers: RTCIceServerConfig[] = [...DEFAULT_STUN_SERVERS];
-let isTurnAvailable = false;
+let cachedIceServers: RTCIceServerConfig[] = [...DEFAULT_ICE_SERVERS];
+let isTurnAvailable = true;
 
 /**
  * Dynamically fetch latest verified ICE servers from backend
@@ -45,11 +60,11 @@ export const fetchAndSetIceServers = async (): Promise<RTCIceServerConfig[]> => 
       cachedIceServers = res.iceServers;
       isTurnAvailable = !!res.turnConfigured;
       console.log(
-        `[WebRTC Config] Dynamic ICE servers updated from backend (TURN configured: ${isTurnAvailable})`
+        `[WebRTC Config] Dynamic ICE servers updated from backend (count: ${cachedIceServers.length}, TURN configured: ${isTurnAvailable})`
       );
     }
   } catch (err: any) {
-    console.warn('[WebRTC Config] Failed to fetch dynamic ICE servers, falling back to STUN/cached config:', err?.message || err);
+    console.warn('[WebRTC Config] Failed to fetch dynamic ICE servers, using cached/default Metered config:', err?.message || err);
   }
 
   // Also append client-side build environment TURN if provided

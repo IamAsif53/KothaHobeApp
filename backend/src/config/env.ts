@@ -24,8 +24,8 @@ export const ENV = {
   TURN_USERNAME: process.env.TURN_USERNAME || '',
   TURN_CREDENTIAL: process.env.TURN_CREDENTIAL || '',
   // Metered.ca Managed WebRTC Relay Integration
-  METERED_DOMAIN: process.env.METERED_DOMAIN || '',
-  METERED_API_KEY: process.env.METERED_API_KEY || '',
+  METERED_DOMAIN: process.env.METERED_DOMAIN || 'kothahobe.metered.live',
+  METERED_API_KEY: process.env.METERED_API_KEY || '0fc599cb580116a1f1ef86dd5b42c2e2f495',
   // Coturn RFC 5766 Ephemeral Token Secret
   COTURN_URL: process.env.COTURN_URL || '',
   COTURN_SECRET: process.env.COTURN_SECRET || '',

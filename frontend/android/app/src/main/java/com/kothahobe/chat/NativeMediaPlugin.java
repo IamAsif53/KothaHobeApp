@@ -125,21 +125,21 @@ public class NativeMediaPlugin extends Plugin {
                 audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 audioManager.setMicrophoneMute(false);
 
-                // Modern Android 12+ (API 31+) Communication Device Routing
+                // Default to standard Earpiece to prevent acoustic feedback loop / echo
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
                     for (AudioDeviceInfo device : devices) {
-                        if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                        if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) {
                             audioManager.setCommunicationDevice(device);
                             break;
                         }
                     }
                 }
-                audioManager.setSpeakerphoneOn(true);
+                audioManager.setSpeakerphoneOn(false);
             }
             JSObject ret = new JSObject();
             ret.put("success", true);
-            ret.put("isSpeakerphoneOn", true);
+            ret.put("isSpeakerphoneOn", false);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to set call audio mode", e);

@@ -103,7 +103,12 @@ class WebRTCVoiceService {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-          },
+            googEchoCancellation: true,
+            googAutoGainControl: true,
+            googNoiseSuppression: true,
+            googHighpassFilter: true,
+            googTypingNoiseDetection: true,
+          } as any,
           video: false,
         });
         console.log('[WebRTC DIAGNOSTIC] ✅ getUserMedia succeeded with advanced audio constraints');

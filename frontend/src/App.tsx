@@ -71,8 +71,13 @@ export const AppContent: React.FC = () => {
         'localNotificationActionPerformed',
         (notificationAction) => {
           const extra = notificationAction.notification.extra;
-          if (extra && extra.conversationId) {
-            navigate(`/chat/${extra.conversationId}`, { replace: false });
+          if (extra) {
+            if (extra.type === 'incoming_call' || extra.callId) {
+              window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: extra }));
+            }
+            if (extra.conversationId) {
+              navigate(`/chat/${extra.conversationId}`, { replace: false });
+            }
           }
         }
       );
@@ -81,8 +86,13 @@ export const AppContent: React.FC = () => {
         'pushNotificationActionPerformed',
         (notificationAction: ActionPerformed) => {
           const data = notificationAction.notification.data;
-          if (data && data.conversationId) {
-            navigate(`/chat/${data.conversationId}`, { replace: false });
+          if (data) {
+            if (data.type === 'incoming_call' || data.callId) {
+              window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: data }));
+            }
+            if (data.conversationId) {
+              navigate(`/chat/${data.conversationId}`, { replace: false });
+            }
           }
         }
       );

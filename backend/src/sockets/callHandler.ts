@@ -31,6 +31,36 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   const userId = socket.userId;
   if (!userId) return;
 
+  // Check if there is an active incoming call for this user upon connecting
+  (async () => {
+    try {
+      const fortyFiveSecsAgo = new Date(Date.now() - 45000);
+      const pendingCall = await Call.findOne({
+        receiverId: userId,
+        status: { $in: ['calling', 'ringing'] },
+        startedAt: { $gte: fortyFiveSecsAgo },
+      }).populate('callerId', 'displayName avatarUrl username');
+
+      if (pendingCall && pendingCall.callerId) {
+        const caller: any = pendingCall.callerId;
+        console.log(`[Call] Emitting pending incoming call ${pendingCall.callId} to reconnected user ${userId}`);
+        socket.emit('call:incoming', {
+          callId: pendingCall.callId,
+          caller: {
+            _id: caller._id,
+            displayName: caller.displayName || 'User',
+            avatar: caller.avatarUrl || '',
+            username: caller.username || '',
+          },
+          conversationId: pendingCall.conversationId,
+          callType: pendingCall.callType,
+        });
+      }
+    } catch (e) {
+      console.warn('[Call] Error checking pending incoming calls on socket connect:', e);
+    }
+  })();
+
   // 1. Initiate Voice Call
   socket.on(
     'call:initiate',

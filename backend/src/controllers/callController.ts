@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { ENV } from '../config/env';
+import { Call } from '../models/Call';
 import crypto from 'crypto';
 
 interface RTCIceServer {
@@ -97,3 +98,62 @@ export const getIceServers = async (req: AuthenticatedRequest, res: Response) =>
     });
   }
 };
+
+/**
+ * GET /api/calls/active
+ * Retrieve current active incoming/ongoing call for the authenticated user
+ */
+export const getActiveCall = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const fortyFiveSecsAgo = new Date(Date.now() - 45000);
+    const activeCall = await Call.findOne({
+      $or: [{ receiverId: userId }, { callerId: userId }],
+      status: { $in: ['calling', 'ringing', 'accepted', 'connected'] },
+      startedAt: { $gte: fortyFiveSecsAgo },
+    })
+      .populate('callerId', 'displayName avatarUrl username')
+      .populate('receiverId', 'displayName avatarUrl username')
+      .sort({ createdAt: -1 });
+
+    if (!activeCall) {
+      res.status(200).json({ success: true, call: null });
+      return;
+    }
+
+    const caller: any = activeCall.callerId;
+    const receiver: any = activeCall.receiverId;
+
+    res.status(200).json({
+      success: true,
+      call: {
+        callId: activeCall.callId,
+        conversationId: activeCall.conversationId,
+        isIncoming: receiver?._id?.toString() === userId.toString(),
+        status: activeCall.status,
+        callType: activeCall.callType,
+        caller: {
+          _id: caller?._id,
+          displayName: caller?.displayName || 'User',
+          avatar: caller?.avatarUrl || '',
+          username: caller?.username || '',
+        },
+        receiver: {
+          _id: receiver?._id,
+          displayName: receiver?.displayName || 'User',
+          avatar: receiver?.avatarUrl || '',
+          username: receiver?.username || '',
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[CallController] getActiveCall error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch active call' });
+  }
+};
+

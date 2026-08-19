@@ -128,7 +128,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
 
           const pushRecvListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-            console.log('[Push] Foreground push received:', notification.title, notification.body);
+            console.log('[Push] Push received:', notification.title, notification.body, notification.data);
+            const data = notification.data;
+            if (data && (data.type === 'incoming_call' || data.callId)) {
+              window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: data }));
+            }
           });
 
           // 4. Register with FCM via Google Play Services

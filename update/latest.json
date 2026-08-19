@@ -1,10 +1,10 @@
 {
-  "versionCode": 40,
-  "versionName": "1.0.39",
+  "versionCode": 42,
+  "versionName": "1.0.41",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "228245b8ed1654f2c2b28adf68a00346247161b456bc00f94a14e6b4f4808a78",
+  "sha256": "7f0e2390adc6233a978f07a97b2948fabdfe5f1763494edead5bc662b3c58cf3",
   "releaseNotes": [
-    "Release v1.0.39 (Build 40)",
+    "Release v1.0.41 (Build 42)",
     "✨ Added release badge & in-app APK auto-updater",
     "Enhanced real-time connection & message delivery",
     "UI polish & stability improvements"

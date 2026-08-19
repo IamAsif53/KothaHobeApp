@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { soundService } from '../services/soundService';
 import { webrtcVoiceService, AudioStats } from '../services/webrtcVoiceService';
 import { fetchAndSetIceServers } from '../config/webrtcConfig';
+import { fetchActiveCallApi } from '../api/callApi';
 import {
   ensureAudioPermission,
   openSystemAppSettings,
@@ -556,7 +557,52 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('call:failed', handleCallFailed);
     socket.on('call:error', handleCallError);
 
+    // Support Push Notification / Background Incoming Call Wakeup
+    const handleCustomIncomingCall = (event: any) => {
+      const data = event.detail;
+      if (data && (data.callId || data.type === 'incoming_call')) {
+        console.log('[CallContext] Received kothahobe:incoming_call event from Push/Local notification:', data);
+        handleCallIncoming({
+          callId: data.callId,
+          conversationId: data.conversationId,
+          caller: {
+            _id: data.callerId || data.caller?._id || '',
+            displayName: data.callerName || data.caller?.displayName || 'User',
+            avatar: data.callerAvatar || data.caller?.avatar || '',
+            username: data.callerUsername || data.caller?.username || '',
+          },
+          callType: data.callType || 'voice',
+        });
+      }
+    };
+    window.addEventListener('kothahobe:incoming_call', handleCustomIncomingCall);
+
+    // Proactively check if there's a live incoming call when app opens or reconnects
+    if (callStateRef.current === 'IDLE') {
+      fetchActiveCallApi()
+        .then((res) => {
+          if (
+            res.success &&
+            res.call &&
+            res.call.isIncoming &&
+            (res.call.status === 'calling' || res.call.status === 'ringing')
+          ) {
+            if (callStateRef.current === 'IDLE') {
+              console.log('[CallContext] Restoring active incoming call from server:', res.call.callId);
+              handleCallIncoming({
+                callId: res.call.callId,
+                conversationId: res.call.conversationId,
+                caller: res.call.caller,
+                callType: res.call.callType,
+              });
+            }
+          }
+        })
+        .catch((e) => console.warn('[CallContext] Proactive active call check note:', e));
+    }
+
     return () => {
+      window.removeEventListener('kothahobe:incoming_call', handleCustomIncomingCall);
       socket.off('call:initiated', handleCallInitiated);
       socket.off('call:incoming', handleCallIncoming);
       socket.off('call:ringing', handleCallRinging);

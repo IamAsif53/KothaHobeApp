@@ -208,10 +208,10 @@ export const ChatListPage: React.FC = () => {
           <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
         </div>
 
-        {/* Center: App Bengali Brand Name as Pure White Text */}
+        {/* Center: App Bengali Brand Name as Pure White Text with Messaging Emoji */}
         <div className="flex items-center justify-center">
-          <span className="text-2xl font-bold text-white tracking-wide font-sans select-none drop-shadow-sm">
-            কথা হবে
+          <span className="text-2xl font-bold text-white tracking-wide font-sans select-none drop-shadow-sm flex items-center gap-1.5">
+            💬 কথা হবে
           </span>
         </div>
 

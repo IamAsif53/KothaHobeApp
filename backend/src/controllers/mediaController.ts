@@ -15,18 +15,6 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Multer Storage Configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueName = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
 // Allowed MIME types & limits
 const ALLOWED_MIMES = new Set([
   // Images
@@ -57,8 +45,9 @@ const ALLOWED_MIMES = new Set([
   'application/x-zip-compressed',
 ]);
 
+// Fast in-memory buffer storage to eliminate slow disk I/O bottlenecks
 export const uploadMiddleware = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     if (ALLOWED_MIMES.has(file.mimetype) || file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
@@ -104,8 +93,9 @@ function getMimeFromExtension(filename: string): string {
   return 'application/octet-stream';
 }
 
-// POST /api/messages/upload (Saves to MongoDB GridFS for permanent cloud persistence)
+// POST /api/messages/upload (Direct memory-to-GridFS stream for sub-second uploads)
 export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const uploadStartTime = Date.now();
   try {
     if (!req.user) {
       res.status(401).json({ success: false, message: 'Not authenticated' });
@@ -113,14 +103,13 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     const file = req.file;
-    if (!file) {
+    if (!file || !file.buffer) {
       res.status(400).json({ success: false, message: 'No file uploaded' });
       return;
     }
 
     const { conversationId, type } = req.body;
     if (!conversationId) {
-      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       res.status(400).json({ success: false, message: 'conversationId required' });
       return;
     }
@@ -132,40 +121,40 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
     });
 
     if (!conversation) {
-      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       res.status(403).json({ success: false, message: 'Access denied to this conversation' });
       return;
     }
 
-    const uniqueFilename = file.filename;
+    const ext = path.extname(file.originalname).toLowerCase() || (type === 'audio' ? '.webm' : '.jpg');
+    const uniqueFilename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
     const finalMime = file.mimetype || getMimeFromExtension(uniqueFilename);
 
-    // Stream into MongoDB GridFS for permanent cloud storage
-    try {
-      const bucket = getGridFSBucket();
-      const readStream = fs.createReadStream(file.path);
-      const uploadStream = bucket.openUploadStream(uniqueFilename, {
-        contentType: finalMime,
-        metadata: {
-          originalName: file.originalname || uniqueFilename,
-          mimeType: finalMime,
-          conversationId,
-          uploaderId: req.user._id,
-          size: file.size,
-        },
-      });
+    // Stream directly from RAM buffer into MongoDB GridFS
+    const bucket = getGridFSBucket();
+    const uploadStream = bucket.openUploadStream(uniqueFilename, {
+      contentType: finalMime,
+      metadata: {
+        originalName: file.originalname || uniqueFilename,
+        mimeType: finalMime,
+        conversationId,
+        uploaderId: req.user._id,
+        size: file.size,
+      },
+    });
 
-      await new Promise<void>((resolve, reject) => {
-        readStream
-          .pipe(uploadStream)
-          .on('finish', () => resolve())
-          .on('error', (err: any) => reject(err));
-      });
+    await new Promise<void>((resolve, reject) => {
+      uploadStream.on('finish', () => resolve());
+      uploadStream.on('error', (err: any) => reject(err));
+      uploadStream.end(file.buffer);
+    });
 
-      console.log(`[MediaUpload] Successfully stored ${uniqueFilename} in MongoDB GridFS (${file.size} bytes)`);
-    } catch (gridErr) {
-      console.warn('[MediaUpload] GridFS upload notice (fallback to disk active):', gridErr);
-    }
+    // Asynchronously save local copy without blocking the client response
+    fs.writeFile(path.join(UPLOADS_DIR, uniqueFilename), file.buffer, (err) => {
+      if (err) console.warn('[MediaUpload] Background disk cache notice:', err);
+    });
+
+    const elapsedMs = Date.now() - uploadStartTime;
+    console.log(`[MediaUpload] Uploaded ${uniqueFilename} (${file.size} bytes) in ${elapsedMs}ms`);
 
     const relativeUrl = `/api/messages/media/${uniqueFilename}`;
 

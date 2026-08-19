@@ -20,12 +20,14 @@ export async function fetchMessagesApi(
   return apiFetch<MessagesResponse>(url);
 }
 
-export async function uploadMediaApi(
+export function uploadMediaApi(
   file: File | Blob,
   fileName: string,
   conversationId: string,
-  type: string
+  type: string,
+  onProgress?: (percent: number) => void
 ): Promise<{ success: boolean; attachment?: IAttachment; message?: string }> {
+  const startTime = Date.now();
   const formData = new FormData();
   formData.append('file', file, fileName);
   formData.append('conversationId', conversationId);
@@ -38,16 +40,52 @@ export async function uploadMediaApi(
       ? 'https://kotha-hobe-api.onrender.com/api'
       : `${window.location.origin}/api`);
 
-  const response = await fetch(`${apiBaseUrl}/messages/upload`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      'Bypass-Tunnel-Reminder': 'true',
-    },
-    body: formData,
-  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiBaseUrl}/messages/upload`, true);
 
-  return response.json();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.setRequestHeader('Bypass-Tunnel-Reminder', 'true');
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      const elapsed = Date.now() - startTime;
+      console.log(`[UploadApi] Upload finished in ${elapsed}ms (status: ${xhr.status})`);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          resolve(res);
+        } catch {
+          resolve({ success: false, message: 'Invalid response from server' });
+        }
+      } else {
+        try {
+          const errRes = JSON.parse(xhr.responseText);
+          resolve({ success: false, message: errRes.message || 'Upload failed' });
+        } catch {
+          resolve({ success: false, message: `Upload failed (status: ${xhr.status})` });
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      const elapsed = Date.now() - startTime;
+      console.error(`[UploadApi] Network error after ${elapsed}ms`);
+      reject(new Error('Network error while uploading'));
+    };
+
+    xhr.send(formData);
+  });
 }
 
 export function getMediaUrl(relativeUrl: string): string {

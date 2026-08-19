@@ -206,29 +206,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         if (audioBlob.size > 0) {
           const ext = finalType.includes('mp4') ? 'm4a' : 'webm';
           const fileName = `voice_${Date.now()}.${ext}`;
+          const previewUrl = URL.createObjectURL(audioBlob);
 
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const permanentDataUrl = (reader.result as string) || URL.createObjectURL(audioBlob);
+          onSend(
+            '',
+            'audio',
+            {
+              url: previewUrl,
+              fileName,
+              mimeType: finalType,
+              size: audioBlob.size,
+              duration: finalDuration,
+            },
+            replyingTo || undefined,
+            audioBlob
+          );
 
-            // Instant 0ms Chat Display with persistent Data URL!
-            onSend(
-              '',
-              'audio',
-              {
-                url: permanentDataUrl,
-                fileName,
-                mimeType: finalType,
-                size: audioBlob.size,
-                duration: finalDuration,
-              },
-              replyingTo || undefined,
-              audioBlob
-            );
-
-            if (onCancelReply) onCancelReply();
-          };
-          reader.readAsDataURL(audioBlob);
+          if (onCancelReply) onCancelReply();
         }
       };
 

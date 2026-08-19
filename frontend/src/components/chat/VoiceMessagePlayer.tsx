@@ -143,21 +143,36 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       }
     };
 
+    const handleCanPlay = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.duration < 86400) {
+        setTotalDuration((prev) => (prev > 0 ? prev : audio.duration));
+      }
+    };
+
+    const handleError = () => {
+      console.warn('[VoicePlayer] Audio load error for url:', fullUrl);
+      setIsPlaying(false);
+    };
+
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (currentlyPlayingAudio === audio) {
         currentlyPlayingAudio = null;
         stopCurrentAudioCallback = null;
       }
     };
-  }, [totalDuration, updateProgress]);
+  }, [fullUrl, totalDuration, updateProgress]);
 
   // Calculate clean percentage (0% to 100%)
   const effectiveDuration = totalDuration > 0 ? totalDuration : 1;

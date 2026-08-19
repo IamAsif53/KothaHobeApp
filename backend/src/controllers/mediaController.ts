@@ -161,6 +161,9 @@ export const streamMedia = async (req: Request, res: Response): Promise<void> =>
     else if (['.webm', '.weba'].includes(ext)) contentType = 'audio/webm';
     else if (['.mp4', '.m4a'].includes(ext)) contentType = 'audio/mp4';
     else if (ext === '.mp3') contentType = 'audio/mpeg';
+    else if (ext === '.aac') contentType = 'audio/aac';
+    else if (ext === '.ogg' || ext === '.opus') contentType = 'audio/ogg';
+    else if (ext === '.wav') contentType = 'audio/wav';
     else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     else if (ext === '.xlsx') contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     else if (ext === '.txt') contentType = 'text/plain';

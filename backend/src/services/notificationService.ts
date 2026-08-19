@@ -170,6 +170,7 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       },
       android: {
         priority: 'high' as const,
+        ttl: 45 * 1000, // 45s TTL for incoming call
         notification: {
           channelId: 'incoming_calls',
           sound: 'default',

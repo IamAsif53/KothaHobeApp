@@ -31,7 +31,8 @@ export const CallScreen: React.FC = () => {
   } = useCall();
 
   const [diagnosticMsg, setDiagnosticMsg] = useState<string | null>(null);
-  const [hudExpanded, setHudExpanded] = useState<boolean>(true);
+  const [showDebugHud, setShowDebugHud] = useState<boolean>(false);
+  const [hudExpanded, setHudExpanded] = useState<boolean>(false);
 
   if (callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
     return null;

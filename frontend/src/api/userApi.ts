@@ -81,8 +81,36 @@ export async function unblockUserApi(targetUserId: string): Promise<{ success: b
   });
 }
 
-export async function getBlockedUsersApi(): Promise<{ success: boolean; blockedUsers: IUser[] }> {
-  return apiFetch<{ success: boolean; blockedUsers: IUser[] }>('/users/blocked');
+export async function checkRecipientPushStatusApi(recipientId: string): Promise<{
+  success: boolean;
+  recipientId?: string;
+  displayName?: string;
+  username?: string;
+  tokenCount?: number;
+  tokensMasked?: string[];
+  canReceiveCallPush?: boolean;
+  message?: string;
+}> {
+  return apiFetch(`/dev/recipient-push-status/${recipientId}`);
+}
+
+export async function sendTestCallPushToRecipientApi(targetUserId: string): Promise<{
+  success: boolean;
+  recipientName?: string;
+  tokensTargeted?: number;
+  callId?: string;
+  result?: any;
+  message?: string;
+  error?: string;
+}> {
+  return apiFetch('/dev/call-push-recipient', {
+    method: 'POST',
+    body: JSON.stringify({ targetUserId }),
+  });
+}
+
+export async function getBlockedUsersApi(): Promise<{ success: boolean; blockedUsers: any[] }> {
+  return apiFetch<{ success: boolean; blockedUsers: any[] }>('/users/blocked');
 }
 
 

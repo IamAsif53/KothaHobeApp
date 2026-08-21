@@ -64,6 +64,7 @@ interface CallContextType {
   testRemoteAudio: () => any;
   permissionAlert: string | null;
   clearPermissionAlert: () => void;
+  recipientPushStatus: { success?: boolean; message?: string; attempted?: number; successCount?: number; failureCount?: number } | null;
 }
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
@@ -81,6 +82,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [audioStats, setAudioStats] = useState<AudioStats | null>(null);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
+  const [recipientPushStatus, setRecipientPushStatus] = useState<any>(null);
 
   const callDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -541,6 +543,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       resetToIdleAfterDelay(2500);
     };
 
+    // 16. Recipient Push Dispatch Status
+    const handlePushStatus = (data: any) => {
+      console.log('[Signaling] Received call:push_status:', data);
+      if (data && data.pushResult) {
+        setRecipientPushStatus(data.pushResult);
+      }
+    };
+
     socket.on('call:initiated', handleCallInitiated);
     socket.on('call:incoming', handleCallIncoming);
     socket.on('call:ringing', handleCallRinging);
@@ -556,6 +566,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('call:timeout', handleCallTimeout);
     socket.on('call:failed', handleCallFailed);
     socket.on('call:error', handleCallError);
+    socket.on('call:push_status', handlePushStatus);
 
     // Support Push Notification / Background Incoming Call Wakeup
     const handleCustomIncomingCall = (event: any) => {
@@ -664,6 +675,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('call:timeout', handleCallTimeout);
       socket.off('call:failed', handleCallFailed);
       socket.off('call:error', handleCallError);
+      socket.off('call:push_status', handlePushStatus);
     };
   }, [socket, user, setupWebRTC, markConnected, resetToIdleAfterDelay]);
 
@@ -694,6 +706,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         testRemoteAudio,
         permissionAlert,
         clearPermissionAlert: () => setPermissionAlert(null),
+        recipientPushStatus,
       }}
     >
       {children}

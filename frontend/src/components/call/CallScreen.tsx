@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useCall } from '../../context/CallContext';
-import { getPushStatusApi, sendTestCallPushApi } from '../../api/userApi';
+import {
+  getPushStatusApi,
+  sendTestCallPushApi,
+  checkRecipientPushStatusApi,
+  sendTestCallPushToRecipientApi,
+} from '../../api/userApi';
 import {
   Mic,
   MicOff,
@@ -15,6 +20,8 @@ import {
   Wifi,
   Bell,
   Smartphone,
+  Send,
+  UserCheck,
 } from 'lucide-react';
 
 export const CallScreen: React.FC = () => {
@@ -31,20 +38,34 @@ export const CallScreen: React.FC = () => {
     toggleSpeaker,
     testMicrophone,
     testRemoteAudio,
+    recipientPushStatus,
   } = useCall();
 
   const [diagnosticMsg, setDiagnosticMsg] = useState<string | null>(null);
   const [showDebugHud, setShowDebugHud] = useState<boolean>(false);
   const [hudExpanded, setHudExpanded] = useState<boolean>(false);
   const [pushStatus, setPushStatus] = useState<any>(null);
+  const [targetRecipientStatus, setTargetRecipientStatus] = useState<any>(null);
+
+  const targetRecipientId = activeCall?.receiver?._id || activeCall?.caller?._id;
 
   useEffect(() => {
     if (hudExpanded) {
-      getPushStatusApi().then((res) => {
-        if (res.success) setPushStatus(res);
-      }).catch(() => {});
+      getPushStatusApi()
+        .then((res) => {
+          if (res.success) setPushStatus(res);
+        })
+        .catch(() => {});
+
+      if (targetRecipientId) {
+        checkRecipientPushStatusApi(targetRecipientId)
+          .then((res) => {
+            if (res.success) setTargetRecipientStatus(res);
+          })
+          .catch(() => {});
+      }
     }
-  }, [hudExpanded]);
+  }, [hudExpanded, targetRecipientId]);
 
   if (callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
     return null;
@@ -342,14 +363,26 @@ export const CallScreen: React.FC = () => {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Your Registered FCM Tokens:</span>
+                <span className="text-gray-400">Your Phone FCM Tokens:</span>
                 <span className={pushStatus?.userTokenCount > 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
                   {pushStatus ? `${pushStatus.userTokenCount} token(s) (${pushStatus.tokensMasked?.[0] || 'none'})` : '...'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Call Channel:</span>
-                <span className="text-emerald-300 font-mono">incoming_voice_calls_v2</span>
+                <span className="text-gray-400">Recipient ({activeCall?.receiver?.displayName || 'User'}):</span>
+                <span className={targetRecipientStatus?.tokenCount > 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                  {targetRecipientStatus
+                    ? targetRecipientStatus.tokenCount > 0
+                      ? `${targetRecipientStatus.tokenCount} token(s) in DB`
+                      : '0 TOKENS (Not registered!)'
+                    : 'Checking DB...'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Live Push Dispatch:</span>
+                <span className={recipientPushStatus ? (recipientPushStatus.success ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold') : 'text-gray-400'}>
+                  {recipientPushStatus ? recipientPushStatus.message || (recipientPushStatus.success ? 'Delivered' : 'Failed') : 'Awaiting signaling...'}
+                </span>
               </div>
 
               {/* Action Test Buttons inside HUD */}
@@ -374,29 +407,33 @@ export const CallScreen: React.FC = () => {
                   className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[9px] font-bold py-1.5 px-2 rounded-lg border border-emerald-500/40 text-center flex items-center justify-center gap-1"
                 >
                   <Smartphone className="w-2.5 h-2.5" />
-                  <span>Test Native Notification UI</span>
+                  <span>Test This Phone UI</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={async () => {
-                    setDiagnosticMsg('Dispatching test incoming call push via FCM...');
+                    if (!targetRecipientId) {
+                      setDiagnosticMsg('⚠️ No recipient target ID found');
+                      return;
+                    }
+                    setDiagnosticMsg(`Sending test call push directly to recipient...`);
                     try {
-                      const res = await sendTestCallPushApi();
+                      const res = await sendTestCallPushToRecipientApi(targetRecipientId);
                       if (res.success) {
-                        setDiagnosticMsg('✅ FCM Call Push sent! Check lock screen.');
+                        setDiagnosticMsg(`✅ Push sent to ${res.recipientName || 'recipient'} (${res.tokensTargeted} device)!`);
                       } else {
-                        setDiagnosticMsg(`⚠️ FCM Error: ${res.message || res.error || 'Failed'}`);
+                        setDiagnosticMsg(`⚠️ ${res.message || res.error || 'Failed'}`);
                       }
                     } catch (e: any) {
-                      setDiagnosticMsg(`❌ Server test failed: ${e?.message || e}`);
+                      setDiagnosticMsg(`❌ Remote push failed: ${e?.message || e}`);
                     }
-                    setTimeout(() => setDiagnosticMsg(null), 4000);
+                    setTimeout(() => setDiagnosticMsg(null), 5000);
                   }}
                   className="bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[9px] font-bold py-1.5 px-2 rounded-lg border border-sky-500/40 text-center flex items-center justify-center gap-1"
                 >
-                  <Bell className="w-2.5 h-2.5" />
-                  <span>Send Test Call Push (FCM)</span>
+                  <Send className="w-2.5 h-2.5" />
+                  <span>Send Push to Recipient</span>
                 </button>
               </div>
             </div>

@@ -202,14 +202,32 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
         // Dispatch high-priority FCM Call Push Notification
         sendCallPushNotification({
-          recipientId: receiverId,
-          callerId: userId,
+          recipientId: String(receiverId),
+          callerId: String(userId),
           callerName: callerUser.displayName || 'Kotha Hobe User',
-          callerAvatar: callerUser.avatarUrl,
-          callId,
-          conversationId,
+          callerAvatar: callerUser.avatarUrl || '',
+          callId: String(callId),
+          conversationId: String(conversationId),
           callType,
-        }).catch((err) => console.warn('[Call] FCM push dispatch error:', err));
+        })
+          .then((pushRes) => {
+            console.log(`[Call] FCM Call Push result for callId ${callId}:`, pushRes);
+            socket.emit('call:push_status', {
+              callId,
+              recipientId: receiverId,
+              recipientName: receiverUser.displayName,
+              pushResult: pushRes,
+            });
+          })
+          .catch((err) => {
+            console.warn('[Call] FCM push dispatch error:', err);
+            socket.emit('call:push_status', {
+              callId,
+              recipientId: receiverId,
+              recipientName: receiverUser.displayName,
+              pushResult: { success: false, message: err?.message || 'Push dispatch error' },
+            });
+          });
 
         // Start 45-second Ringing Timeout
         const timeout = setTimeout(async () => {

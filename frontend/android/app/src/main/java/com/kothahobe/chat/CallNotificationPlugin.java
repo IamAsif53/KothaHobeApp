@@ -39,6 +39,7 @@ public class CallNotificationPlugin extends Plugin {
         JSObject data = new JSObject();
         data.put("action", action);
         data.put("callId", callId);
+        data.put("callerId", extras.getString("callerId", ""));
         data.put("callerName", extras.getString("callerName", "User"));
         data.put("callerAvatar", extras.getString("callerAvatar", ""));
         data.put("conversationId", extras.getString("conversationId", ""));
@@ -46,6 +47,19 @@ public class CallNotificationPlugin extends Plugin {
 
         Log.d(TAG, "Handling incoming call intent: " + action + " for callId: " + callId);
         pendingCallAction = data;
+
+        // Auto-dismiss native notification from Android notification shade immediately
+        if (instance != null && instance.getContext() != null) {
+            try {
+                NotificationManager nm = (NotificationManager) instance.getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    nm.cancel(Math.abs(callId.hashCode()));
+                }
+                KothaFirebaseMessagingService.removeActiveCall(callId);
+            } catch (Exception e) {
+                Log.w(TAG, "Error cancelling notification on intent: " + e.getMessage());
+            }
+        }
 
         if (instance != null) {
             instance.notifyListeners("callActionReceived", data, true);

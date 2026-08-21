@@ -83,6 +83,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         }
         activeCallNotifications.put(callId, now);
 
+        String callerId = data.get("callerId");
         String callerName = data.get("callerName");
         if (callerName == null || callerName.trim().isEmpty()) {
             callerName = "Kotha Hobe User";
@@ -156,6 +157,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         );
         fullScreenIntent.putExtra("action", "incoming_call");
         fullScreenIntent.putExtra("callId", callId);
+        fullScreenIntent.putExtra("callerId", callerId);
         fullScreenIntent.putExtra("callerName", callerName);
         fullScreenIntent.putExtra("callerAvatar", callerAvatar);
         fullScreenIntent.putExtra("conversationId", conversationId);
@@ -176,6 +178,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         acceptIntent.putExtra("action", "accept_call");
         acceptIntent.putExtra("callId", callId);
+        acceptIntent.putExtra("callerId", callerId);
         acceptIntent.putExtra("callerName", callerName);
         acceptIntent.putExtra("callerAvatar", callerAvatar);
         acceptIntent.putExtra("conversationId", conversationId);

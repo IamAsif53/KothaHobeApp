@@ -86,6 +86,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const callDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<any>(socket);
+  const isConnectedRef = useRef<boolean>(isConnected);
+
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Sync refs with state
   useEffect(() => {
@@ -145,8 +155,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         enableCallAudioMode();
 
         // Notify socket server that WebRTC audio stream is verified LIVE
-        if (socket) {
-          socket.emit('call:connected', { callId });
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket) {
+          activeSocket.emit('call:connected', { callId });
         }
 
         // Start connected duration timer
@@ -181,8 +192,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callId,
         // On local ICE candidate
         (candidate, traceId) => {
-          if (socket) {
-            socket.emit('call:ice-candidate', { callId, candidate, traceId });
+          const activeSocket = socketRef.current || socket;
+          if (activeSocket) {
+            activeSocket.emit('call:ice-candidate', { callId, candidate, traceId });
           }
         },
         // On remote track received
@@ -199,7 +211,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             soundService.playCallEndTone();
             setCallState('FAILED');
             callStateRef.current = 'FAILED';
-            if (socket) socket.emit('call:failed', { callId });
+            const activeSocket = socketRef.current || socket;
+            if (activeSocket) activeSocket.emit('call:failed', { callId });
             resetToIdleAfterDelay(2500);
           }
         }
@@ -210,7 +223,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Start Outgoing Voice Call
   const startCall = async (recipient: CallParticipant, conversationId: string) => {
-    if (!socket || !isConnected || !user) {
+    const activeSocket = socketRef.current || socket;
+    if (!activeSocket || !isConnected || !user) {
       setPermissionAlert('Network connection required to start a call.');
       return;
     }
@@ -223,50 +237,51 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. Check microphone permission
     const perm = await ensureAudioPermission();
     if (!perm.granted) {
-      setPermissionAlert(
-        perm.permanentlyDenied
-          ? 'Microphone permission is permanently disabled. Please enable it in Android Settings to make voice calls.'
-          : 'Microphone permission is required to start a voice call.'
-      );
+      setPermissionAlert('Microphone permission is required to make calls.');
       if (perm.permanentlyDenied) {
         openSystemAppSettings();
       }
       return;
     }
 
+    const tempCallId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+    const session: CallSession = {
+      callId: tempCallId,
+      conversationId,
+      caller: {
+        _id: user._id,
+        displayName: user.displayName,
+        avatar: user.avatarUrl,
+        username: user.username,
+      },
+      receiver: recipient,
+      isIncoming: false,
+      callType: 'voice',
+      startedAt: new Date(),
+    };
+
+    setActiveCall(session);
+    activeCallRef.current = session;
+    setCallState('CALLING');
+    callStateRef.current = 'CALLING';
+    soundService.startRingbackTone();
+
     try {
       // 2. Refresh dynamic ICE servers & start local microphone stream
       await fetchAndSetIceServers();
       await webrtcVoiceService.startLocalMicrophone();
 
-      // 3. Set Outgoing Call State
-      const newSession: CallSession = {
-        callId: '',
-        conversationId,
-        caller: {
-          _id: user._id,
-          displayName: user.displayName,
-          avatar: user.avatarUrl,
-        },
-        receiver: recipient,
-        isIncoming: false,
-        callType: 'voice',
-        startedAt: new Date(),
-      };
+      // 3. Setup WebRTC PeerConnection
+      setupWebRTC(tempCallId);
 
-      setActiveCall(newSession);
-      activeCallRef.current = newSession;
-      setCallState('CALLING');
-      callStateRef.current = 'CALLING';
-      soundService.startRingbackTone();
-
-      // 4. Send Initiation to Socket.IO Signaling
-      socket.emit('call:initiate', {
+      // 4. Emit Call Initiation Signal to Server
+      activeSocket.emit('call:initiate', {
         conversationId,
         receiverId: recipient._id,
         callType: 'voice',
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error('[CallContext] Start call error:', err);
       soundService.stopAll();
       setCallState('IDLE');
@@ -280,11 +295,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Receiver Accepts Incoming Call
   const acceptCall = async () => {
     const current = activeCallRef.current;
-    if (!current || !socket || callStateRef.current !== 'RINGING') return;
+    if (!current) return;
 
+    console.log('[CallContext] acceptCall executing for callId:', current.callId, 'state:', callStateRef.current);
     soundService.stopAll();
     setCallState('CONNECTING');
     callStateRef.current = 'CONNECTING';
+
+    // Auto-dismiss native Android notification immediately
+    try {
+      const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+      if (CallPlugin && typeof CallPlugin.dismissCallNotification === 'function') {
+        CallPlugin.dismissCallNotification({ callId: current.callId });
+      }
+    } catch (e) {
+      console.warn('[CallContext] Dismiss notification note:', e);
+    }
 
     // 1. Check microphone permission
     const perm = await ensureAudioPermission();
@@ -305,8 +331,29 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 3. Setup WebRTC PeerConnection
       setupWebRTC(current.callId);
 
-      // 4. Emit Call Accepted Signal to Caller
-      socket.emit('call:accept', { callId: current.callId });
+      // 4. Ensure socket is connected before emitting call:accept
+      let activeSocket = socketRef.current || socket;
+      if (activeSocket && !activeSocket.connected) {
+        console.log('[CallContext] Waiting for socket connection before emitting call:accept...');
+        await new Promise<void>((resolve) => {
+          if (activeSocket.connected) return resolve();
+          const timer = setTimeout(() => resolve(), 4000);
+          activeSocket.once('connect', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+      }
+
+      if (activeSocket && activeSocket.connected) {
+        console.log('[CallContext] Emitting call:accept for callId:', current.callId);
+        activeSocket.emit('call:accept', { callId: current.callId });
+      } else {
+        console.warn('[CallContext] Socket still not connected. Emitting call:accept on connect...');
+        activeSocket?.once('connect', () => {
+          activeSocket.emit('call:accept', { callId: current.callId });
+        });
+      }
     } catch (err) {
       console.error('[CallContext] Accept call error:', err);
       rejectCall();
@@ -316,8 +363,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Receiver Rejects Incoming Call
   const rejectCall = () => {
     const current = activeCallRef.current;
-    if (current && socket) {
-      socket.emit('call:reject', { callId: current.callId });
+    const activeSocket = socketRef.current || socket;
+    if (current && activeSocket) {
+      activeSocket.emit('call:reject', { callId: current.callId });
     }
     soundService.playCallEndTone();
     setCallState('REJECTED');
@@ -328,8 +376,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Caller Cancels Outgoing Call Before Answer
   const cancelCall = () => {
     const current = activeCallRef.current;
-    if (current && socket) {
-      socket.emit('call:cancel', { callId: current.callId });
+    const activeSocket = socketRef.current || socket;
+    if (current && activeSocket) {
+      activeSocket.emit('call:cancel', { callId: current.callId });
     }
     soundService.playCallEndTone();
     setCallState('CANCELLED');
@@ -337,16 +386,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     resetToIdleAfterDelay(1500);
   };
 
-  // Either Participant Ends Connected / Ongoing Call
+  // Either Participant Ends Active Call
   const endCall = () => {
     const current = activeCallRef.current;
-    if (current && socket) {
-      socket.emit('call:end', { callId: current.callId });
+    const activeSocket = socketRef.current || socket;
+    if (current && activeSocket) {
+      activeSocket.emit('call:end', { callId: current.callId });
     }
     soundService.playCallEndTone();
     setCallState('ENDED');
     callStateRef.current = 'ENDED';
-    resetToIdleAfterDelay(2000);
+    resetToIdleAfterDelay(1500);
   };
 
   // Toggle Microphone Mute
@@ -356,7 +406,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsMuted(nextMuted);
   };
 
-  // Toggle Physical Loudspeaker
+  // Toggle Speaker / Earpiece
   const toggleSpeaker = async () => {
     const nextSpeaker = !isSpeakerOn;
     const success = await toggleNativeSpeakerphone(nextSpeaker);
@@ -382,8 +432,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. Receiver gets incoming call
     const handleCallIncoming = (data: { callId: string; conversationId: string; caller: CallParticipant; callType: 'voice' | 'video' }) => {
-      console.log('[Signaling] Incoming call received:', data.callId, 'from', data.caller.displayName);
+      console.log('[Signaling] Incoming call received:', data.callId, 'from', data.caller?.displayName);
+
+      // Deduplicate if receiver is already handling this exact call
+      if (activeCallRef.current?.callId === data.callId) {
+        console.log('[Signaling] Deduplicating incoming call event for active callId:', data.callId);
+        return;
+      }
+
+      // If user is genuinely in another call with someone else
       if (callStateRef.current !== 'IDLE') {
+        console.log('[Signaling] User busy with another call. Emitting call:busy for callId:', data.callId);
         socket.emit('call:busy', { callId: data.callId });
         return;
       }
@@ -433,10 +492,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await fetchAndSetIceServers();
         setupWebRTC(data.callId);
         const offer = await webrtcVoiceService.createOffer();
-        socket.emit('call:offer', {
-          callId: data.callId,
-          sdp: offer,
-        });
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket) {
+          activeSocket.emit('call:offer', {
+            callId: data.callId,
+            sdp: offer,
+          });
+        }
       } catch (err) {
         console.error('[CallContext] Create offer error:', err);
         endCall();
@@ -449,10 +511,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await webrtcVoiceService.handleOffer(data.sdp);
         const answer = await webrtcVoiceService.createAnswer();
-        socket.emit('call:answer', {
-          callId: data.callId,
-          sdp: answer,
-        });
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket) {
+          activeSocket.emit('call:answer', {
+            callId: data.callId,
+            sdp: answer,
+          });
+        }
       } catch (err) {
         console.error('[CallContext] Handle offer / create answer error:', err);
       }
@@ -519,14 +584,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleCallTimeout = () => {
       console.log('[Signaling] Call timed out (missed call)');
       soundService.playCallEndTone();
-      setCallState('ENDED');
-      callStateRef.current = 'ENDED';
-      resetToIdleAfterDelay(2000);
+      setCallState('FAILED');
+      callStateRef.current = 'FAILED';
+      resetToIdleAfterDelay(2500);
     };
 
     // 14. Call Failed
-    const handleCallFailed = () => {
-      console.log('[Signaling] Call connection failed');
+    const handleCallFailed = (data: { message?: string }) => {
+      console.log('[Signaling] Call failed:', data.message);
       soundService.playCallEndTone();
       setCallState('FAILED');
       callStateRef.current = 'FAILED';
@@ -534,10 +599,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 15. Call Error
-    const handleCallError = (data: { message?: string }) => {
-      console.error('[Signaling] Call error:', data.message);
+    const handleCallError = (data: { message: string }) => {
+      console.warn('[Signaling] Call error:', data.message);
+      setPermissionAlert(data.message || 'Call error occurred');
       soundService.playCallEndTone();
-      setPermissionAlert(data.message || 'Call failed.');
       setCallState('FAILED');
       callStateRef.current = 'FAILED';
       resetToIdleAfterDelay(2500);
@@ -597,12 +662,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = event.detail;
       if (data && data.callId) {
         console.log('[CallContext] Received kothahobe:accept_call action from notification:', data);
-        if (activeCallRef.current?.callId === data.callId) {
-          if (callStateRef.current === 'RINGING') {
-            await acceptCall();
+        
+        // Auto-dismiss native Android notification immediately
+        try {
+          const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+          if (CallPlugin && typeof CallPlugin.dismissCallNotification === 'function') {
+            CallPlugin.dismissCallNotification({ callId: data.callId });
           }
-          return;
-        }
+        } catch (e) {}
 
         const session: CallSession = {
           callId: data.callId,
@@ -624,9 +691,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCallState('RINGING');
         callStateRef.current = 'RINGING';
 
-        setTimeout(() => {
-          acceptCall();
-        }, 150);
+        await acceptCall();
       }
     };
 

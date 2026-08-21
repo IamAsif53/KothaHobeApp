@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { ENV } from '../config/env';
 import { Call } from '../models/Call';
+import { Message } from '../models/Message';
+import { getGlobalIO } from '../sockets/socketManager';
 import crypto from 'crypto';
 
 interface RTCIceServer {
@@ -156,4 +158,65 @@ export const getActiveCall = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ success: false, message: 'Failed to fetch active call' });
   }
 };
+
+/**
+ * POST /api/calls/decline
+ * Allows receiver to decline call via native background notification action
+ */
+export const declineCall = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { callId } = req.body;
+    if (!callId) {
+      res.status(400).json({ success: false, message: 'callId is required' });
+      return;
+    }
+
+    const call = await Call.findOne({ callId });
+    if (!call) {
+      res.status(404).json({ success: false, message: 'Call not found' });
+      return;
+    }
+
+    if (call.status !== 'declined' && call.status !== 'cancelled' && call.status !== 'ended') {
+      call.status = 'declined';
+      call.endedAt = new Date();
+      await call.save();
+
+      const io = getGlobalIO();
+      if (io) {
+        io.to(`user:${call.callerId.toString()}`).emit('call:rejected', { callId });
+        io.to(`user:${call.receiverId.toString()}`).emit('call:rejected', { callId });
+
+        // Save Declined Call event in conversation
+        const callMsg = new Message({
+          conversationId: call.conversationId,
+          senderId: call.callerId,
+          receiverId: call.receiverId,
+          text: '📞 Declined voice call',
+          type: 'call',
+          status: 'delivered',
+          clientMessageId: `call_msg_${callId}`,
+          callDetails: {
+            callId,
+            callType: call.callType || 'voice',
+            status: 'declined',
+            duration: 0,
+            startedAt: call.startedAt,
+            endedAt: call.endedAt,
+          },
+        });
+        await callMsg.save();
+
+        io.to(`conv:${call.conversationId.toString()}`).emit('message:new', callMsg);
+        io.to(`user:${call.callerId.toString()}`).emit('message:new', callMsg);
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Call declined successfully' });
+  } catch (error: any) {
+    console.error('[CallController] declineCall error:', error);
+    res.status(500).json({ success: false, message: 'Failed to decline call' });
+  }
+};
+
 

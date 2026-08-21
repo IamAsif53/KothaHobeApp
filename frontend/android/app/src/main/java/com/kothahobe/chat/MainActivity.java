@@ -1,5 +1,6 @@
 package com.kothahobe.chat;
 
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
@@ -12,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppUpdatePlugin.class);
         registerPlugin(NativeMediaPlugin.class);
+        registerPlugin(CallNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Turn screen on and show when locked for incoming calls
@@ -32,5 +34,16 @@ public class MainActivity extends BridgeActivity {
             WebSettings settings = webView.getSettings();
             settings.setMediaPlaybackRequiresUserGesture(false);
         }
+
+        // Check if app was launched via incoming/accept call intent
+        CallNotificationPlugin.handleIncomingIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        CallNotificationPlugin.handleIncomingIntent(intent);
     }
 }
+

@@ -3,7 +3,7 @@ import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
 import { Call, ICall } from '../models/Call';
-import { sendCallPushNotification } from '../services/notificationService';
+import { sendCallPushNotification, sendCallCancelledPushNotification } from '../services/notificationService';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -225,6 +225,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
               io.to(`user:${userId}`).emit('call:timeout', { callId });
               io.to(`user:${receiverId}`).emit('call:timeout', { callId });
+
+              // Dismiss native incoming call notification on receiver device
+              sendCallCancelledPushNotification({ recipientId: receiverId, callId }).catch(() => {});
 
               // Record Missed Call message in conversation
               const missedMsg = new Message({
@@ -521,6 +524,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       io.to(`user:${call.receiverId.toString()}`).emit('call:cancelled', { callId });
       socket.emit('call:cancelled', { callId });
+
+      // Dismiss native incoming call notification on receiver device
+      sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
 
       // Save Missed Call event
       const callMsg = new Message({

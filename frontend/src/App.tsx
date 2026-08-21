@@ -96,6 +96,37 @@ export const AppContent: React.FC = () => {
           }
         }
       );
+
+      // Listen to native CallNotification plugin events (from Native Android Heads-Up / Full-Screen Intent)
+      const callNotifPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+      if (callNotifPlugin) {
+        try {
+          callNotifPlugin.addListener('callActionReceived', (data: any) => {
+            console.log('[App] CallNotification plugin event received:', data);
+            if (data && data.callId) {
+              if (data.action === 'accept_call') {
+                window.dispatchEvent(new CustomEvent('kothahobe:accept_call', { detail: data }));
+              } else {
+                window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: data }));
+              }
+            }
+          });
+
+          // Check if app was launched via pending call intent
+          callNotifPlugin.getPendingCallAction().then((pending: any) => {
+            if (pending && pending.callId) {
+              console.log('[App] Pending call action found on launch:', pending);
+              if (pending.action === 'accept_call') {
+                window.dispatchEvent(new CustomEvent('kothahobe:accept_call', { detail: pending }));
+              } else {
+                window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: pending }));
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('[App] CallNotification plugin init note:', err);
+        }
+      }
     };
 
     setupNotifAction();

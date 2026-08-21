@@ -37,6 +37,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Custom Firebase Messaging Service for Native Incoming Call Full-Screen Notifications -->
+        <service
+            android:name=".KothaFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Receiver for background Call Decline action button -->
+        <receiver
+            android:name=".CallActionReceiver"
+            android:exported="false" />
     </application>
 
     <!-- Permissions for Network, Push Notifications & Vibration -->

@@ -154,11 +154,8 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid tokens' };
     }
 
+    // High-priority Data message: Directly triggers KothaFirebaseMessagingService on all Android states
     const messagePayload = {
-      notification: {
-        title: `Incoming ${callType === 'voice' ? 'Voice' : 'Video'} Call`,
-        body: `${callerName || 'Someone'} is calling you on Kotha Hobe...`,
-      },
       data: {
         type: 'incoming_call',
         callId: String(callId),
@@ -171,20 +168,11 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       android: {
         priority: 'high' as const,
         ttl: 45 * 1000, // 45s TTL for incoming call
-        notification: {
-          channelId: 'incoming_calls',
-          sound: 'default',
-          priority: 'max' as const,
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          visibility: 'public' as const,
-          tag: `call_${callId}`,
-        },
       },
       tokens,
     };
 
-    console.log(`[FCM] Dispatching call push to ${tokens.length} device(s) for call ${callId}`);
+    console.log(`[FCM] Dispatching high-priority incoming call push to ${tokens.length} device(s) for call ${callId}`);
     const response = await admin.messaging().sendEachForMulticast(messagePayload);
     console.log(`[FCM] Call push result: ${response.successCount} succeeded, ${response.failureCount} failed.`);
 
@@ -205,3 +193,47 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
     };
   }
 };
+
+export const sendCallCancelledPushNotification = async (payload: { recipientId: string; callId: string }): Promise<PushResult> => {
+  try {
+    const { recipientId, callId } = payload;
+    if (!recipientId || !callId || !isFirebaseReady()) {
+      return { success: false, attempted: 0, successCount: 0, failureCount: 0, message: 'Invalid payload or FCM not ready' };
+    }
+
+    const recipient = await User.findById(recipientId).select('fcmTokens');
+    if (!recipient || !recipient.fcmTokens || recipient.fcmTokens.length === 0) {
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No registered tokens' };
+    }
+
+    const tokens = recipient.fcmTokens.filter((t) => typeof t === 'string' && t.trim().length > 10);
+    if (tokens.length === 0) {
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid tokens' };
+    }
+
+    const messagePayload = {
+      data: {
+        type: 'call_cancelled',
+        callId: String(callId),
+      },
+      android: {
+        priority: 'high' as const,
+        ttl: 15 * 1000,
+      },
+      tokens,
+    };
+
+    console.log(`[FCM] Dispatching call cancellation push for call ${callId} to ${tokens.length} device(s)`);
+    const response = await admin.messaging().sendEachForMulticast(messagePayload);
+    return {
+      success: response.successCount > 0,
+      attempted: tokens.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    };
+  } catch (error: any) {
+    console.error('[FCM] Call cancel push error:', error?.message || error);
+    return { success: false, attempted: 0, successCount: 0, failureCount: 0 };
+  }
+};
+

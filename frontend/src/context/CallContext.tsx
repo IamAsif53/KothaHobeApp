@@ -562,6 +562,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = event.detail;
       if (data && (data.callId || data.type === 'incoming_call')) {
         console.log('[CallContext] Received kothahobe:incoming_call event from Push/Local notification:', data);
+        if (activeCallRef.current?.callId === data.callId) {
+          console.log('[CallContext] Deduplicating incoming call event for callId:', data.callId);
+          return;
+        }
+
         handleCallIncoming({
           callId: data.callId,
           conversationId: data.conversationId,
@@ -575,7 +580,47 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     };
+
+    // Support Notification Native "ACCEPT" Action Button
+    const handleCustomAcceptCall = async (event: any) => {
+      const data = event.detail;
+      if (data && data.callId) {
+        console.log('[CallContext] Received kothahobe:accept_call action from notification:', data);
+        if (activeCallRef.current?.callId === data.callId) {
+          if (callStateRef.current === 'RINGING') {
+            await acceptCall();
+          }
+          return;
+        }
+
+        const session: CallSession = {
+          callId: data.callId,
+          conversationId: data.conversationId,
+          caller: {
+            _id: data.callerId || data.caller?._id || '',
+            displayName: data.callerName || data.caller?.displayName || 'User',
+            avatar: data.callerAvatar || data.caller?.avatar || '',
+            username: data.callerUsername || data.caller?.username || '',
+          },
+          receiver: { _id: user?._id || '', displayName: user?.displayName || '' },
+          isIncoming: true,
+          callType: data.callType || 'voice',
+          startedAt: new Date(),
+        };
+
+        setActiveCall(session);
+        activeCallRef.current = session;
+        setCallState('RINGING');
+        callStateRef.current = 'RINGING';
+
+        setTimeout(() => {
+          acceptCall();
+        }, 150);
+      }
+    };
+
     window.addEventListener('kothahobe:incoming_call', handleCustomIncomingCall);
+    window.addEventListener('kothahobe:accept_call', handleCustomAcceptCall);
 
     // Proactively check if there's a live incoming call when app opens or reconnects
     if (callStateRef.current === 'IDLE') {
@@ -603,6 +648,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       window.removeEventListener('kothahobe:incoming_call', handleCustomIncomingCall);
+      window.removeEventListener('kothahobe:accept_call', handleCustomAcceptCall);
       socket.off('call:initiated', handleCallInitiated);
       socket.off('call:incoming', handleCallIncoming);
       socket.off('call:ringing', handleCallRinging);

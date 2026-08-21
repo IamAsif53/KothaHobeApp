@@ -11,7 +11,14 @@ interface AuthenticatedSocket extends Socket {
   phoneNumber?: string;
 }
 
+let globalIO: SocketIOServer | null = null;
+
+export function getGlobalIO(): SocketIOServer | null {
+  return globalIO;
+}
+
 export function setupSocketIO(io: SocketIOServer): void {
+  globalIO = io;
   // Handshake authentication middleware
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {

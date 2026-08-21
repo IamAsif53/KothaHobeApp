@@ -25,7 +25,7 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react';
-import { sendTestPushApi, sendTestCallPushApi, getPushStatusApi } from '../api/userApi';
+import { sendTestPushApi, sendTestCallPushApi, getPushStatusApi, registerPushTokenApi } from '../api/userApi';
 import {
   checkLatestRelease,
   getCurrentAppVersion,
@@ -622,6 +622,37 @@ export const SettingsPage: React.FC = () => {
                     className="w-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-purple-500/30"
                   >
                     <span>📋 3. Check FCM Tokens & Server Status</span>
+                  </button>
+
+                  {/* Test 4: Force Re-Register FCM Token */}
+                  <button
+                    onClick={async () => {
+                      showToast('Fetching fresh device token from Firebase...');
+                      try {
+                        const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+                        if (CallPlugin && typeof CallPlugin.getFcmToken === 'function') {
+                          const tokenRes = await CallPlugin.getFcmToken();
+                          if (tokenRes && tokenRes.token) {
+                            const regRes = await registerPushTokenApi(tokenRes.token);
+                            if (regRes.success) {
+                              showToast(`✅ Token registered in DB! (...${tokenRes.token.slice(-6)})`);
+                            } else {
+                              showToast(`⚠️ Server registration error: ${regRes.message}`);
+                            }
+                          } else {
+                            showToast('⚠️ Could not get device FCM token');
+                          }
+                        } else {
+                          showToast('⚠️ Native plugin not available (browser mode)');
+                        }
+                      } catch (e: any) {
+                        showToast(`❌ Sync failed: ${e?.message || e}`);
+                      }
+                    }}
+                    className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-amber-500/30"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>🔄 4. Force Re-Register My Phone FCM Token</span>
                   </button>
                 </div>
               </div>

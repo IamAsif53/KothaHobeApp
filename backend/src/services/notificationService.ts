@@ -181,13 +181,15 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
     const response = await admin.messaging().sendEachForMulticast(messagePayload);
     console.log(`[CALL PUSH] FCM send result for callId=${callId}: successCount=${response.successCount}, failureCount=${response.failureCount}`);
 
-    // Automatically remove stale or unregistered tokens
+    const errorsList: string[] = [];
     if (response.failureCount > 0) {
       const tokensToRemove: string[] = [];
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
           const error = resp.error;
-          console.warn(`[CALL PUSH] FCM delivery failure on token ${idx}:`, error?.code, error?.message);
+          const errStr = `${error?.code || 'error'}: ${error?.message || 'Delivery failed'}`;
+          errorsList.push(errStr);
+          console.warn(`[CALL PUSH] FCM delivery failure on token ${idx}:`, errStr);
           if (
             error?.code === 'messaging/invalid-registration-token' ||
             error?.code === 'messaging/registration-token-not-registered'
@@ -205,11 +207,16 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       }
     }
 
+    const firstErr = errorsList.length > 0 ? errorsList[0] : undefined;
     return {
       success: response.successCount > 0,
       attempted: tokens.length,
       successCount: response.successCount,
       failureCount: response.failureCount,
+      message: response.successCount > 0
+        ? `Delivered to ${response.successCount}/${tokens.length} device(s)`
+        : `Google FCM Error (${firstErr || 'Delivery failed'})`,
+      error: firstErr,
     };
   } catch (error: any) {
     console.error(`[CALL PUSH] FCM send error for callId=${payload?.callId}:`, error?.message || error);
@@ -219,6 +226,7 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       successCount: 0,
       failureCount: 0,
       error: error?.message || 'Call push dispatch failed',
+      message: `Server Error: ${error?.message || 'Push dispatch failed'}`,
     };
   }
 };

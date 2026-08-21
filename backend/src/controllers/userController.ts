@@ -304,12 +304,21 @@ export const registerPushToken = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
+    const cleanToken = token.trim();
+
+    // 1. Remove this device token from any OTHER user accounts in DB
+    await User.updateMany(
+      { _id: { $ne: req.user._id }, fcmTokens: cleanToken },
+      { $pull: { fcmTokens: cleanToken } }
+    );
+
+    // 2. Add exclusively to current user
     await User.findByIdAndUpdate(req.user._id, {
-      $addToSet: { fcmTokens: token.trim() },
+      $addToSet: { fcmTokens: cleanToken },
     });
 
-    console.log(`[FCM] Registered device push token for user ${req.user._id}`);
-    res.status(200).json({ success: true, message: 'Push token registered' });
+    console.log(`[FCM] Registered device push token for user ${req.user._id} (${req.user.displayName}): ${cleanToken.slice(0, 8)}...${cleanToken.slice(-6)}`);
+    res.status(200).json({ success: true, message: 'Push token registered successfully' });
   } catch (error) {
     console.error('[FCM] Token registration error:', error);
     res.status(500).json({ success: false, message: 'Failed to register push token' });

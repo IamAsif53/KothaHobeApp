@@ -95,4 +95,27 @@ public class CallNotificationPlugin extends Plugin {
                 }
             });
     }
+
+    @PluginMethod
+    public void showLocalTestCallNotification(PluginCall call) {
+        String callerName = call.getString("callerName", "Kotha Hobe Test Caller");
+        String callId = call.getString("callId", "local_test_" + System.currentTimeMillis());
+
+        java.util.Map<String, String> data = new java.util.HashMap<>();
+        data.put("type", "incoming_call");
+        data.put("callId", callId);
+        data.put("callerName", callerName);
+        data.put("callType", "voice");
+        data.put("conversationId", "local_diag_test");
+
+        try {
+            KothaFirebaseMessagingService.triggerCallNotification(getContext(), data, callId);
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("callId", callId);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Local test notification error: " + e.getMessage());
+        }
+    }
 }

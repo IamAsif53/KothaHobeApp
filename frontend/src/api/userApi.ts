@@ -44,6 +44,13 @@ export async function sendTestPushApi(): Promise<{ success: boolean; result?: an
   });
 }
 
+export async function sendTestCallPushApi(): Promise<{ success: boolean; callId?: string; result?: any; message?: string; error?: string }> {
+  return apiFetch<{ success: boolean; callId?: string; result?: any; message?: string; error?: string }>('/dev/call-push-test', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export async function getPushStatusApi(): Promise<{
   success: boolean;
   firebaseReady: boolean;

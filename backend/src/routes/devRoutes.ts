@@ -36,8 +36,8 @@ router.get('/push-status', async (req: AuthenticatedRequest, res: Response): Pro
   }
 });
 
-// POST /api/dev/push-test - Send direct test push to current authenticated user
-router.post('/push-test', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// POST /api/dev/call-push-test - Send direct high-priority incoming call push to current user
+router.post('/call-push-test', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -48,25 +48,31 @@ router.post('/push-test', async (req: AuthenticatedRequest, res: Response): Prom
     if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
       res.status(400).json({
         success: false,
-        message: 'No FCM push token registered for your account yet. Open the app on your physical phone to register a token.',
+        message: 'No FCM push token registered for your account in MongoDB. Open the app on your physical phone to sync token.',
       });
       return;
     }
 
-    console.log(`[PushTest] Sending direct test notification to user ${req.user._id}...`);
-    const result = await sendPushNotification({
+    const { sendCallPushNotification } = await import('../services/notificationService');
+    const testCallId = `test_diag_call_${Date.now()}`;
+    console.log(`[PushTest] Sending incoming call test notification to user ${req.user._id} (callId=${testCallId})...`);
+
+    const result = await sendCallPushNotification({
       recipientId: req.user._id.toString(),
-      senderName: 'Kotha Hobe Test',
-      messageText: 'Push notification test successful! Your device is connected.',
-      conversationId: 'test_conversation',
+      callerId: req.user._id.toString(),
+      callerName: 'Diagnostic Test Caller',
+      callId: testCallId,
+      conversationId: 'test_diag_conversation',
+      callType: 'voice',
     });
 
     res.status(200).json({
       success: result.success,
+      callId: testCallId,
       result,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error?.message || 'Failed to send test push' });
+    res.status(500).json({ success: false, error: error?.message || 'Failed to send test call push' });
   }
 });
 

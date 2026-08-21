@@ -69,6 +69,10 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     private void handleIncomingCallPush(Map<String, String> data, String callId) {
+        triggerCallNotification(this, data, callId);
+    }
+
+    public static void triggerCallNotification(Context context, Map<String, String> data, String callId) {
         long now = System.currentTimeMillis();
         Long previousTimestamp = activeCallNotifications.get(callId);
 
@@ -91,7 +95,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         Log.d(TAG, "Showing native incoming call notification for callId: " + callId + " from: " + callerName);
 
         // Wake screen safely with short-lived WakeLock (3-second auto-release by OS)
-        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             try {
                 PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
@@ -106,7 +110,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             }
         }
 
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager == null) return;
 
         Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
@@ -137,7 +141,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         }
 
         // Full-screen / Tap Intent: Launches MainActivity
-        Intent fullScreenIntent = new Intent(this, MainActivity.class);
+        Intent fullScreenIntent = new Intent(context, MainActivity.class);
         fullScreenIntent.setAction(Intent.ACTION_MAIN);
         fullScreenIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -150,14 +154,14 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         int reqCode = Math.abs(callId.hashCode());
         PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
-            this,
+            context,
             reqCode,
             fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
         );
 
         // Accept Action Intent: Launches MainActivity with action "accept_call"
-        Intent acceptIntent = new Intent(this, MainActivity.class);
+        Intent acceptIntent = new Intent(context, MainActivity.class);
         acceptIntent.setAction(Intent.ACTION_MAIN);
         acceptIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -169,20 +173,20 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         acceptIntent.putExtra("callType", callType);
 
         PendingIntent acceptPendingIntent = PendingIntent.getActivity(
-            this,
+            context,
             reqCode + 1,
             acceptIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
         );
 
         // Decline Action Intent: Triggers BroadcastReceiver to decline without opening app UI
-        Intent declineIntent = new Intent(this, CallActionReceiver.class);
+        Intent declineIntent = new Intent(context, CallActionReceiver.class);
         declineIntent.putExtra("action", "decline_call");
         declineIntent.putExtra("callId", callId);
         declineIntent.putExtra("conversationId", conversationId);
 
         PendingIntent declinePendingIntent = PendingIntent.getBroadcast(
-            this,
+            context,
             reqCode + 2,
             declineIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
@@ -190,7 +194,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         String callTypeLabel = "video".equalsIgnoreCase(callType) ? "Video" : "Voice";
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CALL_CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CALL_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Incoming " + callTypeLabel + " Call")
             .setContentText(callerName + " is calling you...")

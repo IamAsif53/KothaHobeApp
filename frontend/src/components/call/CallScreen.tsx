@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCall } from '../../context/CallContext';
+import { getPushStatusApi, sendTestCallPushApi } from '../../api/userApi';
 import {
   Mic,
   MicOff,
@@ -12,6 +13,8 @@ import {
   ChevronUp,
   Radio,
   Wifi,
+  Bell,
+  Smartphone,
 } from 'lucide-react';
 
 export const CallScreen: React.FC = () => {
@@ -33,6 +36,15 @@ export const CallScreen: React.FC = () => {
   const [diagnosticMsg, setDiagnosticMsg] = useState<string | null>(null);
   const [showDebugHud, setShowDebugHud] = useState<boolean>(false);
   const [hudExpanded, setHudExpanded] = useState<boolean>(false);
+  const [pushStatus, setPushStatus] = useState<any>(null);
+
+  useEffect(() => {
+    if (hudExpanded) {
+      getPushStatusApi().then((res) => {
+        if (res.success) setPushStatus(res);
+      }).catch(() => {});
+    }
+  }, [hudExpanded]);
 
   if (callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
     return null;
@@ -313,6 +325,80 @@ export const CallScreen: React.FC = () => {
                 {audioStats?.remoteAudioElementStatus?.volume ?? 1}, Muted:{' '}
                 {audioStats?.remoteAudioElementStatus?.muted ? 'YES' : 'NO'})
               </span>
+            </div>
+
+            {/* FCM & Call Push Notification Telemetry */}
+            <div className="space-y-1 pt-1.5 border-t border-white/10">
+              <div className="flex items-center justify-between text-sky-400 font-bold text-[10px]">
+                <div className="flex items-center gap-1">
+                  <Bell className="w-3 h-3" />
+                  <span>CALL NOTIFICATION & FCM TELEMETRY</span>
+                </div>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Backend Firebase Admin:</span>
+                <span className={pushStatus?.firebaseReady ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                  {pushStatus ? (pushStatus.firebaseReady ? 'READY (Credentials OK)' : 'MISSING SERVICE ACCOUNT') : 'Checking...'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Your Registered FCM Tokens:</span>
+                <span className={pushStatus?.userTokenCount > 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                  {pushStatus ? `${pushStatus.userTokenCount} token(s) (${pushStatus.tokensMasked?.[0] || 'none'})` : '...'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Call Channel:</span>
+                <span className="text-emerald-300 font-mono">incoming_voice_calls_v2</span>
+              </div>
+
+              {/* Action Test Buttons inside HUD */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDiagnosticMsg('Testing Native Incoming Call UI on this phone...');
+                    try {
+                      const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+                      if (CallPlugin && typeof CallPlugin.showLocalTestCallNotification === 'function') {
+                        await CallPlugin.showLocalTestCallNotification({ callerName: 'Kotha Hobe Native Test' });
+                        setDiagnosticMsg('✅ Native Call Notification triggered!');
+                      } else {
+                        setDiagnosticMsg('⚠️ Native plugin not available (browser mode)');
+                      }
+                    } catch (e: any) {
+                      setDiagnosticMsg(`❌ Error: ${e?.message || e}`);
+                    }
+                    setTimeout(() => setDiagnosticMsg(null), 4000);
+                  }}
+                  className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[9px] font-bold py-1.5 px-2 rounded-lg border border-emerald-500/40 text-center flex items-center justify-center gap-1"
+                >
+                  <Smartphone className="w-2.5 h-2.5" />
+                  <span>Test Native Notification UI</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDiagnosticMsg('Dispatching test incoming call push via FCM...');
+                    try {
+                      const res = await sendTestCallPushApi();
+                      if (res.success) {
+                        setDiagnosticMsg('✅ FCM Call Push sent! Check lock screen.');
+                      } else {
+                        setDiagnosticMsg(`⚠️ FCM Error: ${res.message || res.error || 'Failed'}`);
+                      }
+                    } catch (e: any) {
+                      setDiagnosticMsg(`❌ Server test failed: ${e?.message || e}`);
+                    }
+                    setTimeout(() => setDiagnosticMsg(null), 4000);
+                  }}
+                  className="bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[9px] font-bold py-1.5 px-2 rounded-lg border border-sky-500/40 text-center flex items-center justify-center gap-1"
+                >
+                  <Bell className="w-2.5 h-2.5" />
+                  <span>Send Test Call Push (FCM)</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

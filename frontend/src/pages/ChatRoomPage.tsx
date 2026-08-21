@@ -516,8 +516,13 @@ export const ChatRoomPage: React.FC = () => {
     );
   };
 
-  // 1. Native Document Open (Default Reader App)
-  const handleOpenDocument = async (msg: IMessage) => {
+  // 1. Native Media Viewer
+  const handleOpenMedia = useCallback((msg: IMessage) => {
+    setActiveMediaModal(msg);
+  }, []);
+
+  // 2. Native Document Open (Default Reader App)
+  const handleOpenDocument = useCallback(async (msg: IMessage) => {
     if (!msg.attachment?.url) return;
     const fileName = msg.attachment.fileName || 'document.pdf';
     const mimeType = msg.attachment.mimeType || 'application/pdf';
@@ -531,10 +536,10 @@ export const ChatRoomPage: React.FC = () => {
         showToast(res.error || 'Could not open document');
       }
     }
-  };
+  }, []);
 
-  // 2. Native Document Download
-  const handleDownloadDocument = async (msg: IMessage) => {
+  // 3. Native Document Download
+  const handleDownloadDocument = useCallback(async (msg: IMessage) => {
     if (!msg.attachment?.url) return;
     const fileName = msg.attachment.fileName || 'document.pdf';
     const mimeType = msg.attachment.mimeType || 'application/pdf';
@@ -542,22 +547,22 @@ export const ChatRoomPage: React.FC = () => {
     showToast(`Downloading ${fileName}...`);
     const res = await downloadDocumentToDevice(msg.attachment.url, fileName, mimeType);
     showToast(res.message);
-  };
+  }, []);
 
   // React to Message
-  const handleReact = (messageId: string, emoji: string) => {
+  const handleReact = useCallback((messageId: string, emoji: string) => {
     if (!socket || !conversationId) return;
     socket.emit('message:react', { messageId, conversationId, emoji });
-  };
+  }, [socket, conversationId]);
 
   // Delete Message
-  const handleDelete = (messageId: string, deleteForEveryone: boolean) => {
+  const handleDelete = useCallback((messageId: string, deleteForEveryone: boolean) => {
     if (!socket || !conversationId) return;
     socket.emit('message:delete', { messageId, conversationId, deleteForEveryone });
-  };
+  }, [socket, conversationId]);
 
   // Reply to Message
-  const handleReply = (msg: IMessage) => {
+  const handleReply = useCallback((msg: IMessage) => {
     const isMine = msg.senderId === user?._id;
     setReplyingTo({
       messageId: msg._id,
@@ -566,18 +571,18 @@ export const ChatRoomPage: React.FC = () => {
       type: msg.type,
       fileName: msg.attachment?.fileName,
     });
-  };
+  }, [user, recipient]);
 
-  const handleTyping = () => {
+  const handleTyping = useCallback(() => {
     if (!conversationId || !recipient) return;
     startTyping(conversationId, recipient._id);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       stopTyping(conversationId, recipient._id);
     }, 2500);
-  };
+  }, [conversationId, recipient, startTyping, stopTyping]);
 
-  const handleRetryMessage = (msg: IMessage) => {
+  const handleRetryMessage = useCallback((msg: IMessage) => {
     if (!conversationId || !recipient) return;
 
     setMessages((prev) =>
@@ -597,7 +602,7 @@ export const ChatRoomPage: React.FC = () => {
       msg.attachment,
       msg.replyTo
     );
-  };
+  }, [conversationId, recipient, sendMessage]);
 
   const filteredMessages = showSearch && searchQuery.trim()
     ? messages.filter(
@@ -755,7 +760,7 @@ export const ChatRoomPage: React.FC = () => {
         ref={scrollContainerRef}
         onScroll={handleScroll}
         style={{ backgroundColor: themeConfig.bg }}
-        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200 relative"
+        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200 relative hardware-accelerated overscroll-contain"
       >
         {/* Loading Older Messages Spinner */}
         {loadingMore && (
@@ -798,9 +803,9 @@ export const ChatRoomPage: React.FC = () => {
                 <MessageBubble
                   message={msg}
                   isMe={isMine}
-                  onOpenMedia={() => setActiveMediaModal(msg)}
-                  onOpenDocument={() => handleOpenDocument(msg)}
-                  onDownloadDocument={() => handleDownloadDocument(msg)}
+                  onOpenMedia={handleOpenMedia}
+                  onOpenDocument={handleOpenDocument}
+                  onDownloadDocument={handleDownloadDocument}
                   onReply={handleReply}
                   onReact={handleReact}
                   onDelete={handleDelete}

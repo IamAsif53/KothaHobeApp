@@ -101,7 +101,7 @@ export const SearchUserPage: React.FC = () => {
           <button
             type="submit"
             disabled={isSearching || !searchInput.trim()}
-            className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md shadow-brand-500/20"
+            className="w-full bg-brand-500 hover:bg-brand-600 pressable text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-brand-500/20"
           >
             {isSearching ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -112,7 +112,7 @@ export const SearchUserPage: React.FC = () => {
         </form>
 
         {error && (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-2 mb-4">
+          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-2 mb-4 animate-fade-in">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -139,7 +139,7 @@ export const SearchUserPage: React.FC = () => {
             <button
               onClick={handleStartChat}
               disabled={isCreatingConv}
-              className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.99] text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-500/20"
+              className="w-full bg-brand-500 hover:bg-brand-600 pressable text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-brand-500/20"
             >
               {isCreatingConv ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

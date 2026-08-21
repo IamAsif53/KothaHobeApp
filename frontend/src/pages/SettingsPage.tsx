@@ -224,7 +224,7 @@ export const SettingsPage: React.FC = () => {
         <div
           onClick={() => navigate('/profile-setup')}
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/5 cursor-pointer transition-all shadow-sm"
+          className="border border-white/10 rounded-2xl p-4 flex items-center gap-4 pressable-card cursor-pointer shadow-sm"
         >
           <Avatar
             src={user?.avatarUrl}
@@ -256,7 +256,7 @@ export const SettingsPage: React.FC = () => {
           {/* Edit Profile */}
           <div
             onClick={() => navigate('/profile-setup')}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400 flex-shrink-0">
               <User className="w-5 h-5" />
@@ -271,7 +271,7 @@ export const SettingsPage: React.FC = () => {
           {/* Notifications */}
           <div
             onClick={() => setActiveModal('notifications')}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 flex-shrink-0">
               <Bell className="w-5 h-5" />
@@ -288,7 +288,7 @@ export const SettingsPage: React.FC = () => {
           {/* Privacy & Security */}
           <div
             onClick={() => setActiveModal('privacy')}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 flex-shrink-0">
               <Lock className="w-5 h-5" />
@@ -303,7 +303,7 @@ export const SettingsPage: React.FC = () => {
           {/* Blocked Accounts */}
           <div
             onClick={() => navigate('/settings/blocked')}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0">
               <ShieldAlert className="w-5 h-5" />
@@ -318,7 +318,7 @@ export const SettingsPage: React.FC = () => {
           {/* Chat Wallpaper & Theme */}
           <div
             onClick={() => setActiveModal('chatTheme')}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 flex-shrink-0">
               <Palette className="w-5 h-5" />
@@ -338,7 +338,7 @@ export const SettingsPage: React.FC = () => {
               calculateCacheSize();
               setActiveModal('storage');
             }}
-            className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 flex-shrink-0">
               <HardDrive className="w-5 h-5" />

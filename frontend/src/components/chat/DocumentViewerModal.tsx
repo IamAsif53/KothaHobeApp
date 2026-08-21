@@ -52,7 +52,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col select-none animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col select-none animate-modal-enter">
       {/* Toast Notification */}
       {statusMessage && (
         <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-1.5 animate-fade-in">
@@ -66,7 +66,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/10 text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-white/10 text-white pressable-icon"
           >
             <X className="w-5 h-5" />
           </button>
@@ -84,14 +84,14 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-md active:scale-95"
+            className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold flex items-center gap-1.5 pressable disabled:opacity-50 shadow-md"
           >
             <Download className="w-3.5 h-3.5" />
             <span>{downloading ? 'Saving...' : 'Save'}</span>
           </button>
           <button
             onClick={handleOpenNative}
-            className="p-2 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
+            className="p-2 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white pressable-icon"
             title="Open in Native App"
           >
             <ExternalLink className="w-4 h-4" />

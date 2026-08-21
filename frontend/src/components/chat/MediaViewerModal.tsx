@@ -53,7 +53,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between select-none animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between select-none animate-modal-enter">
       {/* Toast Notification */}
       {saveStatus && (
         <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-1.5 animate-fade-in">
@@ -67,7 +67,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white pressable-icon"
           >
             <X className="w-5 h-5" />
           </button>
@@ -84,28 +84,28 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleZoomIn}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white pressable-icon"
             title="Zoom In"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
           <button
             onClick={handleZoomOut}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white pressable-icon"
             title="Zoom Out"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
           <button
             onClick={handleResetZoom}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white pressable-icon"
             title="Reset Zoom"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
           <button
             onClick={handleShare}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white pressable-icon"
             title="Share"
           >
             <Share2 className="w-4 h-4" />
@@ -113,7 +113,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
           <button
             onClick={handleSave}
             disabled={downloading}
-            className="p-2 rounded-full bg-brand-500 hover:bg-brand-600 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5 text-xs font-semibold px-3 shadow-lg active:scale-95"
+            className="p-2 rounded-full bg-brand-500 hover:bg-brand-600 text-white pressable disabled:opacity-50 flex items-center gap-1.5 text-xs font-semibold px-3 shadow-lg"
             title="Save to Photos"
           >
             <Download className="w-4 h-4" />

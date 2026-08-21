@@ -23,7 +23,7 @@ export const BottomNav: React.FC = () => {
           key={path}
           to={path}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 transition-all py-1 px-4 rounded-xl ${
+            `flex flex-col items-center gap-1 transition-all py-1 px-4 rounded-xl pressable-icon ${
               isActive
                 ? 'text-brand-400 font-semibold scale-105'
                 : 'text-chat-textMuted hover:text-white'

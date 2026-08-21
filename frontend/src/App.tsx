@@ -230,7 +230,7 @@ export const AppContent: React.FC = () => {
       style={{ backgroundColor: themeConfig.bg }}
       className="h-dvh w-full flex flex-col max-w-md mx-auto relative shadow-2xl overflow-hidden border-x border-white/5 transition-colors duration-200"
     >
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div key={location.pathname} className="flex-1 overflow-hidden flex flex-col animate-page-enter hardware-accelerated">
         <Routes>
           <Route path="/" element={<SplashPage />} />
           <Route path="/login" element={<LoginPage />} />

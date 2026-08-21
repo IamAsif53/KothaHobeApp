@@ -283,7 +283,7 @@ export const ChatListPage: React.FC = () => {
           filteredConversations.map((conv) => (
             <div
               key={conv._id}
-              className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none relative group"
+              className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer select-none relative group hardware-accelerated"
             >
               {/* Click to open chat */}
               <div
@@ -331,7 +331,7 @@ export const ChatListPage: React.FC = () => {
                   e.stopPropagation();
                   setSelectedConvForAction(conv);
                 }}
-                className="p-2 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 active:scale-95 transition-all flex-shrink-0"
+                className="p-2 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 pressable-icon flex-shrink-0"
                 title="Chat Options"
               >
                 <MoreVertical className="w-4 h-4" />
@@ -344,7 +344,7 @@ export const ChatListPage: React.FC = () => {
       {/* Floating Action Button */}
       <button
         onClick={() => navigate('/search')}
-        className="fixed right-5 bottom-20 w-14 h-14 rounded-full bg-brand-500 hover:bg-brand-600 active:scale-95 text-white flex items-center justify-center shadow-xl shadow-brand-500/30 transition-all z-20"
+        className="fixed right-5 bottom-20 w-14 h-14 rounded-full bg-brand-500 hover:bg-brand-600 pressable text-white flex items-center justify-center shadow-xl shadow-brand-500/30 z-20"
         title="Start New Chat"
       >
         <UserPlus className="w-6 h-6" />

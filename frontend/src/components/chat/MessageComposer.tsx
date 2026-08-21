@@ -48,6 +48,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   const lastTypingCallRef = useRef<number>(0);
+  const sendLockRef = useRef<boolean>(false);
 
   // Auto-resize textarea based on text lines
   useEffect(() => {
@@ -87,9 +88,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  // 1. Send Text / Image / Document Message Instantly
+  // 1. Send Text / Image / Document Message Instantly (with double-tap protection)
   const handleSend = () => {
-    if (disabled) return;
+    if (disabled || sendLockRef.current) return;
+    sendLockRef.current = true;
+    setTimeout(() => {
+      sendLockRef.current = false;
+    }, 250);
 
     if (pendingFile) {
       const originalFile = pendingFile.file;
@@ -511,7 +516,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               setShowEmoji(!showEmoji);
               setShowAttachMenu(false);
             }}
-            className={`p-2 transition-colors rounded-full focus:outline-none ${
+            className={`p-2 rounded-full focus:outline-none pressable-icon ${
               showEmoji ? 'text-brand-400 bg-white/10' : 'text-chat-textMuted hover:text-brand-400'
             }`}
             title="Emoji"
@@ -526,7 +531,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               setShowAttachMenu(!showAttachMenu);
               setShowEmoji(false);
             }}
-            className={`p-2 transition-colors rounded-full focus:outline-none ${
+            className={`p-2 rounded-full focus:outline-none pressable-icon ${
               showAttachMenu ? 'text-brand-400 bg-white/10' : 'text-chat-textMuted hover:text-brand-400'
             }`}
             title="Attach Media or File"
@@ -554,7 +559,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               type="button"
               onClick={handleSend}
               disabled={disabled}
-              className="w-11 h-11 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md bg-brand-500 hover:bg-brand-600 text-white active:scale-95"
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 shadow-md bg-brand-500 hover:bg-brand-600 text-white pressable"
               title="Send"
             >
               <Send className="w-5 h-5 ml-0.5" />
@@ -564,7 +569,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               type="button"
               onClick={handleMicClick}
               disabled={disabled}
-              className="w-11 h-11 rounded-full bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white flex items-center justify-center transition-all flex-shrink-0 shadow-md active:scale-95"
+              className="w-11 h-11 rounded-full bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white flex items-center justify-center flex-shrink-0 shadow-md pressable-icon"
               title="Record Voice Message"
             >
               <Mic className="w-5 h-5" />

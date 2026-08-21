@@ -34,8 +34,13 @@ export default {
       },
       animation: {
         'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in': 'fadeIn 0.2s ease-out forwards',
-        'slide-up': 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'fade-in': 'fadeIn 0.18s ease-out forwards',
+        'slide-up': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'message-enter': 'messageEnter 0.14s ease-out forwards',
+        'page-enter': 'pageEnter 0.18s ease-out forwards',
+        'modal-enter': 'modalEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'sheet-up': 'sheetUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'shimmer': 'shimmer 1.6s infinite',
       },
       keyframes: {
         fadeIn: {
@@ -43,8 +48,28 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { transform: 'translateY(12px)', opacity: '0' },
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        messageEnter: {
+          '0%': { transform: 'translateY(5px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        pageEnter: {
+          '0%': { transform: 'translateY(6px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        modalEnter: {
+          '0%': { transform: 'scale(0.96)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        sheetUp: {
+          '0%': { transform: 'translateY(100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
         },
       },
     },

@@ -36,7 +36,7 @@ interface MessageBubbleProps {
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   message,
   isMe,
   onRetry,
@@ -135,7 +135,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1 px-3 group select-none`}
+      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1 px-3 group select-none animate-message-enter`}
       onContextMenu={(e) => {
         e.preventDefault();
         setShowMenu(true);
@@ -419,7 +419,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {isMe && message.status === 'failed' && (
         <button
           onClick={() => onRetry && onRetry(message)}
-          className="mt-1 flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+          className="mt-1 flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors pressable"
         >
           <AlertCircle className="w-3 h-3" />
           <span>Failed. Tap to retry</span>
@@ -428,3 +428,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     </div>
   );
 };
+
+export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => {
+  return (
+    prev.isMe === next.isMe &&
+    prev.message._id === next.message._id &&
+    prev.message.clientMessageId === next.message.clientMessageId &&
+    prev.message.status === next.message.status &&
+    prev.message.text === next.message.text &&
+    prev.message.reactions === next.message.reactions &&
+    prev.message.attachment?.url === next.message.attachment?.url &&
+    prev.message.attachment?.size === next.message.attachment?.size &&
+    prev.message.callDetails?.status === next.message.callDetails?.status &&
+    prev.message.callDetails?.duration === next.message.callDetails?.duration
+  );
+});

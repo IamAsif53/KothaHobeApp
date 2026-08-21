@@ -39,3 +39,50 @@
 .h-dvh {
   height: 100dvh;
 }
+
+/* Global Mobile-Native Touch Feedback Utilities */
+.pressable {
+  transition: transform 100ms cubic-bezier(0.16, 1, 0.3, 1), opacity 100ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pressable:active {
+  transform: scale(0.975);
+  opacity: 0.92;
+}
+
+.pressable-icon {
+  transition: transform 100ms cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pressable-icon:active {
+  transform: scale(0.88);
+}
+
+.pressable-card {
+  transition: background-color 100ms ease, transform 100ms ease;
+}
+.pressable-card:active {
+  background-color: rgba(255, 255, 255, 0.05);
+  transform: scale(0.995);
+}
+
+/* GPU Hardware Acceleration for smooth 60fps mobile scrolling */
+.hardware-accelerated {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Accessibility: Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

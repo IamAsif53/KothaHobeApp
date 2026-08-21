@@ -134,7 +134,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
       </div>
 
       {/* Emoji Scroll Grid */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4 hardware-accelerated overscroll-contain">
         {/* Recents */}
         {!search && recents.length > 0 && (
           <div>
@@ -147,7 +147,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
                 <button
                   key={`recent_${idx}`}
                   onClick={() => handleSelectEmoji(emoji)}
-                  className="hover:scale-125 active:scale-95 transition-transform p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                  className="pressable-icon p-1 rounded-lg hover:bg-white/5 cursor-pointer"
                 >
                   {emoji}
                 </button>
@@ -169,7 +169,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
                   <button
                     key={`${cat.id}_${idx}`}
                     onClick={() => handleSelectEmoji(emoji)}
-                    className="hover:scale-125 active:scale-95 transition-transform p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                    className="pressable-icon p-1 rounded-lg hover:bg-white/5 cursor-pointer"
                   >
                     {emoji}
                   </button>

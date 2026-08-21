@@ -49,17 +49,20 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid device tokens' };
     }
 
+    const safeBody = (messageText || 'Sent you a message').slice(0, 500);
+    const safeTitle = (senderName || 'Kotha Hobe').slice(0, 100);
+
     const messagePayload = {
       notification: {
-        title: senderName || 'Kotha Hobe',
-        body: messageText || 'Sent you a message',
+        title: safeTitle,
+        body: safeBody,
       },
       data: {
         type: 'chat_message',
         conversationId: String(conversationId || ''),
         senderId: String(senderId || ''),
         messageId: String(messageId || ''),
-        senderName: String(senderName || ''),
+        senderName: safeTitle,
       },
       android: {
         priority: 'high' as const,
@@ -160,14 +163,21 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
 
     console.log(`[CALL PUSH] Token found=YES (${tokens.length} device token(s)). Dispatching high-priority FCM payload for callId=${callId}`);
 
+    // Ensure callerAvatar is a safe short URL and never a massive base64 string (>4KB limit)
+    let safeAvatar = '';
+    if (callerAvatar && typeof callerAvatar === 'string' && !callerAvatar.startsWith('data:image') && callerAvatar.length < 250) {
+      safeAvatar = callerAvatar.trim();
+    }
+    const safeCallerName = String(callerName || 'Unknown').slice(0, 50);
+
     // High-priority Data message: Directly triggers KothaFirebaseMessagingService on all Android states
     const messagePayload = {
       data: {
         type: 'incoming_call',
         callId: String(callId),
         callerId: String(callerId),
-        callerName: String(callerName || 'Unknown'),
-        callerAvatar: String(callerAvatar || ''),
+        callerName: safeCallerName,
+        callerAvatar: safeAvatar,
         conversationId: String(conversationId || ''),
         callType: String(callType),
       },

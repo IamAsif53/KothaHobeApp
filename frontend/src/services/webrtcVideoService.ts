@@ -274,10 +274,6 @@ class WebRTCVideoService {
         this.remoteStream.addTrack(event.track);
       }
 
-      if (event.track.kind === 'audio') {
-        this.attachRemoteAudio(event.track, this.remoteStream);
-      }
-
       if (this.onRemoteTrackCallback) {
         this.onRemoteTrackCallback(event.track, this.remoteStream);
       }
@@ -465,11 +461,22 @@ class WebRTCVideoService {
    * 9. Attach Local Stream to <video> element
    */
   public attachLocalVideo(element: HTMLVideoElement | null): void {
-    if (element) {
-      element.srcObject = this.localStream;
+    if (element && this.localStream) {
+      if (element.srcObject !== this.localStream) {
+        console.log('[WebRTC-VIDEO] Setting local video element.srcObject');
+        element.srcObject = this.localStream;
+      }
       element.muted = true; // Prevent local audio feedback
-      element.playsInline = true;
-      element.play().catch(() => {});
+      element.volume = 0;
+      element.setAttribute('playsinline', 'true');
+      element.setAttribute('webkit-playsinline', 'true');
+      element.setAttribute('x5-playsinline', 'true');
+      element.setAttribute('controlslist', 'nodownload nofullscreen noremoteplayback');
+      (element as any).disablePictureInPicture = true;
+      (element as any).disableRemotePlayback = true;
+      if (element.paused) {
+        element.play().catch(() => {});
+      }
     }
   }
 
@@ -477,10 +484,20 @@ class WebRTCVideoService {
    * 10. Attach Remote Stream to <video> element
    */
   public attachRemoteVideo(element: HTMLVideoElement | null): void {
-    if (element) {
-      element.srcObject = this.remoteStream;
-      element.playsInline = true;
-      element.play().catch(() => {});
+    if (element && this.remoteStream) {
+      if (element.srcObject !== this.remoteStream) {
+        console.log('[WebRTC-VIDEO] Setting remote video element.srcObject');
+        element.srcObject = this.remoteStream;
+      }
+      element.setAttribute('playsinline', 'true');
+      element.setAttribute('webkit-playsinline', 'true');
+      element.setAttribute('x5-playsinline', 'true');
+      element.setAttribute('controlslist', 'nodownload nofullscreen noremoteplayback');
+      (element as any).disablePictureInPicture = true;
+      (element as any).disableRemotePlayback = true;
+      if (element.paused) {
+        element.play().catch(() => {});
+      }
     }
   }
 

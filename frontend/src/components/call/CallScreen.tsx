@@ -150,7 +150,10 @@ export const CallScreen: React.FC = () => {
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className={`w-full h-full object-cover transition-opacity duration-300 ${
+            controls={false}
+            disablePictureInPicture
+            disableRemotePlayback
+            className={`w-full h-full object-cover transition-opacity duration-300 pointer-events-none ${
               hasRemoteVideo ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -243,7 +246,10 @@ export const CallScreen: React.FC = () => {
               autoPlay
               playsInline
               muted
-              className={`w-full h-full object-cover ${isFrontCamera ? 'scale-x-[-1]' : ''}`}
+              controls={false}
+              disablePictureInPicture
+              disableRemotePlayback
+              className={`w-full h-full object-cover pointer-events-none ${isFrontCamera ? 'scale-x-[-1]' : ''}`}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-black/70">

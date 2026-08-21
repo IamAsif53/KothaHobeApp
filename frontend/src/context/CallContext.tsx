@@ -526,14 +526,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Attach local / remote video elements
-  const attachLocalVideo = (el: HTMLVideoElement | null) => {
+  // Attach local / remote video elements with stable callback references
+  const attachLocalVideo = useCallback((el: HTMLVideoElement | null) => {
     webrtcVideoService.attachLocalVideo(el);
-  };
+  }, []);
 
-  const attachRemoteVideo = (el: HTMLVideoElement | null) => {
+  const attachRemoteVideo = useCallback((el: HTMLVideoElement | null) => {
     webrtcVideoService.attachRemoteVideo(el);
-  };
+  }, []);
 
   // Diagnostic Test Helpers
   const testMicrophone = () => webrtcVoiceService.testLocalMicrophone();

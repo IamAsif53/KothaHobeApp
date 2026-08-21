@@ -70,6 +70,7 @@ public class CallNotificationPlugin extends Plugin {
     public void getPendingCallAction(PluginCall call) {
         if (pendingCallAction != null) {
             JSObject result = pendingCallAction;
+            result.put("hasPending", true);
             pendingCallAction = null;
             call.resolve(result);
         } else {

@@ -43,13 +43,17 @@ import java.util.List;
         @Permission(
             alias = "audio",
             strings = { Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS }
+        ),
+        @Permission(
+            alias = "camera",
+            strings = { Manifest.permission.CAMERA }
         )
     }
 )
 public class NativeMediaPlugin extends Plugin {
 
     // =========================================================================
-    // 1. Microphone Permission & Settings
+    // 1. Microphone & Camera Permission & Settings
     // =========================================================================
 
     @PluginMethod
@@ -65,7 +69,6 @@ public class NativeMediaPlugin extends Plugin {
                 getActivity(),
                 Manifest.permission.RECORD_AUDIO
             );
-            // If shouldShow is false and status is denied, it might be first time or permanently denied
             ret.put("state", "denied");
             ret.put("shouldShowRationale", shouldShow);
         }
@@ -93,6 +96,53 @@ public class NativeMediaPlugin extends Plugin {
             boolean shouldShow = ActivityCompat.shouldShowRequestPermissionRationale(
                 getActivity(),
                 Manifest.permission.RECORD_AUDIO
+            );
+            ret.put("state", "denied");
+            ret.put("shouldShowRationale", shouldShow);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void checkCameraPermission(PluginCall call) {
+        Context context = getContext();
+        int status = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA);
+        
+        JSObject ret = new JSObject();
+        if (status == PackageManager.PERMISSION_GRANTED) {
+            ret.put("state", "granted");
+        } else {
+            boolean shouldShow = ActivityCompat.shouldShowRequestPermissionRationale(
+                getActivity(),
+                Manifest.permission.CAMERA
+            );
+            ret.put("state", "denied");
+            ret.put("shouldShowRationale", shouldShow);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestCameraPermission(PluginCall call) {
+        if (getPermissionState("camera") == PermissionState.GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("state", "granted");
+            call.resolve(ret);
+            return;
+        }
+
+        requestPermissionForAlias("camera", call, "cameraPermissionCallback");
+    }
+
+    @PermissionCallback
+    private void cameraPermissionCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (getPermissionState("camera") == PermissionState.GRANTED) {
+            ret.put("state", "granted");
+        } else {
+            boolean shouldShow = ActivityCompat.shouldShowRequestPermissionRationale(
+                getActivity(),
+                Manifest.permission.CAMERA
             );
             ret.put("state", "denied");
             ret.put("shouldShowRationale", shouldShow);

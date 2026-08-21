@@ -6,6 +6,8 @@ import { getMediaUrl } from '../api/messageApi';
 export interface NativeMediaPluginInterface {
   checkAudioPermission(): Promise<{ state: 'granted' | 'denied' | 'prompt'; shouldShowRationale?: boolean }>;
   requestAudioPermission(): Promise<{ state: 'granted' | 'denied'; shouldShowRationale?: boolean }>;
+  checkCameraPermission(): Promise<{ state: 'granted' | 'denied' | 'prompt'; shouldShowRationale?: boolean }>;
+  requestCameraPermission(): Promise<{ state: 'granted' | 'denied'; shouldShowRationale?: boolean }>;
   openAppSettings(): Promise<{ success: boolean }>;
   setCallAudioMode(): Promise<{ success: boolean }>;
   resetAudioMode(): Promise<{ success: boolean }>;
@@ -80,6 +82,31 @@ export async function ensureAudioPermission(): Promise<{ granted: boolean; perma
     return { granted: false, permanentlyDenied: isPermanentlyDenied };
   } catch (err) {
     console.warn('[NativeMedia] Audio permission check error:', err);
+    return { granted: false };
+  }
+}
+
+// 1b. Camera Permissions
+export async function ensureCameraPermission(): Promise<{ granted: boolean; permanentlyDenied?: boolean }> {
+  if (!Capacitor.isNativePlatform()) {
+    return { granted: true };
+  }
+
+  try {
+    const check = await NativeMedia.checkCameraPermission();
+    if (check.state === 'granted') {
+      return { granted: true };
+    }
+
+    const req = await NativeMedia.requestCameraPermission();
+    if (req.state === 'granted') {
+      return { granted: true };
+    }
+
+    const isPermanentlyDenied = req.shouldShowRationale === false;
+    return { granted: false, permanentlyDenied: isPermanentlyDenied };
+  } catch (err) {
+    console.warn('[NativeMedia] Camera permission check error:', err);
     return { granted: false };
   }
 }

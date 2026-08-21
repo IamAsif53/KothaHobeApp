@@ -25,6 +25,7 @@ import {
   Search,
   MoreVertical,
   Phone,
+  Video,
   X,
   ChevronDown,
 } from 'lucide-react';
@@ -713,6 +714,29 @@ export const ChatRoomPage: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex items-center gap-1">
+          {/* Video Call Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (recipient && conversationId) {
+                startCall(
+                  {
+                    _id: recipient._id,
+                    displayName: recipient.displayName || recipient.username || 'User',
+                    avatarUrl: recipient.avatarUrl,
+                    username: recipient.username,
+                  },
+                  conversationId,
+                  'video'
+                );
+              }
+            }}
+            className="p-2 rounded-full text-brand-400 hover:text-brand-300 hover:bg-white/5 active:scale-95 transition-all"
+            title="Start Video Call"
+          >
+            <Video className="w-4 h-4" />
+          </button>
+
           {/* Voice Call Button */}
           <button
             type="button"
@@ -725,7 +749,8 @@ export const ChatRoomPage: React.FC = () => {
                     avatarUrl: recipient.avatarUrl,
                     username: recipient.username,
                   },
-                  conversationId
+                  conversationId,
+                  'voice'
                 );
               }
             }}

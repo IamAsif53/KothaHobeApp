@@ -77,9 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ Added release badge & in-app APK auto-updater",
-      "Enhanced real-time connection & message delivery",
-      "UI polish & stability improvements"
+      "📹 Added 1-to-1 WebRTC Video Calling with front/rear camera flip & PiP preview",
+      "✨ Dedicated video call interface with camera toggle, mute & speaker controls",
+      "📞 Full preservation and stability for high-quality Voice Calling",
+      "🔔 Android full-screen heads-up notifications with Accept / Decline for video calls",
+      "🔒 Secure WebRTC Unified Plan signaling with STUN/TURN fallback"
     ],
     mandatory: false
   };

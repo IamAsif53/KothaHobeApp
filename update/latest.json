@@ -1,13 +1,15 @@
 {
-  "versionCode": 57,
-  "versionName": "1.1.12",
+  "versionCode": 58,
+  "versionName": "1.1.13",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a7ca9dc7d22d92a53d84a9e0b258c8268066c4dbb3f8fc6d302f498bc2bc14f2",
+  "sha256": "406ce53db2d8f2367a2cfb8595b14ad6daf0a9347b12ace67ef320def49514f2",
   "releaseNotes": [
-    "Release v1.1.12 (Build 57)",
-    "✨ Added release badge & in-app APK auto-updater",
-    "Enhanced real-time connection & message delivery",
-    "UI polish & stability improvements"
+    "Release v1.1.13 (Build 58)",
+    "📹 Added 1-to-1 WebRTC Video Calling with front/rear camera flip & PiP preview",
+    "✨ Dedicated video call interface with camera toggle, mute & speaker controls",
+    "📞 Full preservation and stability for high-quality Voice Calling",
+    "🔔 Android full-screen heads-up notifications with Accept / Decline for video calls",
+    "🔒 Secure WebRTC Unified Plan signaling with STUN/TURN fallback"
   ],
   "mandatory": false
 }

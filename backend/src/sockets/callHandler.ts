@@ -248,17 +248,18 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
               sendCallCancelledPushNotification({ recipientId: receiverId, callId }).catch(() => {});
 
               // Record Missed Call message in conversation
+              const isVideoCall = currentCall.callType === 'video';
               const missedMsg = new Message({
                 conversationId,
                 senderId: userId,
                 receiverId,
-                text: '📞 Missed voice call',
+                text: isVideoCall ? '📹 Missed video call' : '📞 Missed voice call',
                 type: 'call',
                 status: 'delivered',
                 clientMessageId: `call_msg_${callId}`,
                 callDetails: {
                   callId,
-                  callType: 'voice',
+                  callType: currentCall.callType || 'voice',
                   status: 'missed',
                   duration: 0,
                   startedAt: currentCall.startedAt,
@@ -490,17 +491,18 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       socket.emit('call:rejected', { callId });
 
       // Save Declined Call event in conversation
+      const isVideoCall = call.callType === 'video';
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
         receiverId: call.receiverId,
-        text: '📞 Declined voice call',
+        text: isVideoCall ? '📹 Declined video call' : '📞 Declined voice call',
         type: 'call',
         status: 'delivered',
         clientMessageId: `call_msg_${callId}`,
         callDetails: {
           callId,
-          callType: 'voice',
+          callType: call.callType || 'voice',
           status: 'declined',
           duration: 0,
           startedAt: call.startedAt,
@@ -547,17 +549,18 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
 
       // Save Missed Call event
+      const isVideoCancel = call.callType === 'video';
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
         receiverId: call.receiverId,
-        text: '📞 Missed voice call',
+        text: isVideoCancel ? '📹 Missed video call' : '📞 Missed voice call',
         type: 'call',
         status: 'delivered',
         clientMessageId: `call_msg_${callId}`,
         callDetails: {
           callId,
-          callType: 'voice',
+          callType: call.callType || 'voice',
           status: 'cancelled',
           duration: 0,
           startedAt: call.startedAt,
@@ -609,17 +612,18 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       // Save in-chat Call Record
       const durText = formatDurationText(duration);
+      const isVideoEnd = call.callType === 'video';
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
         receiverId: call.receiverId,
-        text: `📞 Voice call (${durText})`,
+        text: isVideoEnd ? `📹 Video call (${durText})` : `📞 Voice call (${durText})`,
         type: 'call',
         status: 'delivered',
         clientMessageId: `call_msg_${callId}`,
         callDetails: {
           callId,
-          callType: 'voice',
+          callType: call.callType || 'voice',
           status: 'completed',
           duration,
           startedAt: call.startedAt,

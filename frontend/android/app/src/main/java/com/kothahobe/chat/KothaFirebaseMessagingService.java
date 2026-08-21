@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     private static final String TAG = "KothaFCMService";
-    public static final String CALL_CHANNEL_ID = "incoming_calls";
+    public static final String CALL_CHANNEL_ID = "incoming_voice_calls_v2";
 
     // Deduplication tracking: callId -> timestamp
     private static final ConcurrentHashMap<String, Long> activeCallNotifications = new ConcurrentHashMap<>();
@@ -36,30 +36,34 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(@NonNull String token) {
         super.onNewToken(token);
+        Log.d(TAG, "New FCM Token received in KothaFirebaseMessagingService");
         PushNotificationsPlugin.onNewToken(token);
     }
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         Map<String, String> data = remoteMessage.getData();
-        Log.d(TAG, "FCM payload received. Data size: " + data.size());
+        Log.d(TAG, "FCM payload received: size=" + data.size() + ", data=" + data);
 
         String type = data.get("type");
         String callId = data.get("callId");
 
         // 1. Handle Incoming Call Push
         if ("incoming_call".equals(type) && callId != null && !callId.isEmpty()) {
+            Log.d(TAG, "[NATIVE FCM] Intercepted incoming_call push for callId: " + callId);
             handleIncomingCallPush(data, callId);
             return;
         }
 
         // 2. Handle Call Cancellation / Timeout Push
         if (("call_cancelled".equals(type) || "call_ended".equals(type) || "call_timeout".equals(type)) && callId != null) {
+            Log.d(TAG, "[NATIVE FCM] Intercepted call cancellation push for callId: " + callId);
             handleCallCancelledPush(callId);
             return;
         }
 
         // 3. Delegate regular text / media chat messages to Capacitor push plugin
+        Log.d(TAG, "[NATIVE FCM] Forwarding chat push to Capacitor plugin");
         super.onMessageReceived(remoteMessage);
         PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
     }
@@ -86,12 +90,11 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "Showing native incoming call notification for callId: " + callId + " from: " + callerName);
 
-        // Wake screen safely with short-lived WakeLock (3-second timeout)
+        // Wake screen safely with short-lived WakeLock (3-second auto-release by OS)
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
-            PowerManager.WakeLock wakeLock = null;
             try {
-                wakeLock = powerManager.newWakeLock(
+                PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
                     PowerManager.FULL_WAKE_LOCK |
                     PowerManager.ACQUIRE_CAUSES_WAKEUP |
                     PowerManager.ON_AFTER_RELEASE,
@@ -99,13 +102,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
                 );
                 wakeLock.acquire(3000);
             } catch (Exception e) {
-                Log.w(TAG, "WakeLock acquisition warning: " + e.getMessage());
-            } finally {
-                if (wakeLock != null && wakeLock.isHeld()) {
-                    try {
-                        wakeLock.release();
-                    } catch (Exception ignored) {}
-                }
+                Log.w(TAG, "WakeLock acquisition notice: " + e.getMessage());
             }
         }
 
@@ -130,9 +127,11 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                 .build();
             channel.setSound(ringtoneUri, audioAttributes);
             channel.setBypassDnd(true);
+            channel.enableLights(true);
 
             notificationManager.createNotificationChannel(channel);
         }

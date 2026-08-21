@@ -80,7 +80,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             lights: true,
           });
           await PushNotifications.createChannel({
-            id: 'incoming_calls',
+            id: 'incoming_voice_calls_v2',
             name: 'Incoming Voice Calls',
             description: 'Incoming live calls from Kotha Hobe',
             importance: 5,
@@ -89,7 +89,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             vibration: true,
             lights: true,
           });
-          console.log('[Push] Notification channels "chat_messages" and "incoming_calls" created with HIGH importance');
+          console.log('[Push] Notification channels "chat_messages" and "incoming_voice_calls_v2" created');
         } catch (e) {
           console.warn('[Push] Channel creation note:', e);
         }
@@ -110,7 +110,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (!isMounted) return;
             const tokenVal = fcmToken.value;
             const fingerprint = tokenVal.length > 8 ? `...${tokenVal.slice(-6)}` : tokenVal;
-            console.log(`[Push] FCM Registration Successful! Token fingerprint: ${fingerprint}`);
+            console.log(`[Push] FCM Registration Listener Success: fingerprint ${fingerprint}`);
             setPushToken(tokenVal);
 
             try {
@@ -128,7 +128,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
 
           const pushRecvListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-            console.log('[Push] Push received:', notification.title, notification.body, notification.data);
+            console.log('[Push] Push received in foreground:', notification.title, notification.data);
             const data = notification.data;
             if (data && (data.type === 'incoming_call' || data.callId)) {
               window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: data }));
@@ -138,6 +138,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // 4. Register with FCM via Google Play Services
           console.log('[Push] Calling PushNotifications.register()...');
           await PushNotifications.register();
+
+          // 5. Direct Token Retrieval Fallback (guarantees token is sent to backend even if registration event already fired previously)
+          try {
+            const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+            if (CallPlugin && typeof CallPlugin.getFcmToken === 'function') {
+              const tokenRes = await CallPlugin.getFcmToken();
+              if (tokenRes && tokenRes.token) {
+                console.log('[Push] Direct FCM Token sync on startup:', tokenRes.token.slice(-6));
+                setPushToken(tokenRes.token);
+                registerPushTokenApi(tokenRes.token).catch((e) => console.warn('[Push] Direct sync error:', e));
+              }
+            }
+          } catch (e) {
+            console.warn('[Push] Direct token fetch fallback notice:', e);
+          }
 
           return () => {
             regListener.remove();

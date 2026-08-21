@@ -77,4 +77,22 @@ public class CallNotificationPlugin extends Plugin {
         }
         call.resolve();
     }
+
+    @PluginMethod
+    public void getFcmToken(PluginCall call) {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+            .addOnCompleteListener(task -> {
+                if (task.isSuccessful() && task.getResult() != null) {
+                    String token = task.getResult();
+                    Log.d(TAG, "Direct FCM Token retrieved: length=" + token.length());
+                    JSObject ret = new JSObject();
+                    ret.put("token", token);
+                    call.resolve(ret);
+                } else {
+                    String err = task.getException() != null ? task.getException().getMessage() : "Unknown error";
+                    Log.w(TAG, "Direct FCM Token error: " + err);
+                    call.reject(err);
+                }
+            });
+    }
 }

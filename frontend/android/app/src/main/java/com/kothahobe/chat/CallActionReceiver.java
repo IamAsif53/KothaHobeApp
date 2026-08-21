@@ -29,7 +29,7 @@ public class CallActionReceiver extends BroadcastReceiver {
         // 1. Cancel Native Notification immediately & remove from active calls
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager != null) {
-            notificationManager.cancel(callId.hashCode());
+            notificationManager.cancel(Math.abs(callId.hashCode()));
         }
         KothaFirebaseMessagingService.removeActiveCall(callId);
 

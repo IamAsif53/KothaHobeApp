@@ -144,15 +144,21 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       return { success: false, attempted: 0, successCount: 0, failureCount: 0, message: 'Firebase Admin not configured' };
     }
 
+    console.log(`[CALL PUSH] Initiating call push. callId=${callId}, recipient=${recipientId}, caller=${callerName} (${callerId})`);
+
     const recipient = await User.findById(recipientId).select('fcmTokens displayName');
     if (!recipient || !recipient.fcmTokens || recipient.fcmTokens.length === 0) {
+      console.warn(`[CALL PUSH] Token found=NO for recipient ${recipientId}`);
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No registered tokens' };
     }
 
     const tokens = recipient.fcmTokens.filter((t) => typeof t === 'string' && t.trim().length > 10);
     if (tokens.length === 0) {
+      console.warn(`[CALL PUSH] Token found=NO (all empty/invalid) for recipient ${recipientId}`);
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid tokens' };
     }
+
+    console.log(`[CALL PUSH] Token found=YES (${tokens.length} device token(s)). Dispatching high-priority FCM payload for callId=${callId}`);
 
     // High-priority Data message: Directly triggers KothaFirebaseMessagingService on all Android states
     const messagePayload = {
@@ -172,9 +178,32 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       tokens,
     };
 
-    console.log(`[FCM] Dispatching high-priority incoming call push to ${tokens.length} device(s) for call ${callId}`);
     const response = await admin.messaging().sendEachForMulticast(messagePayload);
-    console.log(`[FCM] Call push result: ${response.successCount} succeeded, ${response.failureCount} failed.`);
+    console.log(`[CALL PUSH] FCM send result for callId=${callId}: successCount=${response.successCount}, failureCount=${response.failureCount}`);
+
+    // Automatically remove stale or unregistered tokens
+    if (response.failureCount > 0) {
+      const tokensToRemove: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const error = resp.error;
+          console.warn(`[CALL PUSH] FCM delivery failure on token ${idx}:`, error?.code, error?.message);
+          if (
+            error?.code === 'messaging/invalid-registration-token' ||
+            error?.code === 'messaging/registration-token-not-registered'
+          ) {
+            tokensToRemove.push(tokens[idx]);
+          }
+        }
+      });
+
+      if (tokensToRemove.length > 0) {
+        console.log(`[CALL PUSH] Pruning ${tokensToRemove.length} invalid token(s)...`);
+        await User.findByIdAndUpdate(recipientId, {
+          $pull: { fcmTokens: { $in: tokensToRemove } },
+        });
+      }
+    }
 
     return {
       success: response.successCount > 0,
@@ -183,7 +212,7 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
       failureCount: response.failureCount,
     };
   } catch (error: any) {
-    console.error('[FCM] Call push dispatch error:', error?.message || error);
+    console.error(`[CALL PUSH] FCM send error for callId=${payload?.callId}:`, error?.message || error);
     return {
       success: false,
       attempted: 0,
@@ -223,8 +252,9 @@ export const sendCallCancelledPushNotification = async (payload: { recipientId: 
       tokens,
     };
 
-    console.log(`[FCM] Dispatching call cancellation push for call ${callId} to ${tokens.length} device(s)`);
+    console.log(`[CALL CANCEL PUSH] Dispatching call cancellation for callId=${callId} to ${tokens.length} token(s)`);
     const response = await admin.messaging().sendEachForMulticast(messagePayload);
+    console.log(`[CALL CANCEL PUSH] Result for callId=${callId}: successCount=${response.successCount}, failureCount=${response.failureCount}`);
     return {
       success: response.successCount > 0,
       attempted: tokens.length,

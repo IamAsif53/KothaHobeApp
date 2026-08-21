@@ -331,26 +331,32 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 3. Setup WebRTC PeerConnection
       setupWebRTC(current.callId);
 
-      // 4. Ensure socket is connected before emitting call:accept
+      // 4. Ensure socket is ready & connected before emitting call:accept
       let activeSocket = socketRef.current || socket;
-      if (activeSocket && !activeSocket.connected) {
-        console.log('[CallContext] Waiting for socket connection before emitting call:accept...');
+      if (!activeSocket || !activeSocket.connected) {
+        console.log('[CallContext] Waiting for socket initialization and connection before emitting call:accept...');
         await new Promise<void>((resolve) => {
-          if (activeSocket.connected) return resolve();
-          const timer = setTimeout(() => resolve(), 4000);
-          activeSocket.once('connect', () => {
-            clearTimeout(timer);
-            resolve();
-          });
+          const startTime = Date.now();
+          const checkTimer = setInterval(() => {
+            const cur = socketRef.current;
+            if (cur && cur.connected) {
+              clearInterval(checkTimer);
+              resolve();
+            } else if (Date.now() - startTime > 6000) {
+              clearInterval(checkTimer);
+              resolve();
+            }
+          }, 100);
         });
+        activeSocket = socketRef.current || socket;
       }
 
       if (activeSocket && activeSocket.connected) {
-        console.log('[CallContext] Emitting call:accept for callId:', current.callId);
+        console.log('[CallContext] Socket ready! Emitting call:accept for callId:', current.callId);
         activeSocket.emit('call:accept', { callId: current.callId });
-      } else {
-        console.warn('[CallContext] Socket still not connected. Emitting call:accept on connect...');
-        activeSocket?.once('connect', () => {
+      } else if (activeSocket) {
+        console.warn('[CallContext] Socket still connecting. Queuing call:accept on connect...');
+        activeSocket.once('connect', () => {
           activeSocket.emit('call:accept', { callId: current.callId });
         });
       }
@@ -697,6 +703,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     window.addEventListener('kothahobe:incoming_call', handleCustomIncomingCall);
     window.addEventListener('kothahobe:accept_call', handleCustomAcceptCall);
+
+    // Direct check of native pending call action on mount (ensures zero lost events on cold-start)
+    try {
+      const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
+      if (CallPlugin && typeof CallPlugin.getPendingCallAction === 'function') {
+        CallPlugin.getPendingCallAction().then((pending: any) => {
+          if (pending && pending.callId) {
+            console.log('[CallContext] Found native pendingCallAction on mount:', pending);
+            if (pending.action === 'accept_call') {
+              handleCustomAcceptCall({ detail: pending });
+            } else {
+              handleCustomIncomingCall({ detail: pending });
+            }
+          }
+        }).catch(() => {});
+      }
+    } catch (e) {}
 
     // Proactively check if there's a live incoming call when app opens or reconnects
     if (callStateRef.current === 'IDLE') {

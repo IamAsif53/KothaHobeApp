@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     private static final String TAG = "KothaFCMService";
-    public static final String CALL_CHANNEL_ID = "incoming_voice_calls_v2";
+    public static final String CALL_CHANNEL_ID = "incoming_calls_ringtone_v3";
 
     // Deduplication tracking: callId -> timestamp
     private static final ConcurrentHashMap<String, Long> activeCallNotifications = new ConcurrentHashMap<>();
@@ -223,7 +223,9 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             .addAction(R.drawable.ic_call_decline, "Decline", declinePendingIntent)
             .addAction(R.drawable.ic_call_accept, "Accept", acceptPendingIntent);
 
-        notificationManager.notify(reqCode, builder.build());
+        Notification notification = builder.build();
+        notification.flags |= Notification.FLAG_INSISTENT;
+        notificationManager.notify(reqCode, notification);
     }
 
     private void handleCallCancelledPush(String callId) {

@@ -94,17 +94,18 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "Showing native incoming call notification for callId: " + callId + " from: " + callerName);
 
-        // Wake screen safely with short-lived WakeLock (3-second auto-release by OS)
+        // Wake screen safely with short-lived WakeLock (5-second auto-release by OS)
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             try {
                 PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
-                    PowerManager.FULL_WAKE_LOCK |
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK |
                     PowerManager.ACQUIRE_CAUSES_WAKEUP |
                     PowerManager.ON_AFTER_RELEASE,
                     "kothahobe:incoming_call_wake"
                 );
-                wakeLock.acquire(3000);
+                wakeLock.setReferenceCounted(false);
+                wakeLock.acquire(5000);
             } catch (Exception e) {
                 Log.w(TAG, "WakeLock acquisition notice: " + e.getMessage());
             }
@@ -114,7 +115,10 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         if (notificationManager == null) return;
 
         Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-        long[] vibrationPattern = new long[]{0, 1000, 1000, 1000, 1000, 1000};
+        if (ringtoneUri == null) {
+            ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        }
+        long[] vibrationPattern = new long[]{0, 1000, 500, 1000, 500, 1000, 500, 1000};
 
         // Create high-priority incoming calls notification channel for Android 8.0+ (API 26+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -123,7 +127,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
                 "Incoming Calls",
                 NotificationManager.IMPORTANCE_HIGH
             );
-            channel.setDescription("Full-screen notifications and ringtone for incoming voice and video calls");
+            channel.setDescription("Full-screen notifications, sound and vibration for incoming voice and video calls");
             channel.enableVibration(true);
             channel.setVibrationPattern(vibrationPattern);
             channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -144,7 +148,12 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
         fullScreenIntent.setAction(Intent.ACTION_MAIN);
         fullScreenIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        fullScreenIntent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK |
+            Intent.FLAG_ACTIVITY_CLEAR_TOP |
+            Intent.FLAG_ACTIVITY_SINGLE_TOP |
+            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        );
         fullScreenIntent.putExtra("action", "incoming_call");
         fullScreenIntent.putExtra("callId", callId);
         fullScreenIntent.putExtra("callerName", callerName);

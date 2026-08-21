@@ -1,5 +1,7 @@
 package com.kothahobe.chat;
 
+import android.app.KeyguardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,17 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CallNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Turn screen on and show when locked for incoming calls
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-        } else {
-            getWindow().addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-            );
-        }
+        unlockAndTurnScreenOn();
 
         // Enable instant WebRTC audio/media streaming without requiring manual touch unlock
         if (getBridge() != null && getBridge().getWebView() != null) {
@@ -43,7 +35,32 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        unlockAndTurnScreenOn();
         CallNotificationPlugin.handleIncomingIntent(intent);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        unlockAndTurnScreenOn();
+    }
+
+    private void unlockAndTurnScreenOn() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+            KeyguardManager keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (keyguardManager != null) {
+                keyguardManager.requestDismissKeyguard(this, null);
+            }
+        } else {
+            getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            );
+        }
     }
 }
 

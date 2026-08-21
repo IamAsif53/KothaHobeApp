@@ -25,7 +25,7 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react';
-import { sendTestPushApi, sendTestCallPushApi, getPushStatusApi, registerPushTokenApi } from '../api/userApi';
+import { registerPushTokenApi } from '../api/userApi';
 import {
   checkLatestRelease,
   getCurrentAppVersion,
@@ -548,115 +548,7 @@ export const SettingsPage: React.FC = () => {
                 </button>
               </div>
 
-              <div
-                style={{ backgroundColor: themeConfig.card }}
-                className="p-3 rounded-xl border border-dashed border-white/10 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-white">Call & Push Diagnostic Suite</div>
-                  <span className="text-[10px] text-emerald-400 font-mono">v1.1.4</span>
-                </div>
-                <p className="text-[11px] text-chat-textMuted leading-relaxed">
-                  Test native incoming call full-screen alerts, ringtone, vibration, and FCM server delivery on this phone.
-                </p>
-
-                <div className="grid grid-cols-1 gap-2 pt-1">
-                  {/* Test 1: Native Local Call Notification */}
-                  <button
-                    onClick={async () => {
-                      showToast('Triggering Native Incoming Call UI...');
-                      try {
-                        const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-                        if (CallPlugin && typeof CallPlugin.showLocalTestCallNotification === 'function') {
-                          await CallPlugin.showLocalTestCallNotification({ callerName: 'Kotha Hobe Diagnostic Test' });
-                          showToast('✅ Native Incoming Call Notification triggered!');
-                        } else {
-                          showToast('⚠️ Native plugin not available (browser mode)');
-                        }
-                      } catch (e: any) {
-                        showToast(`❌ Error: ${e?.message || e}`);
-                      }
-                    }}
-                    className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-emerald-500/30"
-                  >
-                    <span>🔔 1. Test Native Call UI on this Phone</span>
-                  </button>
-
-                  {/* Test 2: Remote High-Priority FCM Call Push */}
-                  <button
-                    onClick={async () => {
-                      showToast('Sending live FCM incoming call push...');
-                      try {
-                        const res = await sendTestCallPushApi();
-                        if (res.success) {
-                          showToast('✅ High-priority FCM Call Push sent! Check lock screen.');
-                        } else {
-                          showToast(`⚠️ Error: ${res.message || res.error || 'Check server credentials'}`);
-                        }
-                      } catch (e: any) {
-                        showToast('❌ Failed to reach push server');
-                      }
-                    }}
-                    className="w-full bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-sky-500/30"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>🚀 2. Send Test Incoming Call Push (FCM)</span>
-                  </button>
-
-                  {/* Test 3: Check Server FCM Status */}
-                  <button
-                    onClick={async () => {
-                      showToast('Checking FCM Status...');
-                      try {
-                        const res = await getPushStatusApi();
-                        if (res.success) {
-                          const readyStr = res.firebaseReady ? 'Firebase Admin OK' : 'MISSING SERVICE ACCOUNT';
-                          showToast(`📊 ${readyStr} | ${res.userTokenCount} token(s) registered`);
-                        } else {
-                          showToast('⚠️ Could not fetch status');
-                        }
-                      } catch (e: any) {
-                        showToast('❌ Status check failed');
-                      }
-                    }}
-                    className="w-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-purple-500/30"
-                  >
-                    <span>📋 3. Check FCM Tokens & Server Status</span>
-                  </button>
-
-                  {/* Test 4: Force Re-Register FCM Token */}
-                  <button
-                    onClick={async () => {
-                      showToast('Fetching fresh device token from Firebase...');
-                      try {
-                        const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-                        if (CallPlugin && typeof CallPlugin.getFcmToken === 'function') {
-                          const tokenRes = await CallPlugin.getFcmToken();
-                          if (tokenRes && tokenRes.token) {
-                            const regRes = await registerPushTokenApi(tokenRes.token);
-                            if (regRes.success) {
-                              showToast(`✅ Token registered in DB! (...${tokenRes.token.slice(-6)})`);
-                            } else {
-                              showToast(`⚠️ Server registration error: ${regRes.message}`);
-                            }
-                          } else {
-                            showToast('⚠️ Could not get device FCM token');
-                          }
-                        } else {
-                          showToast('⚠️ Native plugin not available (browser mode)');
-                        }
-                      } catch (e: any) {
-                        showToast(`❌ Sync failed: ${e?.message || e}`);
-                      }
-                    }}
-                    className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-amber-500/30"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>🔄 4. Force Re-Register My Phone FCM Token</span>
-                  </button>
-                </div>
               </div>
-            </div>
 
             <button
               onClick={() => setActiveModal(null)}

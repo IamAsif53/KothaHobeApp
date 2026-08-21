@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMessages } from '../controllers/messageController';
+import { getMessages, markMessageDelivered } from '../controllers/messageController';
 import { uploadMedia, uploadMiddleware, streamMedia } from '../controllers/mediaController';
 import { authenticateToken } from '../middleware/authMiddleware';
 
@@ -13,5 +13,6 @@ router.use(authenticateToken);
 
 router.get('/:conversationId/messages', getMessages);
 router.post('/upload', uploadMiddleware.single('file'), uploadMedia);
+router.post('/delivered', markMessageDelivered);
 
 export default router;

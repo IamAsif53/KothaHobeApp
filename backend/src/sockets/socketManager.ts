@@ -55,7 +55,7 @@ export function setupSocketIO(io: SocketIOServer): void {
     // Join personal user room for private messages
     socket.join(`user:${userId}`);
 
-    // Update user online status
+    // Update user online status & mark all pending messages sent to this user as DELIVERED
     try {
       await User.findByIdAndUpdate(userId, {
         isOnline: true,
@@ -63,9 +63,59 @@ export function setupSocketIO(io: SocketIOServer): void {
       });
 
       socket.broadcast.emit('user:online', { userId, isOnline: true });
+
+      // Find all pending 'sent' messages where this connected user is the recipient
+      const pendingMessages = await Message.find({
+        receiverId: userId,
+        status: 'sent',
+      }).select('_id senderId conversationId clientMessageId');
+
+      if (pendingMessages.length > 0) {
+        const now = new Date();
+        await Message.updateMany(
+          { receiverId: userId, status: 'sent' },
+          { $set: { status: 'delivered', deliveredAt: now } }
+        );
+
+        pendingMessages.forEach((m) => {
+          io.to(`user:${m.senderId}`).emit('message:delivered', {
+            _id: m._id,
+            clientMessageId: m.clientMessageId,
+            conversationId: m.conversationId,
+            deliveredAt: now,
+          });
+        });
+      }
     } catch (err) {
-      console.error('[Socket] Failed to update online status:', err);
+      console.error('[Socket] Failed to update online/delivery status on connect:', err);
     }
+
+    // Recipient Client Acknowledges Message Delivery
+    socket.on('message:delivered', async (data: { messageId?: string; clientMessageId?: string; conversationId?: string }) => {
+      try {
+        const query: any = { receiverId: userId, status: 'sent' };
+        if (data.messageId) query._id = data.messageId;
+        else if (data.clientMessageId) query.clientMessageId = data.clientMessageId;
+
+        const now = new Date();
+        const updated = await Message.findOneAndUpdate(
+          query,
+          { status: 'delivered', deliveredAt: now },
+          { new: true }
+        );
+
+        if (updated) {
+          io.to(`user:${updated.senderId}`).emit('message:delivered', {
+            _id: updated._id,
+            clientMessageId: updated.clientMessageId,
+            conversationId: updated.conversationId,
+            deliveredAt: now,
+          });
+        }
+      } catch (e) {
+        console.warn('[Socket] message:delivered acknowledge error:', e);
+      }
+    });
 
     // Join / Leave conversation rooms
     socket.on('conversation:join', (conversationId: string) => {
@@ -177,24 +227,48 @@ export function setupSocketIO(io: SocketIOServer): void {
           // 3. Dispatch FCM Push Notification (works when app is closed / screen is locked)
           User.findById(userId)
             .select('displayName username')
-            .then((senderUser) => {
+            .then(async (senderUser) => {
               let notifBody = text.trim();
               if (type === 'image') notifBody = '📷 Photo';
               else if (type === 'audio') notifBody = '🎤 Voice message';
               else if (type === 'document') notifBody = `📄 ${attachment?.fileName || 'Document'}`;
 
-              sendPushNotification({
+              const pushRes = await sendPushNotification({
                 recipientId: receiverId,
                 senderId: userId,
                 messageId: message._id.toString(),
                 senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
                 messageText: notifBody,
                 conversationId,
-              }).catch((err) => console.warn('[Push] Dispatch notice:', err));
-            })
-            .catch(() => {});
+              });
 
-          // 4. If delivered instantly, inform sender
+              // When push notification is accepted by Google FCM for delivery to recipient's device:
+              if (pushRes && pushRes.success && pushRes.successCount > 0) {
+                const now = new Date();
+                const updatedMsg = await Message.findOneAndUpdate(
+                  { _id: message._id, status: 'sent' },
+                  { status: 'delivered', deliveredAt: now },
+                  { new: true }
+                );
+
+                if (updatedMsg) {
+                  await Conversation.updateOne(
+                    { _id: conversationId, 'lastMessage.createdAt': message.createdAt },
+                    { $set: { 'lastMessage.status': 'delivered' } }
+                  );
+
+                  io.to(`user:${userId}`).emit('message:delivered', {
+                    _id: updatedMsg._id,
+                    clientMessageId: updatedMsg.clientMessageId,
+                    conversationId: updatedMsg.conversationId,
+                    deliveredAt: now,
+                  });
+                }
+              }
+            })
+            .catch((err) => console.warn('[Push] Dispatch notice:', err));
+
+          // 4. If delivered instantly via socket, inform sender
           if (message.status === 'delivered') {
             socket.emit('message:delivered', {
               _id: message._id,

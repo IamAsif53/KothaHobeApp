@@ -60,3 +60,33 @@ export const getMessages = async (
     res.status(500).json({ success: false, message: 'Failed to retrieve message history' });
   }
 };
+
+export const markMessageDelivered = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messageId } = req.body;
+    if (!messageId) {
+      res.status(400).json({ success: false, message: 'Missing messageId' });
+      return;
+    }
+
+    const now = new Date();
+    const updated = await Message.findOneAndUpdate(
+      { _id: messageId, receiverId: req.user._id, status: 'sent' },
+      { status: 'delivered', deliveredAt: now },
+      { new: true }
+    );
+
+    res.status(200).json({ success: true, message: updated ? 'Marked delivered' : 'Already delivered/read' });
+  } catch (error) {
+    console.error('[MessageController] markDelivered error:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark message delivered' });
+  }
+};

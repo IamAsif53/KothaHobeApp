@@ -340,7 +340,32 @@ export const ChatRoomPage: React.FC = () => {
       setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, status: 'read', readAt } : m)));
     };
 
-    // 6. Typing Indicators
+    // 6. Delivered Receipt
+    const handleMessageDelivered = ({
+      _id,
+      clientMessageId,
+      conversationId: msgConvId,
+      deliveredAt,
+    }: {
+      _id?: string;
+      clientMessageId?: string;
+      conversationId?: string;
+      deliveredAt?: string;
+    }) => {
+      if (msgConvId && msgConvId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if ((_id && m._id === _id) || (clientMessageId && m.clientMessageId === clientMessageId)) {
+            if (m.status !== 'read') {
+              return { ...m, status: 'delivered', deliveredAt };
+            }
+          }
+          return m;
+        })
+      );
+    };
+
+    // 7. Typing Indicators
     const handleTypingStart = ({ userId }: { userId: string }) => {
       if (recipient && userId === recipient._id) setIsTyping(true);
     };
@@ -349,7 +374,7 @@ export const ChatRoomPage: React.FC = () => {
       if (recipient && userId === recipient._id) setIsTyping(false);
     };
 
-    // 7. Presence
+    // 8. Presence
     const handleUserOnline = ({ userId }: { userId: string }) => {
       if (recipient && userId === recipient._id) {
         setRecipient((prev) => (prev ? { ...prev, isOnline: true } : null));
@@ -367,6 +392,7 @@ export const ChatRoomPage: React.FC = () => {
     socket.on('message:reaction_updated', handleReactionUpdated);
     socket.on('message:deleted', handleMessageDeleted);
     socket.on('message:read', handleMessageRead);
+    socket.on('message:delivered', handleMessageDelivered);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
     socket.on('user:online', handleUserOnline);
@@ -378,6 +404,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('message:reaction_updated', handleReactionUpdated);
       socket.off('message:deleted', handleMessageDeleted);
       socket.off('message:read', handleMessageRead);
+      socket.off('message:delivered', handleMessageDelivered);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
       socket.off('user:online', handleUserOnline);

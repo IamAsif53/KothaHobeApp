@@ -124,13 +124,36 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
+    const handleMessageDelivered = (data: { conversationId: string; deliveredAt?: string }) => {
+      setConversations((prev) => {
+        const index = prev.findIndex((c) => c._id === data.conversationId);
+        if (index > -1) {
+          const updated = [...prev];
+          if (updated[index].lastMessage && updated[index].lastMessage!.status !== 'read') {
+            updated[index] = {
+              ...updated[index],
+              lastMessage: {
+                ...updated[index].lastMessage!,
+                status: 'delivered',
+              },
+            };
+          }
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:read', handleMessageRead);
+    socket.on('message:delivered', handleMessageDelivered);
     socket.on('conversation:update', () => loadConversations(true));
 
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:read', handleMessageRead);
+      socket.off('message:delivered', handleMessageDelivered);
       socket.off('conversation:update');
     };
   }, [socket]);

@@ -90,7 +90,7 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
           status: 'connected',
           startedAt,
           activeParticipants: [userId],
-          participantsHistory: [{ userId, joinedAt: startedAt }],
+          participantsHistory: [{ user: userId as any, joinedAt: startedAt }],
         });
         await newCall.save();
 
@@ -225,7 +225,7 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
         { callId },
         {
           $addToSet: { activeParticipants: userId },
-          $push: { participantsHistory: { userId, joinedAt: new Date() } },
+          $push: { participantsHistory: { user: userId as any, joinedAt: new Date() } },
         }
       );
 
@@ -314,7 +314,7 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
           $pull: { activeParticipants: userId },
           $set: { 'participantsHistory.$[elem].leftAt': new Date() },
         },
-        { arrayFilters: [{ 'elem.userId': userId, 'elem.leftAt': { $exists: false } }] }
+        { arrayFilters: [{ 'elem.user': userId, 'elem.leftAt': { $exists: false } }] }
       );
 
       // Inform remaining participants
@@ -438,7 +438,7 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
               $pull: { activeParticipants: userId },
               $set: { 'participantsHistory.$[elem].leftAt': new Date() },
             },
-            { arrayFilters: [{ 'elem.userId': userId, 'elem.leftAt': { $exists: false } }] }
+            { arrayFilters: [{ 'elem.user': userId, 'elem.leftAt': { $exists: false } }] }
           );
 
           socket.to(`group_call:${callId}`).emit('group_call:participant_left', {

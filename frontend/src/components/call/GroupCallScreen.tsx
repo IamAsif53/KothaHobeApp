@@ -50,6 +50,18 @@ const RemotePeerTile: React.FC<{
           : 'border-slate-700/60'
       }`}
     >
+      {/* Audio Playback Element (Always active for crisp audio) */}
+      <audio
+        ref={(el) => {
+          if (el && peerState.stream && el.srcObject !== peerState.stream) {
+            el.srcObject = peerState.stream;
+            el.play().catch(() => {});
+          }
+        }}
+        autoPlay
+        playsInline
+      />
+
       {/* Video Element */}
       <video
         ref={videoRef}

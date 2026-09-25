@@ -79,6 +79,15 @@ export const createGroup = async (req: AuthenticatedRequest, res: Response): Pro
       )
     );
 
+    // Enforce minimum 2 invited members (at least 3 participants total including creator)
+    if (validMemberIds.length < 2) {
+      res.status(400).json({
+        success: false,
+        message: 'A group requires at least 2 other members to be selected.',
+      });
+      return;
+    }
+
     // Enforce 10 members maximum (creator + 9 invited)
     const totalCount = validMemberIds.length + 1;
     if (totalCount > MAX_GROUP_MEMBERS) {

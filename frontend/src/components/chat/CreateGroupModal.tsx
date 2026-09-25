@@ -3,6 +3,7 @@ import { X, Search, Users, Check, Loader2, Camera } from 'lucide-react';
 import { createGroupApi } from '../../api/groupApi';
 import { searchUserApi } from '../../api/userApi';
 import { fetchConversations } from '../../api/conversationApi';
+import { useAuth } from '../../context/AuthContext';
 import { IUser } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +20,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   onGroupCreated,
 }) => {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,12 +45,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           if (res.success && res.conversations) {
             const usersMap = new Map<string, IUser>();
             res.conversations.forEach((c) => {
-              if (c.recipient && c.recipient._id) {
+              if (c.recipient && c.recipient._id && c.recipient._id !== currentUser?._id) {
                 usersMap.set(c.recipient._id, c.recipient);
               }
               if (c.participants) {
                 c.participants.forEach((p) => {
-                  if (p._id) usersMap.set(p._id, p);
+                  if (p._id && p._id !== currentUser?._id) usersMap.set(p._id, p);
                 });
               }
             });
@@ -57,7 +59,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         })
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, currentUser]);
 
   // Search user handler with debounce
   useEffect(() => {
@@ -71,7 +73,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       setIsSearching(true);
       try {
         const res = await searchUserApi(searchQuery.trim());
-        if (res.success && res.user) {
+        if (res.success && res.user && res.user._id !== currentUser?._id) {
           setSearchResults([res.user]);
         } else {
           setSearchResults([]);
@@ -84,11 +86,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, currentUser]);
 
   if (!isOpen) return null;
 
   const toggleUserSelection = (userToToggle: IUser) => {
+    if (userToToggle._id === currentUser?._id) return;
     setErrorMessage('');
     const exists = selectedUsers.some((u) => u._id === userToToggle._id);
     if (exists) {
@@ -106,6 +109,11 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     e.preventDefault();
     if (!name.trim()) {
       setErrorMessage('Please enter a group name.');
+      return;
+    }
+
+    if (selectedUsers.length < 2) {
+      setErrorMessage('Please select at least 2 other members to create a group.');
       return;
     }
 
@@ -203,7 +211,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="font-semibold text-slate-300">Invite Members</span>
               <span className="text-emerald-400 font-medium">
-                {selectedUsers.length} / 9 invited (Max 10 total)
+                {selectedUsers.length + 1} / 10 members (You + {selectedUsers.length} invited)
               </span>
             </div>
 
@@ -294,7 +302,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           {/* Create Button */}
           <button
             type="submit"
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || !name.trim() || selectedUsers.length < 2}
             className="w-full mt-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
           >
             {isSubmitting ? (
@@ -302,8 +310,10 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Creating Group...</span>
               </>
+            ) : selectedUsers.length < 2 ? (
+              <span>Select at least 2 members ({selectedUsers.length}/2)</span>
             ) : (
-              <span>Create Group</span>
+              <span>Create Group ({selectedUsers.length + 1} members)</span>
             )}
           </button>
         </form>

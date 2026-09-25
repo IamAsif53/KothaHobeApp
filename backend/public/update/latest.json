@@ -1,15 +1,15 @@
 {
-  "versionCode": 61,
-  "versionName": "1.1.16",
+  "versionCode": 62,
+  "versionName": "1.1.17",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a0558cd27f22f586cc33b7a15c79de5f7c3885ea0da310d13b32b4e05d0be4ed",
+  "sha256": "e3125e4182084ca202f394d7e767d87c9ab1616b536c8c5033701edf27e810b1",
   "releaseNotes": [
-    "Release v1.1.16 (Build 61)",
+    "Release v1.1.17 (Build 62)",
     "📝 Fix corrupted Unicode & Bengali filenames on document uploads",
-    "🔗 In-app Share to Chat modal to send images directly across conversations",
-    "📱 Polished, responsive Save & action bar in full-screen media viewer",
-    "🌐 External apps share integration via Native Share dialog",
-    "⚡ Instant reconnection on foreground resume & backend keep-alive"
+    "🚀 Instant 0ms rendering when forwarding images to chats",
+    "💬 Direct in-app Share to Chat list + native OS share integration",
+    "📱 Compact, unclipped Last Seen display in chat header",
+    "🖼️ Polished full-screen image viewer with responsive zoom, rotate & save controls"
   ],
   "mandatory": false
 }

@@ -256,9 +256,29 @@ export const ChatRoomPage: React.FC = () => {
     };
   }, [socket, conversationId]);
 
-  // Real-time Socket event listeners
+  // Real-time Socket & Window event listeners
   useEffect(() => {
     if (!socket || !conversationId) return;
+
+    // Window event for immediate optimistic rendering (e.g. from Forward modal)
+    const handleSavedEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<IMessage>;
+      const msg = customEvent.detail;
+      if (msg && msg.conversationId === conversationId) {
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === msg._id || m.clientMessageId === msg.clientMessageId)) {
+            return prev;
+          }
+          const updated = [...prev, msg];
+          persistMessages(updated);
+          return updated;
+        });
+        if (isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(false));
+        }
+      }
+    };
+    window.addEventListener('kothahobe:message_saved', handleSavedEvent);
 
     // 1. Incoming Message
     const handleNewMessage = (newMsg: IMessage) => {
@@ -410,6 +430,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('typing:stop', handleTypingStop);
       socket.off('user:online', handleUserOnline);
       socket.off('user:offline', handleUserOffline);
+      window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
     };
   }, [socket, conversationId, recipient, persistMessages, scrollToBottom]);
 
@@ -671,9 +692,9 @@ export const ChatRoomPage: React.FC = () => {
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-3 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200"
+        className="px-2.5 pt-10 pb-2.5 border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200 gap-1.5"
       >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             onClick={() => navigate('/chats')}
             className="p-1.5 -ml-1 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors flex-shrink-0"
@@ -684,7 +705,7 @@ export const ChatRoomPage: React.FC = () => {
 
           <div
             onClick={() => navigate(`/chat/${conversationId}/info`)}
-            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:opacity-90 transition-opacity"
+            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
           >
             <Avatar
               src={recipient?.avatarUrl}
@@ -693,11 +714,11 @@ export const ChatRoomPage: React.FC = () => {
               size="sm"
             />
 
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-white truncate">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <h2 className="text-sm font-semibold text-white truncate leading-tight">
                 {recipient?.displayName || recipient?.username || 'Chat'}
               </h2>
-              <p className="text-[11px] text-chat-textMuted truncate">
+              <p className="text-[11px] text-chat-textMuted truncate mt-0.5 leading-none">
                 {isTyping ? (
                   <span className="text-brand-400 font-medium animate-pulse">typing...</span>
                 ) : recipient?.isOnline ? (
@@ -713,7 +734,7 @@ export const ChatRoomPage: React.FC = () => {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           {/* Video Call Button */}
           <button
             type="button"
@@ -731,7 +752,7 @@ export const ChatRoomPage: React.FC = () => {
                 );
               }
             }}
-            className="p-2 rounded-full text-brand-400 hover:text-brand-300 hover:bg-white/5 active:scale-95 transition-all"
+            className="p-1.5 rounded-full text-brand-400 hover:text-brand-300 hover:bg-white/5 active:scale-95 transition-all"
             title="Start Video Call"
           >
             <Video className="w-4 h-4" />
@@ -754,7 +775,7 @@ export const ChatRoomPage: React.FC = () => {
                 );
               }
             }}
-            className="p-2 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-white/5 active:scale-95 transition-all"
+            className="p-1.5 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-white/5 active:scale-95 transition-all"
             title="Start Voice Call"
           >
             <Phone className="w-4 h-4" />
@@ -762,7 +783,7 @@ export const ChatRoomPage: React.FC = () => {
 
           <button
             onClick={() => setShowSearch(!showSearch)}
-            className={`p-2 rounded-full transition-colors ${
+            className={`p-1.5 rounded-full transition-colors ${
               showSearch ? 'bg-white/10 text-brand-400' : 'text-chat-textMuted hover:text-white'
             }`}
             title="Search in Chat"
@@ -772,7 +793,7 @@ export const ChatRoomPage: React.FC = () => {
 
           <button
             onClick={() => navigate(`/chat/${conversationId}/info`)}
-            className="p-2 rounded-full text-chat-textMuted hover:text-white transition-colors"
+            className="p-1.5 rounded-full text-chat-textMuted hover:text-white transition-colors"
             title="Chat Info"
           >
             <MoreVertical className="w-4 h-4" />
@@ -782,7 +803,7 @@ export const ChatRoomPage: React.FC = () => {
             <button
               type="button"
               onClick={() => reconnectNow()}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-400 text-[10px] font-medium flex-shrink-0 ml-1 transition-all"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-400 text-[10px] font-medium flex-shrink-0 ml-0.5 transition-all"
               title="Tap to reconnect immediately"
             >
               <WifiOff className={`w-3 h-3 ${isReconnecting ? 'animate-pulse' : ''}`} />

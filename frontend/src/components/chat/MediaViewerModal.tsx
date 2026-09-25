@@ -58,50 +58,50 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
         )}
 
         {/* Top Controls Bar */}
-        <header className="px-3 pt-10 pb-3 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/60 to-transparent z-10">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+        <header className="px-3 pt-10 pb-3 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/60 to-transparent z-10 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
             <button
               onClick={onClose}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex-shrink-0 transition-all"
+              className="p-1.5 sm:p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex-shrink-0 transition-all"
               title="Close"
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-semibold text-white truncate drop-shadow-md">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <h4 className="text-sm font-semibold text-white truncate drop-shadow-md leading-tight">
                 {fileName}
               </h4>
-              <span className="text-[11px] text-white/70">
+              <span className="text-[11px] text-white/70 block truncate mt-0.5">
                 {formatMessageTime(message.createdAt)}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <button
               onClick={handleZoomIn}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
+              className="p-1.5 sm:p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
               title="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
               onClick={handleZoomOut}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
+              className="p-1.5 sm:p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
               title="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
             <button
               onClick={handleRotate}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
+              className="p-1.5 sm:p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
               title="Rotate 90°"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowForwardModal(true)}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
+              className="p-1.5 sm:p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all"
               title="Share to Chat"
             >
               <Share2 className="w-4 h-4" />
@@ -109,7 +109,7 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
             <button
               onClick={handleSave}
               disabled={downloading}
-              className="p-2 rounded-full bg-brand-500 hover:bg-brand-600 active:scale-95 text-white disabled:opacity-50 transition-all flex items-center gap-1.5 text-xs font-semibold px-3 shadow-lg flex-shrink-0"
+              className="p-1.5 sm:p-2 rounded-full bg-brand-500 hover:bg-brand-600 active:scale-95 text-white disabled:opacity-50 transition-all flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 shadow-lg flex-shrink-0"
               title="Save to Device"
             >
               {downloading ? (

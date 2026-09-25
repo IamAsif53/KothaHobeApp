@@ -50,11 +50,11 @@ export function formatLastSeen(dateString?: string | Date, isOnline?: boolean): 
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0 && now.getDate() === date.getDate()) {
-    return `last seen today at ${timeStr}`;
+    return `today at ${timeStr}`;
   } else if (diffDays === 1 || (diffDays === 0 && now.getDate() !== date.getDate())) {
-    return `last seen yesterday at ${timeStr}`;
+    return `yesterday at ${timeStr}`;
   } else {
     const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    return `last seen ${dateStr} at ${timeStr}`;
+    return `${dateStr}, ${timeStr}`;
   }
 }

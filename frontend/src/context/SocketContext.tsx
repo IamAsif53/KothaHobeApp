@@ -335,15 +335,49 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       flushOutbox(newSocket);
     });
 
-    // Remove from Outbox when message is confirmed sent by server
+    // Remove from Outbox when message is confirmed sent by server and update cache
     newSocket.on('message:sent', (sentMsg: IMessage) => {
       const outbox = getStoredOutbox();
       const filtered = outbox.filter((item) => item.clientMessageId !== sentMsg.clientMessageId);
       saveOutbox(filtered);
+
+      // Instantly update local conversation cache
+      if (sentMsg.conversationId) {
+        try {
+          const cacheKey = `kotha_hobe_msgs_${sentMsg.conversationId}`;
+          const cached = localStorage.getItem(cacheKey);
+          const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
+          const updated = currentList.map((m) =>
+            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id
+              ? { ...m, ...sentMsg, status: sentMsg.status || 'sent' }
+              : m
+          );
+          if (!updated.some((m) => m._id === sentMsg._id || m.clientMessageId === sentMsg.clientMessageId)) {
+            updated.push(sentMsg);
+          }
+          localStorage.setItem(cacheKey, JSON.stringify(updated));
+        } catch {}
+      }
+
+      window.dispatchEvent(new CustomEvent('kothahobe:message_sent', { detail: sentMsg }));
     });
 
-    // Handle Local In-App Notification if user is on another screen inside app
+    // Handle incoming new message & sync to cache
     newSocket.on('message:new', async (newMsg: IMessage) => {
+      if (newMsg.conversationId) {
+        try {
+          const cacheKey = `kotha_hobe_msgs_${newMsg.conversationId}`;
+          const cached = localStorage.getItem(cacheKey);
+          const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
+          if (!currentList.some((m) => m._id === newMsg._id || m.clientMessageId === newMsg.clientMessageId)) {
+            currentList.push(newMsg);
+            localStorage.setItem(cacheKey, JSON.stringify(currentList));
+          }
+        } catch {}
+      }
+
+      window.dispatchEvent(new CustomEvent('kothahobe:message_new', { detail: newMsg }));
+
       try {
         if (activeChatRef.current === newMsg.conversationId) {
           return;

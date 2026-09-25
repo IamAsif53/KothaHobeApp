@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Send, Check, Share2, MessageSquare, ExternalLink, Loader2 } from 'lucide-react';
-import { IConversation, IAttachment } from '../../types';
+import { IConversation, IAttachment, IMessage } from '../../types';
 import { fetchConversations } from '../../api/conversationApi';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
 import { getMediaUrl } from '../../api/messageApi';
 
@@ -25,6 +26,7 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
   attachment,
   initialCaption = '',
 }) => {
+  const { user } = useAuth();
   const { sendMessage } = useSocket();
   const [conversations, setConversations] = useState<IConversation[]>(() => {
     try {
@@ -83,6 +85,56 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
       mimeType: type === 'image' ? 'image/jpeg' : 'application/octet-stream',
       size: 0,
     };
+
+    const optimisticMsg: IMessage = {
+      _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      conversationId: targetConvId,
+      senderId: user?._id || '',
+      receiverId,
+      text: caption.trim(),
+      type,
+      status: 'sent',
+      createdAt: new Date().toISOString(),
+      clientMessageId: clientMsgId,
+      attachment: finalAttachment,
+    };
+
+    // 1. Instant Cache Update for 0ms delay when user opens this chat
+    try {
+      const cacheKey = `kotha_hobe_msgs_${targetConvId}`;
+      const existing = localStorage.getItem(cacheKey);
+      const list: IMessage[] = existing ? JSON.parse(existing) : [];
+      if (!list.some((m) => m.clientMessageId === clientMsgId)) {
+        list.push(optimisticMsg);
+        localStorage.setItem(cacheKey, JSON.stringify(list));
+      }
+
+      // Update conversations list preview
+      const convsCache = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (convsCache) {
+        const convs: IConversation[] = JSON.parse(convsCache);
+        const idx = convs.findIndex((c) => c._id === targetConvId);
+        if (idx > -1) {
+          convs[idx] = {
+            ...convs[idx],
+            lastMessage: {
+              text: type === 'image' ? '📷 Photo' : type === 'document' ? `📄 ${fileName}` : caption.trim(),
+              senderId: user?._id || '',
+              createdAt: optimisticMsg.createdAt,
+              status: 'sent',
+            },
+            lastMessageAt: optimisticMsg.createdAt,
+          };
+          convs.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(convs));
+        }
+      }
+    } catch (e) {
+      console.warn('[Forward] Local cache update notice:', e);
+    }
+
+    // 2. Dispatch event for live components
+    window.dispatchEvent(new CustomEvent('kothahobe:message_saved', { detail: optimisticMsg }));
 
     try {
       sendMessage(

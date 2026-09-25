@@ -78,10 +78,10 @@ function main() {
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
       "📝 Fix corrupted Unicode & Bengali filenames on document uploads",
-      "🔗 In-app Share to Chat modal to send images directly across conversations",
-      "📱 Polished, responsive Save & action bar in full-screen media viewer",
-      "🌐 External apps share integration via Native Share dialog",
-      "⚡ Instant reconnection on foreground resume & backend keep-alive"
+      "🚀 Instant 0ms rendering when forwarding images to chats",
+      "💬 Direct in-app Share to Chat list + native OS share integration",
+      "📱 Compact, unclipped Last Seen display in chat header",
+      "🖼️ Polished full-screen image viewer with responsive zoom, rotate & save controls"
     ],
     mandatory: false
   };

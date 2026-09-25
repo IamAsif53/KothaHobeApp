@@ -15,6 +15,20 @@ export const connectDB = async (): Promise<void> => {
     });
     const maskedUri = ENV.MONGODB_URI.replace(/:([^:@]+)@/, ':****@');
     console.log(`[Database] Connected to MongoDB Atlas at: ${maskedUri}`);
+
+    // Drop legacy non-sparse unique index on participantsKey if present
+    try {
+      const collection = mongoose.connection.collection('conversations');
+      const indexes = await collection.indexes();
+      const pKeyIndex = indexes.find((idx) => idx.name === 'participantsKey_1');
+      if (pKeyIndex && !pKeyIndex.sparse) {
+        console.log('[Database] 🛠️ Dropping legacy non-sparse index participantsKey_1...');
+        await collection.dropIndex('participantsKey_1');
+        console.log('[Database] ✅ Dropped legacy participantsKey_1 index successfully.');
+      }
+    } catch (idxErr: any) {
+      console.warn('[Database] Index migration notice:', idxErr?.message);
+    }
   } catch (error) {
     console.warn('[Database] MongoDB Atlas connection error:', (error as Error).message);
     console.warn('[Database] Spawning embedded MongoDB instance fallback...');

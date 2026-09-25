@@ -76,6 +76,7 @@ const ConversationSchema: Schema = new Schema(
     participantsKey: {
       type: String,
       sparse: true,
+      unique: true,
       index: true,
     },
     groupMeta: {
@@ -104,6 +105,14 @@ const ConversationSchema: Schema = new Schema(
     timestamps: true,
   }
 );
+
+// Pre-validate hook: automatically assign unique participantsKey for group conversations
+ConversationSchema.pre<IConversation>('validate', function (next) {
+  if (this.isGroup && (!this.participantsKey || this.participantsKey.trim() === '')) {
+    this.participantsKey = `group_${this._id || new Types.ObjectId()}`;
+  }
+  next();
+});
 
 // Indexes
 ConversationSchema.index({ participants: 1 });

@@ -112,6 +112,7 @@ export const createGroup = async (req: AuthenticatedRequest, res: Response): Pro
     const newGroup = await Conversation.create({
       isGroup: true,
       participants: allParticipantIds,
+      participantsKey: `group_${new Types.ObjectId()}`,
       groupMeta: {
         name: cleanName,
         avatarUrl: typeof avatarUrl === 'string' ? avatarUrl : '',

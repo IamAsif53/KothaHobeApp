@@ -63,18 +63,24 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
   if (!isOpen) return null;
 
   const filteredConversations = conversations.filter((c) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (c.isGroup) {
+      const gName = (c.groupMeta?.name || 'Group').toLowerCase();
+      return !q || gName.includes(q);
+    }
     if (!c.recipient) return false;
     const name = (c.recipient.displayName || '').toLowerCase();
     const uname = (c.recipient.username || '').toLowerCase();
-    const q = searchQuery.toLowerCase().trim();
-    return name.includes(q) || uname.includes(q);
+    return !q || name.includes(q) || uname.includes(q);
   });
 
   const handleSendToChat = async (conv: IConversation) => {
-    if (!conv.recipient?._id || sendingConvId) return;
+    if ((!conv.isGroup && !conv.recipient?._id) || sendingConvId) return;
     const targetConvId = conv._id;
-    const receiverId = conv.recipient._id;
-    const recipientName = conv.recipient.displayName || conv.recipient.username || 'User';
+    const receiverId = conv.isGroup ? undefined : conv.recipient?._id;
+    const chatTitle = conv.isGroup
+      ? conv.groupMeta?.name || 'Group'
+      : conv.recipient?.displayName || conv.recipient?.username || 'User';
 
     setSendingConvId(targetConvId);
 
@@ -86,11 +92,22 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
       size: 0,
     };
 
+    let mySenderNickname = user?.displayName || user?.username || '';
+    if (conv.isGroup && conv.groupMeta?.nicknames && user?._id) {
+      const nicks = conv.groupMeta.nicknames;
+      const customNick =
+        typeof (nicks as any).get === 'function'
+          ? (nicks as any).get(user._id)
+          : (nicks as any)[user._id];
+      if (customNick) mySenderNickname = customNick;
+    }
+
     const optimisticMsg: IMessage = {
       _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       conversationId: targetConvId,
       senderId: user?._id || '',
       receiverId,
+      senderNickname: conv.isGroup ? mySenderNickname : undefined,
       text: caption.trim(),
       type,
       status: 'sent',
@@ -147,7 +164,7 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
       );
 
       setSentConvIds((prev) => [...prev, targetConvId]);
-      setStatusToast(`Sent to ${recipientName}`);
+      setStatusToast(`Sent to ${chatTitle}`);
 
       setTimeout(() => {
         onClose();
@@ -269,8 +286,10 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
             </div>
           ) : (
             filteredConversations.map((conv) => {
-              const recipient = conv.recipient;
-              if (!recipient) return null;
+              const chatTitle = conv.isGroup
+                ? conv.groupMeta?.name || 'Group Chat'
+                : conv.recipient?.displayName || conv.recipient?.username || 'User';
+              const avatarSrc = conv.isGroup ? conv.groupMeta?.avatarUrl : conv.recipient?.avatarUrl;
               const isSent = sentConvIds.includes(conv._id);
               const isSending = sendingConvId === conv._id;
 
@@ -286,18 +305,20 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <Avatar
-                      src={recipient.avatarUrl}
-                      name={recipient.displayName || recipient.username || 'User'}
+                      src={avatarSrc}
+                      name={chatTitle}
                       size="sm"
-                      isOnline={recipient.isOnline}
+                      isOnline={!conv.isGroup && conv.recipient?.isOnline}
                     />
                     <div className="min-w-0 flex-1">
                       <h4 className="text-xs font-semibold text-white truncate">
-                        {recipient.displayName || recipient.username || 'User'}
+                        {chatTitle}
                       </h4>
-                      {recipient.username && (
-                        <p className="text-[10px] text-chat-textMuted truncate">@{recipient.username}</p>
-                      )}
+                      {conv.isGroup ? (
+                        <p className="text-[10px] text-emerald-400 truncate">Group</p>
+                      ) : conv.recipient?.username ? (
+                        <p className="text-[10px] text-chat-textMuted truncate">@{conv.recipient.username}</p>
+                      ) : null}
                     </div>
                   </div>
 

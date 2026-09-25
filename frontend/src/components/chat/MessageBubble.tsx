@@ -24,6 +24,8 @@ import {
 interface MessageBubbleProps {
   message: IMessage;
   isMe: boolean;
+  isGroup?: boolean;
+  senderDisplayName?: string;
   onRetry?: (message: IMessage) => void;
   onOpenMedia?: (message: IMessage) => void;
   onOpenDocument?: (message: IMessage) => void;
@@ -35,9 +37,34 @@ interface MessageBubbleProps {
   onActionMenu?: (message: IMessage) => void;
 }
 
+const SENDER_COLORS = [
+  'text-emerald-400',
+  'text-sky-400',
+  'text-amber-400',
+  'text-purple-400',
+  'text-rose-400',
+  'text-indigo-400',
+  'text-teal-400',
+  'text-pink-400',
+  'text-cyan-400',
+  'text-orange-400',
+];
+
+export const getSenderColor = (senderId?: string): string => {
+  if (!senderId) return 'text-emerald-400';
+  let hash = 0;
+  for (let i = 0; i < senderId.length; i++) {
+    hash = senderId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % SENDER_COLORS.length;
+  return SENDER_COLORS[index];
+};
+
 const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   message,
   isMe,
+  isGroup = false,
+  senderDisplayName,
   onRetry,
   onOpenMedia,
   onOpenDocument,
@@ -156,10 +183,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             : 'bg-chat-bubbleIn text-chat-textPrimary rounded-tl-none border border-white/5'
         } ${message.type === 'image' ? 'p-1 pb-6' : 'px-3.5 py-2'}`}
       >
-        {/* Sender Nickname in Group */}
-        {!isMe && message.senderNickname && (
-          <p className="text-[11px] font-bold text-emerald-400 mb-1 leading-none select-none">
-            {message.senderNickname}
+        {/* Sender Name / Nickname in Group Chat */}
+        {isGroup && !isMe && (
+          <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 leading-none select-none tracking-wide`}>
+            {senderDisplayName || message.senderNickname || 'Member'}
           </p>
         )}
 
@@ -338,10 +365,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => {
   return (
     prev.isMe === next.isMe &&
+    prev.isGroup === next.isGroup &&
+    prev.senderDisplayName === next.senderDisplayName &&
     prev.message._id === next.message._id &&
     prev.message.clientMessageId === next.message.clientMessageId &&
     prev.message.status === next.message.status &&
     prev.message.text === next.message.text &&
+    prev.message.senderNickname === next.message.senderNickname &&
     prev.message.reactions === next.message.reactions &&
     prev.message.attachment?.url === next.message.attachment?.url &&
     prev.message.attachment?.size === next.message.attachment?.size &&

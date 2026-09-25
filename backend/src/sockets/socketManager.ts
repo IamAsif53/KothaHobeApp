@@ -193,7 +193,8 @@ export function setupSocketIO(io: SocketIOServer): void {
             // Check if group has a custom nickname set for sender
             let senderNickname = senderUser?.displayName || senderUser?.username || '';
             if (conversation.isGroup && conversation.groupMeta?.nicknames) {
-              const customNick = (conversation.groupMeta.nicknames as any)[userId];
+              const nicks = conversation.groupMeta.nicknames;
+              const customNick = nicks instanceof Map ? nicks.get(userId) : (nicks as any)[userId];
               if (customNick) senderNickname = customNick;
             }
 
@@ -206,7 +207,7 @@ export function setupSocketIO(io: SocketIOServer): void {
                 text: text.trim(),
                 type,
                 status: 'delivered',
-                readBy: [userId],
+                readBy: [{ user: userId as any, readAt: new Date() }],
                 clientMessageId,
                 attachment: attachment || undefined,
                 replyTo: replyTo || undefined,
@@ -486,10 +487,10 @@ export function setupSocketIO(io: SocketIOServer): void {
             {
               conversationId,
               senderId: { $ne: userId },
-              readBy: { $ne: userId },
+              'readBy.user': { $ne: userId },
             },
             {
-              $addToSet: { readBy: userId },
+              $addToSet: { readBy: { user: userId, readAt: now } },
             }
           );
 

@@ -467,6 +467,36 @@ export const ChatRoomPage: React.FC = () => {
       }
     };
 
+    // 9. Group Nickname Updated
+    const handleNicknameUpdated = ({
+      conversationId: updatedConvId,
+      userId: targetUserId,
+      nickname,
+    }: {
+      conversationId: string;
+      userId: string;
+      nickname: string | null;
+    }) => {
+      if (updatedConvId === conversationId) {
+        setConversation((prev: any) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updatedNicknames = { ...(prev.groupMeta.nicknames || {}) };
+          if (nickname) {
+            updatedNicknames[targetUserId] = nickname;
+          } else {
+            delete updatedNicknames[targetUserId];
+          }
+          return {
+            ...prev,
+            groupMeta: {
+              ...prev.groupMeta,
+              nicknames: updatedNicknames,
+            },
+          };
+        });
+      }
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:sent', handleMessageSent);
     socket.on('message:reaction_updated', handleReactionUpdated);
@@ -477,6 +507,7 @@ export const ChatRoomPage: React.FC = () => {
     socket.on('typing:stop', handleTypingStop);
     socket.on('user:online', handleUserOnline);
     socket.on('user:offline', handleUserOffline);
+    socket.on('group:nickname_updated', handleNicknameUpdated);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -489,6 +520,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('typing:stop', handleTypingStop);
       socket.off('user:online', handleUserOnline);
       socket.off('user:offline', handleUserOffline);
+      socket.off('group:nickname_updated', handleNicknameUpdated);
       window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
     };
   }, [socket, conversationId, recipient, user, persistMessages, scrollToBottom]);
@@ -521,6 +553,51 @@ export const ChatRoomPage: React.FC = () => {
     }
   };
 
+  // Resolve sender name or custom nickname for group chat messages
+  const getSenderName = useCallback(
+    (msg: IMessage): string => {
+      if (!isGroup) return '';
+      const senderId = msg.senderId;
+
+      // 1. Check custom nicknames in groupMeta
+      if (conversation?.groupMeta?.nicknames && senderId) {
+        const nicks = conversation.groupMeta.nicknames;
+        const customNick =
+          typeof (nicks as any).get === 'function'
+            ? (nicks as any).get(senderId)
+            : (nicks as any)[senderId];
+        if (customNick) return customNick;
+      }
+
+      // 2. Check senderNickname stored on message
+      if (msg.senderNickname) return msg.senderNickname;
+
+      // 3. Check group members
+      if (conversation?.groupMeta?.members && senderId) {
+        const member = conversation.groupMeta.members.find((m: any) => {
+          const uId = m.user?._id || m.user;
+          return uId?.toString() === senderId?.toString();
+        });
+        if (member?.user?.displayName) return member.user.displayName;
+        if (member?.user?.username) return member.user.username;
+      }
+
+      // 4. Check conversation participants
+      if (conversation?.participants && senderId) {
+        const p = conversation.participants.find(
+          (part: any) => (part._id || part)?.toString() === senderId?.toString()
+        );
+        if (p && typeof p === 'object') {
+          if (p.displayName) return p.displayName;
+          if (p.username) return p.username;
+        }
+      }
+
+      return 'Member';
+    },
+    [isGroup, conversation]
+  );
+
   // Send Message (Instant 0ms UI Rendering + Background Upload)
   const handleSendMessage = (
     text: string,
@@ -532,12 +609,23 @@ export const ChatRoomPage: React.FC = () => {
     if (!conversationId) return;
     if (!isGroup && !recipient) return;
 
+    let mySenderNickname = user?.displayName || user?.username || '';
+    if (isGroup && conversation?.groupMeta?.nicknames && user?._id) {
+      const nicks = conversation.groupMeta.nicknames;
+      const customNick =
+        typeof (nicks as any).get === 'function'
+          ? (nicks as any).get(user._id)
+          : (nicks as any)[user._id];
+      if (customNick) mySenderNickname = customNick;
+    }
+
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage: IMessage = {
       _id: tempId,
       conversationId,
       senderId: user?._id || '',
       receiverId: isGroup ? undefined : recipient?._id,
+      senderNickname: isGroup ? mySenderNickname : undefined,
       text: text.trim(),
       type,
       attachment,
@@ -1120,6 +1208,8 @@ export const ChatRoomPage: React.FC = () => {
                 <MessageBubble
                   message={msg}
                   isMe={isMine}
+                  isGroup={isGroup}
+                  senderDisplayName={getSenderName(msg)}
                   onOpenMedia={handleOpenMedia}
                   onOpenDocument={handleOpenDocument}
                   onDownloadDocument={handleDownloadDocument}

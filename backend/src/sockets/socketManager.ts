@@ -447,6 +447,11 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
+    // Lightweight Heartbeat / Ping Handler for mobile keep-alive
+    socket.on('heartbeat', () => {
+      socket.emit('heartbeat:ack', { timestamp: Date.now() });
+    });
+
     // Register 1-to-1 WebRTC Call Signaling Handlers
     registerCallHandlers(io, socket);
 

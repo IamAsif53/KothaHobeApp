@@ -33,7 +33,7 @@ import {
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
-  const { socket, isConnected, sendMessage, markAsRead, startTyping, stopTyping, setActiveConversationId } = useSocket();
+  const { socket, isConnected, isReconnecting, reconnectNow, sendMessage, markAsRead, startTyping, stopTyping, setActiveConversationId } = useSocket();
   const { themeConfig } = useTheme();
   const { startCall } = useCall();
   const navigate = useNavigate();
@@ -779,10 +779,15 @@ export const ChatRoomPage: React.FC = () => {
           </button>
 
           {!isConnected && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-medium flex-shrink-0 ml-1">
-              <WifiOff className="w-3 h-3" />
-              <span>Offline</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => reconnectNow()}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-400 text-[10px] font-medium flex-shrink-0 ml-1 transition-all"
+              title="Tap to reconnect immediately"
+            >
+              <WifiOff className={`w-3 h-3 ${isReconnecting ? 'animate-pulse' : ''}`} />
+              <span>{isReconnecting ? 'Connecting...' : 'Offline'}</span>
+            </button>
           )}
         </div>
       </header>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { IMessage } from '../types';
@@ -6,6 +6,7 @@ import { registerPushTokenApi } from '../api/userApi';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 
 interface OutboxItem {
   conversationId: string;
@@ -22,6 +23,7 @@ interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   isReconnecting: boolean;
+  reconnectNow: () => void;
   sendMessage: (
     conversationId: string,
     receiverId: string,
@@ -50,12 +52,47 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
+  const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
   const activeChatRef = useRef<string | null>(null);
+  const watchdogIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     activeChatRef.current = activeConversationId;
   }, [activeConversationId]);
+
+  // Fast Reconnect Trigger (Lifecycle, Network change, Watchdog, Manual)
+  const reconnectNow = useCallback(() => {
+    const currentSocket = socketRef.current;
+    console.log('[Socket] ⚡ Fast Reconnect triggered. Socket state:', currentSocket?.connected ? 'connected' : 'disconnected');
+
+    // 1. Proactively hit /api/health to immediately spin up / wake cloud backend if cold
+    const baseUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      (window.location.origin.includes('localhost') || window.location.origin.includes('file')
+        ? 'https://kotha-hobe-api.onrender.com'
+        : window.location.origin);
+
+    fetch(`${baseUrl}/api/health`, { cache: 'no-store' })
+      .then((res) => {
+        if (res.ok && socketRef.current && !socketRef.current.connected) {
+          console.log('[Socket] 💓 Health check OK. Re-triggering socket.connect()...');
+          socketRef.current.connect();
+        }
+      })
+      .catch((err) => {
+        console.warn('[Socket] Health check ping during reconnect note:', err?.message || err);
+      });
+
+    // 2. Connect socket immediately if disconnected
+    if (currentSocket) {
+      if (!currentSocket.connected) {
+        setIsReconnecting(true);
+        currentSocket.connect();
+      }
+    }
+  }, []);
 
   // Complete FCM Push Notification Lifecycle on Native Android
   useEffect(() => {
@@ -225,10 +262,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  // Socket Connection Lifecycle
   useEffect(() => {
     if (!token || !user) {
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
         setSocket(null);
         setIsConnected(false);
       }
@@ -241,6 +280,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ? 'https://kotha-hobe-api.onrender.com'
         : window.location.origin);
 
+    console.log('[Socket] Initializing Socket.IO connection to:', socketUrl);
+
     const newSocket = io(socketUrl, {
       auth: { token },
       extraHeaders: {
@@ -248,13 +289,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       },
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 4000,
+      reconnectionAttempts: Infinity, // Never stop reconnecting
+      reconnectionDelay: 500,        // Start reconnecting immediately in 500ms
+      reconnectionDelayMax: 3000,     // Cap max delay at 3s
+      randomizationFactor: 0.2,
+      timeout: 10000,
+      autoConnect: true,
     });
 
+    socketRef.current = newSocket;
+    setSocket(newSocket);
+
     newSocket.on('connect', () => {
-      console.log('[Socket] Connected with ID:', newSocket.id);
+      console.log('[Socket] ✅ Connected with ID:', newSocket.id);
       setIsConnected(true);
       setIsReconnecting(false);
 
@@ -263,8 +310,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.warn('[Socket] Disconnected:', reason);
+      console.warn('[Socket] ⚠️ Disconnected:', reason);
       setIsConnected(false);
+      if (reason === 'io server disconnect') {
+        // Server initiated disconnect; explicitly reconnect
+        newSocket.connect();
+      }
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.warn('[Socket] Connect error:', error.message);
+      setIsConnected(false);
+      setIsReconnecting(true);
     });
 
     newSocket.on('reconnect_attempt', () => {
@@ -272,6 +329,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('reconnect', () => {
+      console.log('[Socket] 🔄 Reconnected successfully!');
       setIsConnected(true);
       setIsReconnecting(false);
       flushOutbox(newSocket);
@@ -329,25 +387,124 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
-    setSocket(newSocket);
+    return () => {
+      newSocket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token, user]);
 
-    // Online Event Listener to flush immediately when internet reconnects
-    const handleOnline = () => {
-      console.log('[Network] Internet restored. Re-syncing socket...');
-      if (newSocket.connected) {
-        flushOutbox(newSocket);
-      } else {
-        newSocket.connect();
+  // App Lifecycle & Network Watcher for Instant Reconnect
+  useEffect(() => {
+    if (!token || !user) return;
+
+    // 1. Capacitor Native App State Change (Foreground Resume)
+    let capAppListener: any = null;
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener('appStateChange', (state) => {
+        console.log('[AppLifecycle] appStateChange isActive:', state.isActive);
+        if (state.isActive) {
+          reconnectNow();
+        }
+      })
+        .then((l) => {
+          capAppListener = l;
+        })
+        .catch(() => {});
+    }
+
+    // 2. Web Visibility & Focus Listeners
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[AppLifecycle] document visibility -> visible');
+        reconnectNow();
       }
     };
 
+    const handleFocus = () => {
+      console.log('[AppLifecycle] window focus event');
+      reconnectNow();
+    };
+
+    const handleOnline = () => {
+      console.log('[Network] Network online event detected');
+      reconnectNow();
+    };
+
+    const handleResume = () => {
+      console.log('[AppLifecycle] window resume event');
+      reconnectNow();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('online', handleOnline);
+    window.addEventListener('resume', handleResume);
+    window.addEventListener('pageshow', handleFocus);
 
     return () => {
+      if (capAppListener && typeof capAppListener.remove === 'function') {
+        capAppListener.remove();
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);
-      newSocket.disconnect();
+      window.removeEventListener('resume', handleResume);
+      window.removeEventListener('pageshow', handleFocus);
     };
-  }, [token, user]);
+  }, [token, user, reconnectNow]);
+
+  // Offline Watchdog Timer: When disconnected, proactively ping backend health every 3.5s
+  useEffect(() => {
+    if (!token || !user) {
+      if (watchdogIntervalRef.current) clearInterval(watchdogIntervalRef.current);
+      return;
+    }
+
+    if (!isConnected) {
+      console.log('[Watchdog] Socket is offline. Starting health recovery watchdog...');
+      watchdogIntervalRef.current = setInterval(() => {
+        if (!socketRef.current?.connected) {
+          console.log('[Watchdog] 🐕 Pinging health check to recover connection...');
+          reconnectNow();
+        }
+      }, 3500);
+    } else {
+      if (watchdogIntervalRef.current) {
+        clearInterval(watchdogIntervalRef.current);
+        watchdogIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (watchdogIntervalRef.current) {
+        clearInterval(watchdogIntervalRef.current);
+        watchdogIntervalRef.current = null;
+      }
+    };
+  }, [isConnected, token, user, reconnectNow]);
+
+  // Connected Idle Keep-Alive (Heartbeat every 25s to keep mobile NAT route alive)
+  useEffect(() => {
+    if (!isConnected || !socketRef.current) {
+      if (keepAliveIntervalRef.current) clearInterval(keepAliveIntervalRef.current);
+      return;
+    }
+
+    keepAliveIntervalRef.current = setInterval(() => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('heartbeat');
+      } else {
+        reconnectNow();
+      }
+    }, 25000);
+
+    return () => {
+      if (keepAliveIntervalRef.current) {
+        clearInterval(keepAliveIntervalRef.current);
+        keepAliveIntervalRef.current = null;
+      }
+    };
+  }, [isConnected, reconnectNow]);
 
   const sendMessage = (
     conversationId: string,
@@ -427,6 +584,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socket,
         isConnected,
         isReconnecting,
+        reconnectNow,
         sendMessage,
         flushPendingOutbox,
         markAsRead,

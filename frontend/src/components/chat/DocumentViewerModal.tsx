@@ -3,6 +3,7 @@ import { X, Download, FileText, ExternalLink, AlertCircle, Share2, Check } from 
 import { IMessage } from '../../types';
 import { getMediaUrl } from '../../api/messageApi';
 import { downloadDocumentToDevice, openDocumentInNativeApp } from '../../services/nativeMediaService';
+import { ForwardMediaModal } from './ForwardMediaModal';
 
 interface DocumentViewerModalProps {
   message: IMessage;
@@ -12,6 +13,7 @@ interface DocumentViewerModalProps {
 export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ message, onClose }) => {
   const [downloading, setDownloading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
 
   const fullUrl = getMediaUrl(message.attachment?.url || '');
   const fileName = message.attachment?.fileName || 'document.pdf';
@@ -80,7 +82,14 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowForwardModal(true)}
+            className="p-2 rounded-full hover:bg-white/10 text-white pressable-icon"
+            title="Share to Chat"
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
           <button
             onClick={handleDownload}
             disabled={downloading}
@@ -129,6 +138,19 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
           </button>
         </div>
       </div>
+
+      {/* Forward / Share to Chat Modal */}
+      {showForwardModal && (
+        <ForwardMediaModal
+          isOpen={showForwardModal}
+          onClose={() => setShowForwardModal(false)}
+          mediaUrl={message.attachment?.url || ''}
+          fileName={fileName}
+          type="document"
+          attachment={message.attachment}
+          initialCaption={message.text || ''}
+        />
+      )}
     </div>
   );
 };

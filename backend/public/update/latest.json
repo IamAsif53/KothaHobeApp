@@ -1,15 +1,15 @@
 {
-  "versionCode": 60,
-  "versionName": "1.1.15",
+  "versionCode": 61,
+  "versionName": "1.1.16",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a54146c2f7b34a7e5006e065a5266b07289b223770646082fa440189231ea2a9",
+  "sha256": "a0558cd27f22f586cc33b7a15c79de5f7c3885ea0da310d13b32b4e05d0be4ed",
   "releaseNotes": [
-    "Release v1.1.15 (Build 60)",
-    "⚡ Instant reconnection on app foreground, unlock & network resume",
-    "💓 Backend self-ping keepalive preventing cloud server from sleeping",
-    "🐕 Proactive offline watchdog & infinite socket auto-recovery engine",
-    "👆 Interactive tap-to-reconnect on offline indicator badge",
-    "📹 High-performance 1-to-1 Video & Voice Calling stability"
+    "Release v1.1.16 (Build 61)",
+    "📝 Fix corrupted Unicode & Bengali filenames on document uploads",
+    "🔗 In-app Share to Chat modal to send images directly across conversations",
+    "📱 Polished, responsive Save & action bar in full-screen media viewer",
+    "🌐 External apps share integration via Native Share dialog",
+    "⚡ Instant reconnection on foreground resume & backend keep-alive"
   ],
   "mandatory": false
 }

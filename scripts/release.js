@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "⚡ Instant reconnection on app foreground, unlock & network resume",
-      "💓 Backend self-ping keepalive preventing cloud server from sleeping",
-      "🐕 Proactive offline watchdog & infinite socket auto-recovery engine",
-      "👆 Interactive tap-to-reconnect on offline indicator badge",
-      "📹 High-performance 1-to-1 Video & Voice Calling stability"
+      "📝 Fix corrupted Unicode & Bengali filenames on document uploads",
+      "🔗 In-app Share to Chat modal to send images directly across conversations",
+      "📱 Polished, responsive Save & action bar in full-screen media viewer",
+      "🌐 External apps share integration via Native Share dialog",
+      "⚡ Instant reconnection on foreground resume & backend keep-alive"
     ],
     mandatory: false
   };

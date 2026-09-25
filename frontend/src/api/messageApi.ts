@@ -30,6 +30,7 @@ export function uploadMediaApi(
   const startTime = Date.now();
   const formData = new FormData();
   formData.append('file', file, fileName);
+  formData.append('originalName', fileName);
   formData.append('conversationId', conversationId);
   formData.append('type', type);
 

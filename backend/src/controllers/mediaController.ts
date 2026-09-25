@@ -94,6 +94,18 @@ function getMimeFromExtension(filename: string): string {
   return 'application/octet-stream';
 }
 
+function decodeUtf8Filename(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  try {
+    // Multer / busboy header standard: latin1 decoded string from UTF-8 bytes
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    // If conversion produces valid non-replacement string, use it
+    return decoded && !decoded.includes('') ? decoded : name;
+  } catch {
+    return name;
+  }
+}
+
 // POST /api/messages/upload (Direct memory-to-GridFS stream for sub-second uploads)
 export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uploadStartTime = Date.now();
@@ -109,7 +121,7 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const { conversationId, type } = req.body;
+    const { conversationId, type, originalName: explicitOriginalName } = req.body;
     if (!conversationId) {
       res.status(400).json({ success: false, message: 'conversationId required' });
       return;
@@ -126,7 +138,11 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const ext = path.extname(file.originalname).toLowerCase() || (type === 'audio' ? '.webm' : '.jpg');
+    // Accurately preserve Unicode/Bengali original filename
+    const rawFilename = explicitOriginalName || file.originalname || 'file';
+    const originalName = decodeUtf8Filename(rawFilename);
+
+    const ext = path.extname(originalName).toLowerCase() || (type === 'audio' ? '.webm' : '.jpg');
     const uniqueFilename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
     const finalMime = file.mimetype || getMimeFromExtension(uniqueFilename);
 
@@ -135,7 +151,7 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
     const uploadStream = bucket.openUploadStream(uniqueFilename, {
       contentType: finalMime,
       metadata: {
-        originalName: file.originalname || uniqueFilename,
+        originalName: originalName,
         mimeType: finalMime,
         conversationId,
         uploaderId: req.user._id,
@@ -155,7 +171,7 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
     });
 
     const elapsedMs = Date.now() - uploadStartTime;
-    console.log(`[MediaUpload] Uploaded ${uniqueFilename} (${file.size} bytes) in ${elapsedMs}ms`);
+    console.log(`[MediaUpload] Uploaded ${uniqueFilename} ("${originalName}", ${file.size} bytes) in ${elapsedMs}ms`);
 
     const relativeUrl = `/api/messages/media/${uniqueFilename}`;
 
@@ -163,7 +179,7 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
       success: true,
       attachment: {
         url: relativeUrl,
-        fileName: file.originalname || uniqueFilename,
+        fileName: originalName,
         mimeType: finalMime,
         size: file.size,
       },

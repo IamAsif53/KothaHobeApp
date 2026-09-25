@@ -1,10 +1,10 @@
 {
-  "versionCode": 64,
-  "versionName": "1.1.19",
+  "versionCode": 65,
+  "versionName": "1.1.20",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "db332e00f6592932d6331121643be6d149efca9e697c8d9bd6a31dfd8c035143",
+  "sha256": "bbbd0f0401e910b1f51934340972f4a7286096929124bc1e2974d14a13f9f655",
   "releaseNotes": [
-    "Release v1.1.19 (Build 64)",
+    "Release v1.1.20 (Build 65)",
     "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
     "📩 Invitation & Approval workflow: Accept/Decline invitations directly from chat list",
     "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",

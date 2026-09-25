@@ -50,11 +50,17 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
           return;
         }
 
-        // Verify user is an accepted member of this group
+        // Verify user is an accepted member or creator/admin of this group
+        const isCreatorOrAdmin =
+          group.groupMeta.creator?.toString() === userId ||
+          group.groupMeta.admins?.some(
+            (a: any) => a._id?.toString() === userId || a.toString() === userId
+          );
+
         const memberEntry = group.groupMeta.members.find(
           (m: any) => m.user?._id?.toString() === userId || m.user?.toString() === userId
         );
-        if (!memberEntry || memberEntry.status !== 'accepted') {
+        if (!isCreatorOrAdmin && (!memberEntry || memberEntry.status !== 'accepted')) {
           socket.emit('group_call:error', { message: 'You must be an accepted member to start a call' });
           return;
         }

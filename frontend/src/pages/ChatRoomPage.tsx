@@ -31,7 +31,14 @@ import {
   X,
   ChevronDown,
   Users,
+  CornerUpLeft,
+  Copy,
+  ExternalLink,
+  Download,
+  Trash2,
 } from 'lucide-react';
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
 
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -118,6 +125,7 @@ export const ChatRoomPage: React.FC = () => {
   const [replyingTo, setReplyingTo] = useState<IReplyTo | null>(null);
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
+  const [actionMenuMessage, setActionMenuMessage] = useState<IMessage | null>(null);
 
   // Toast / Status Message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -752,6 +760,132 @@ export const ChatRoomPage: React.FC = () => {
         />
       )}
 
+      {/* Top Floating Message Action Menu / Reactions Sheet */}
+      {actionMenuMessage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-start pt-16 px-4 animate-fade-in"
+          onClick={() => setActionMenuMessage(null)}
+          onTouchStart={(e) => {
+            if (e.target === e.currentTarget) {
+              setActionMenuMessage(null);
+            }
+          }}
+        >
+          <div
+            className="bg-[#202c33] border border-white/10 rounded-2xl p-4 w-full max-w-sm shadow-2xl space-y-3 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Header / Close Bar */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <span className="text-xs font-semibold text-brand-400">
+                Message Options
+              </span>
+              <button
+                onClick={() => setActionMenuMessage(null)}
+                className="p-1 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Reactions Bar */}
+            <div className="flex items-center justify-between bg-[#111b21] p-2 rounded-xl text-2xl">
+              {QUICK_REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    handleReact(actionMenuMessage._id, emoji);
+                    setActionMenuMessage(null);
+                  }}
+                  className="hover:scale-125 active:scale-95 transition-transform p-1 cursor-pointer"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+
+            {/* Action Items */}
+            <div className="space-y-1 divide-y divide-white/5 text-sm">
+              <button
+                onClick={() => {
+                  handleReply(actionMenuMessage);
+                  setActionMenuMessage(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+              >
+                <CornerUpLeft className="w-4 h-4 text-brand-400" />
+                <span>Reply</span>
+              </button>
+
+              {actionMenuMessage.text && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(actionMenuMessage.text || '');
+                    showToast('Text copied to clipboard');
+                    setActionMenuMessage(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                >
+                  <Copy className="w-4 h-4 text-chat-textMuted" />
+                  <span>Copy Text</span>
+                </button>
+              )}
+
+              {actionMenuMessage.attachment && (
+                <button
+                  onClick={() => {
+                    if (actionMenuMessage.type === 'image') handleOpenMedia(actionMenuMessage);
+                    else if (actionMenuMessage.type === 'document') handleOpenDocument(actionMenuMessage);
+                    setActionMenuMessage(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                >
+                  <ExternalLink className="w-4 h-4 text-sky-400" />
+                  <span>Open Attachment</span>
+                </button>
+              )}
+
+              {actionMenuMessage.type === 'document' && (
+                <button
+                  onClick={() => {
+                    handleDownloadDocument(actionMenuMessage);
+                    setActionMenuMessage(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Download to Device</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  handleDelete(actionMenuMessage._id, false);
+                  setActionMenuMessage(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-chat-textMuted hover:text-red-400 rounded-lg transition-colors text-left"
+              >
+                <Trash2 className="w-4 h-4 text-chat-textMuted" />
+                <span>Delete for me</span>
+              </button>
+
+              {actionMenuMessage.senderId === user?._id && (
+                <button
+                  onClick={() => {
+                    handleDelete(actionMenuMessage._id, true);
+                    setActionMenuMessage(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors text-left"
+                >
+                  <Trash2 className="w-4 h-4 text-red-400" />
+                  <span>Delete for everyone</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
@@ -993,6 +1127,7 @@ export const ChatRoomPage: React.FC = () => {
                   onReact={handleReact}
                   onDelete={handleDelete}
                   onRetry={handleRetryMessage}
+                  onActionMenu={setActionMenuMessage}
                 />
               </React.Fragment>
             );

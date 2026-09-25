@@ -21,7 +21,11 @@ export const getMessages = async (
     // Verify conversation membership
     const conversation = await Conversation.findOne({
       _id: conversationId,
-      participants: req.user._id,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
     });
 
     if (!conversation) {

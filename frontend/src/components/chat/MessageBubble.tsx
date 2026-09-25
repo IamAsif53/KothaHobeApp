@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { IMessage } from '../../types';
 import { formatMessageTime } from '../../utils/dateUtils';
 import { getMediaUrl } from '../../api/messageApi';
@@ -32,9 +32,8 @@ interface MessageBubbleProps {
   onReact?: (messageId: string, emoji: string) => void;
   onDelete?: (messageId: string, deleteForEveryone: boolean) => void;
   onJumpToMessage?: (messageId: string) => void;
+  onActionMenu?: (message: IMessage) => void;
 }
-
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
 
 const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   message,
@@ -47,8 +46,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   onReact,
   onDelete,
   onJumpToMessage,
+  onActionMenu,
 }) => {
-  const [showMenu, setShowMenu] = useState(false);
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -92,8 +91,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       clearTimeout(touchTimerRef.current);
     }
     touchTimerRef.current = setTimeout(() => {
-      setShowMenu(true);
-    }, 550);
+      onActionMenu && onActionMenu(message);
+    }, 450);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -123,13 +122,6 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  const handleCopyText = () => {
-    if (message.text) {
-      navigator.clipboard.writeText(message.text);
-    }
-    setShowMenu(false);
-  };
-
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '';
     if (bytes < 1024) return `${bytes} B`;
@@ -148,116 +140,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1 px-3 group select-none animate-message-enter`}
       onContextMenu={(e) => {
         e.preventDefault();
-        setShowMenu(true);
+        onActionMenu && onActionMenu(message);
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchCancel}
     >
-      {/* Context Action Menu Modal */}
-      {showMenu && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setShowMenu(false)}
-        >
-          <div
-            className="bg-[#202c33] border border-white/10 rounded-2xl p-4 w-full max-w-xs shadow-2xl space-y-3 animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Quick Reactions Bar */}
-            <div className="flex items-center justify-between bg-[#111b21] p-2 rounded-xl text-2xl">
-              {QUICK_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    onReact && onReact(message._id, emoji);
-                    setShowMenu(false);
-                  }}
-                  className="hover:scale-125 active:scale-95 transition-transform p-1 cursor-pointer"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-
-            {/* Menu Items */}
-            <div className="space-y-1 divide-y divide-white/5 text-sm">
-              <button
-                onClick={() => {
-                  onReply && onReply(message);
-                  setShowMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
-              >
-                <CornerUpLeft className="w-4 h-4 text-brand-400" />
-                <span>Reply</span>
-              </button>
-
-              {message.text && (
-                <button
-                  onClick={handleCopyText}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
-                >
-                  <Copy className="w-4 h-4 text-chat-textMuted" />
-                  <span>Copy Text</span>
-                </button>
-              )}
-
-              {message.attachment && (
-                <button
-                  onClick={() => {
-                    if (message.type === 'image') onOpenMedia && onOpenMedia(message);
-                    else if (message.type === 'document') onOpenDocument && onOpenDocument(message);
-                    setShowMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-sky-400" />
-                  <span>Open Attachment</span>
-                </button>
-              )}
-
-              {message.type === 'document' && (
-                <button
-                  onClick={() => {
-                    onDownloadDocument && onDownloadDocument(message);
-                    setShowMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors"
-                >
-                  <Download className="w-4 h-4 text-emerald-400" />
-                  <span>Download to Device</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => {
-                  onDelete && onDelete(message._id, false);
-                  setShowMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-chat-textMuted hover:text-red-400 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-chat-textMuted" />
-                <span>Delete for me</span>
-              </button>
-
-              {isMe && (
-                <button
-                  onClick={() => {
-                    onDelete && onDelete(message._id, true);
-                    setShowMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                  <span>Delete for everyone</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Bubble Container */}
       <div

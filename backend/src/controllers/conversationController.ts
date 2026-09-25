@@ -227,7 +227,11 @@ export const getConversationDetails = async (
 
     const conv = await Conversation.findOne({
       _id: conversationId,
-      participants: req.user._id,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
     })
       .populate({
         path: 'participants',

@@ -5,8 +5,9 @@ import { MessageSquare, UserPlus, Settings } from 'lucide-react';
 export const BottomNav: React.FC = () => {
   const location = useLocation();
 
-  // Hide bottom navigation inside individual conversation screen
-  if (location.pathname.startsWith('/chat/')) {
+  // Only show bottom navigation on primary root tabs
+  const isMainTab = ['/chats', '/search', '/settings'].includes(location.pathname);
+  if (!isMainTab) {
     return null;
   }
 

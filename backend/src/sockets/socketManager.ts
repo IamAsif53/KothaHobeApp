@@ -165,7 +165,11 @@ export function setupSocketIO(io: SocketIOServer): void {
           // Validate conversation membership
           const conversation = await Conversation.findOne({
             _id: conversationId,
-            participants: userId,
+            $or: [
+              { participants: userId },
+              { 'groupMeta.members.user': userId },
+              { 'groupMeta.creator': userId },
+            ],
           });
 
           if (!conversation) {
@@ -231,13 +235,16 @@ export function setupSocketIO(io: SocketIOServer): void {
               // 2. Emit to conversation room (for anyone currently inside chat room)
               io.to(`conv:${conversationId}`).emit('message:new', message);
 
-              // 3. Emit and push to all other group participants
-              const otherParticipants = conversation.participants.filter(
-                (p) => p.toString() !== userId
-              );
+              // 3. Emit and push to all other group participants & members
+              const allMemberIds = new Set<string>();
+              (conversation.participants || []).forEach((p: any) => allMemberIds.add(p.toString()));
+              (conversation.groupMeta?.members || []).forEach((m: any) => {
+                const mId = m.user?._id?.toString() || m.user?.toString();
+                if (mId && m.status === 'accepted') allMemberIds.add(mId);
+              });
+              allMemberIds.delete(userId);
 
-              otherParticipants.forEach((pid) => {
-                const pIdStr = pid.toString();
+              allMemberIds.forEach((pIdStr) => {
                 io.to(`user:${pIdStr}`).emit('message:new', message);
 
                 sendPushNotification({

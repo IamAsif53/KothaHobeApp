@@ -167,6 +167,16 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         await webrtcGroupCallService.startLocalMedia(callType, true);
         enableCallAudioMode();
 
+        setGroupCallSession({
+          callId: `initiating_${Date.now()}`,
+          conversationId,
+          groupName,
+          groupAvatar,
+          callType,
+          startedAt: new Date(),
+          allParticipants: user ? [user] : [],
+        });
+
         socketRef.current.emit('group_call:initiate', {
           conversationId,
           callType,
@@ -182,7 +192,7 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         cleanupCall();
       }
     },
-    [cleanupCall, startDurationTimer]
+    [cleanupCall, startDurationTimer, user]
   );
 
   // 2. Join an Existing Active Group Call
@@ -411,6 +421,22 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
 
+    // Error from server
+    const handleError = (data: { message: string }) => {
+      console.warn('[GroupCallContext] group_call:error:', data.message);
+      alert(data.message || 'Call failed');
+      cleanupCall();
+    };
+
+    // Already Active in Group
+    const handleAlreadyActive = (data: { callId: string; callType: 'voice' | 'video' }) => {
+      console.log('[GroupCallContext] Call already active in group, connecting directly to callId:', data.callId);
+      const current = groupCallSessionRef.current;
+      if (current) {
+        joinGroupCall(data.callId, current.conversationId, current.groupName, current.groupAvatar, data.callType);
+      }
+    };
+
     socket.on('group_call:initiated', handleInitiated);
     socket.on('group_call:joined', handleJoined);
     socket.on('group_call:incoming', handleIncoming);
@@ -419,6 +445,8 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     socket.on('group_call:participant_left', handleParticipantLeft);
     socket.on('group_call:signal', handleSignal);
     socket.on('group_call:ended', handleCallEnded);
+    socket.on('group_call:error', handleError);
+    socket.on('group_call:already_active', handleAlreadyActive);
 
     return () => {
       socket.off('group_call:initiated', handleInitiated);
@@ -429,6 +457,8 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       socket.off('group_call:participant_left', handleParticipantLeft);
       socket.off('group_call:signal', handleSignal);
       socket.off('group_call:ended', handleCallEnded);
+      socket.off('group_call:error', handleError);
+      socket.off('group_call:already_active', handleAlreadyActive);
     };
   }, [socket, isConnected, user, cleanupCall]);
 

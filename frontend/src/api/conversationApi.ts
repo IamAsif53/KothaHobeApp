@@ -22,6 +22,10 @@ export async function getOrCreateConversationApi(recipientId: string): Promise<C
   });
 }
 
+export async function fetchConversationDetailsApi(conversationId: string): Promise<ConversationResponse> {
+  return apiFetch<ConversationResponse>(`/conversations/${conversationId}`);
+}
+
 export async function clearChatHistoryApi(conversationId: string): Promise<{ success: boolean; message?: string }> {
   return apiFetch<{ success: boolean; message?: string }>(`/conversations/${conversationId}/clear`, {
     method: 'POST',

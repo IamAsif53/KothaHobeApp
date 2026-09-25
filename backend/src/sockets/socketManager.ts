@@ -5,6 +5,7 @@ import { Conversation } from '../models/Conversation';
 import { Message, MessageStatus, IAttachment, IReplyTo } from '../models/Message';
 import { sendPushNotification } from '../services/notificationService';
 import { registerCallHandlers } from './callHandler';
+import { registerGroupCallHandlers } from './groupCallHandler';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -130,12 +131,12 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
-    // Send Message (Text / Image / Document / Audio)
+    // Send Message (Text / Image / Document / Audio) - Supports Direct and Group Chats
     socket.on(
       'message:send',
       async (data: {
         conversationId: string;
-        receiverId: string;
+        receiverId?: string;
         text?: string;
         clientMessageId: string;
         type?: 'text' | 'image' | 'video' | 'audio' | 'document';
@@ -153,7 +154,7 @@ export function setupSocketIO(io: SocketIOServer): void {
             replyTo,
           } = data;
 
-          if (!conversationId || !receiverId || !clientMessageId) {
+          if (!conversationId || !clientMessageId) {
             socket.emit('message:error', {
               clientMessageId,
               message: 'Missing required message parameters',
@@ -183,99 +184,168 @@ export function setupSocketIO(io: SocketIOServer): void {
             const count = await Message.countDocuments({ conversationId });
             const serverSequence = count + 1;
 
-            // Check if recipient is connected online
-            const recipientSockets = await io.in(`user:${receiverId}`).fetchSockets();
-            const initialStatus: MessageStatus = recipientSockets.length > 0 ? 'delivered' : 'sent';
+            const senderUser = await User.findById(userId).select('displayName username avatarUrl');
 
-            message = await Message.create({
-              conversationId,
-              senderId: userId,
-              receiverId,
-              text: text.trim(),
-              type,
-              status: initialStatus,
-              clientMessageId,
-              attachment: attachment || undefined,
-              replyTo: replyTo || undefined,
-              serverSequence,
-              deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
-            });
+            // Check if group has a custom nickname set for sender
+            let senderNickname = senderUser?.displayName || senderUser?.username || '';
+            if (conversation.isGroup && conversation.groupMeta?.nicknames) {
+              const customNick = (conversation.groupMeta.nicknames as any)[userId];
+              if (customNick) senderNickname = customNick;
+            }
 
-            // Format last message snippet for chat list
-            let previewText = text.trim();
-            if (type === 'image') previewText = '📷 Photo';
-            else if (type === 'audio') previewText = '🎤 Voice message';
-            else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
-
-            await Conversation.findByIdAndUpdate(conversationId, {
-              lastMessage: {
-                text: previewText,
+            if (conversation.isGroup) {
+              // --- GROUP CHAT MESSAGE ---
+              message = await Message.create({
+                conversationId,
                 senderId: userId,
-                createdAt: message.createdAt,
+                senderNickname,
+                text: text.trim(),
+                type,
+                status: 'delivered',
+                readBy: [userId],
+                clientMessageId,
+                attachment: attachment || undefined,
+                replyTo: replyTo || undefined,
+                serverSequence,
+                deliveredAt: new Date(),
+              });
+
+              let previewText = text.trim();
+              if (type === 'image') previewText = '📷 Photo';
+              else if (type === 'audio') previewText = '🎤 Voice message';
+              else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
+
+              await Conversation.findByIdAndUpdate(conversationId, {
+                lastMessage: {
+                  text: `${senderNickname}: ${previewText}`,
+                  senderId: userId,
+                  createdAt: message.createdAt,
+                  status: 'delivered',
+                },
+                lastMessageAt: message.createdAt,
+              });
+
+              // 1. Confirm to sender
+              socket.emit('message:sent', message);
+
+              // 2. Emit to conversation room (for anyone currently inside chat room)
+              io.to(`conv:${conversationId}`).emit('message:new', message);
+
+              // 3. Emit and push to all other group participants
+              const otherParticipants = conversation.participants.filter(
+                (p) => p.toString() !== userId
+              );
+
+              otherParticipants.forEach((pid) => {
+                const pIdStr = pid.toString();
+                io.to(`user:${pIdStr}`).emit('message:new', message);
+
+                sendPushNotification({
+                  recipientId: pIdStr,
+                  senderId: userId,
+                  messageId: message!._id.toString(),
+                  senderName: conversation.groupMeta?.name || 'Group Chat',
+                  messageText: `${senderNickname}: ${previewText}`,
+                  conversationId,
+                }).catch(() => {});
+              });
+            } else {
+              // --- 1-TO-1 DIRECT CHAT MESSAGE ---
+              const targetReceiverId = receiverId || conversation.participants.find((p) => p.toString() !== userId)?.toString();
+              if (!targetReceiverId) {
+                socket.emit('message:error', { clientMessageId, message: 'Receiver not found' });
+                return;
+              }
+
+              const recipientSockets = await io.in(`user:${targetReceiverId}`).fetchSockets();
+              const initialStatus: MessageStatus = recipientSockets.length > 0 ? 'delivered' : 'sent';
+
+              message = await Message.create({
+                conversationId,
+                senderId: userId,
+                receiverId: targetReceiverId,
+                text: text.trim(),
+                type,
                 status: initialStatus,
-              },
-              lastMessageAt: message.createdAt,
-            });
-          }
+                clientMessageId,
+                attachment: attachment || undefined,
+                replyTo: replyTo || undefined,
+                serverSequence,
+                deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
+              });
 
-          // 1. Confirm to sender with full message data
-          socket.emit('message:sent', message);
+              let previewText = text.trim();
+              if (type === 'image') previewText = '📷 Photo';
+              else if (type === 'audio') previewText = '🎤 Voice message';
+              else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
 
-          // 2. Emit to recipient in real time
-          io.to(`user:${receiverId}`).emit('message:new', message);
+              await Conversation.findByIdAndUpdate(conversationId, {
+                lastMessage: {
+                  text: previewText,
+                  senderId: userId,
+                  createdAt: message.createdAt,
+                  status: initialStatus,
+                },
+                lastMessageAt: message.createdAt,
+              });
 
-          // 3. Dispatch FCM Push Notification (works when app is closed / screen is locked)
-          User.findById(userId)
-            .select('displayName username')
-            .then(async (senderUser) => {
+              // 1. Confirm to sender
+              socket.emit('message:sent', message);
+
+              // 2. Emit to recipient in real time
+              io.to(`user:${targetReceiverId}`).emit('message:new', message);
+
+              // 3. Dispatch FCM Push Notification
               let notifBody = text.trim();
               if (type === 'image') notifBody = '📷 Photo';
               else if (type === 'audio') notifBody = '🎤 Voice message';
               else if (type === 'document') notifBody = `📄 ${attachment?.fileName || 'Document'}`;
 
-              const pushRes = await sendPushNotification({
-                recipientId: receiverId,
+              sendPushNotification({
+                recipientId: targetReceiverId,
                 senderId: userId,
                 messageId: message._id.toString(),
                 senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
                 messageText: notifBody,
                 conversationId,
-              });
+              })
+                .then(async (pushRes) => {
+                  if (pushRes && pushRes.success && pushRes.successCount > 0) {
+                    const now = new Date();
+                    const updatedMsg = await Message.findOneAndUpdate(
+                      { _id: message!._id, status: 'sent' },
+                      { status: 'delivered', deliveredAt: now },
+                      { new: true }
+                    );
 
-              // When push notification is accepted by Google FCM for delivery to recipient's device:
-              if (pushRes && pushRes.success && pushRes.successCount > 0) {
-                const now = new Date();
-                const updatedMsg = await Message.findOneAndUpdate(
-                  { _id: message._id, status: 'sent' },
-                  { status: 'delivered', deliveredAt: now },
-                  { new: true }
-                );
+                    if (updatedMsg) {
+                      await Conversation.updateOne(
+                        { _id: conversationId, 'lastMessage.createdAt': message!.createdAt },
+                        { $set: { 'lastMessage.status': 'delivered' } }
+                      );
 
-                if (updatedMsg) {
-                  await Conversation.updateOne(
-                    { _id: conversationId, 'lastMessage.createdAt': message.createdAt },
-                    { $set: { 'lastMessage.status': 'delivered' } }
-                  );
+                      io.to(`user:${userId}`).emit('message:delivered', {
+                        _id: updatedMsg._id,
+                        clientMessageId: updatedMsg.clientMessageId,
+                        conversationId: updatedMsg.conversationId,
+                        deliveredAt: now,
+                      });
+                    }
+                  }
+                })
+                .catch((err) => console.warn('[Push] Dispatch notice:', err));
 
-                  io.to(`user:${userId}`).emit('message:delivered', {
-                    _id: updatedMsg._id,
-                    clientMessageId: updatedMsg.clientMessageId,
-                    conversationId: updatedMsg.conversationId,
-                    deliveredAt: now,
-                  });
-                }
+              if (message.status === 'delivered') {
+                socket.emit('message:delivered', {
+                  _id: message._id,
+                  clientMessageId: message.clientMessageId,
+                  conversationId: message.conversationId,
+                  deliveredAt: message.deliveredAt,
+                });
               }
-            })
-            .catch((err) => console.warn('[Push] Dispatch notice:', err));
-
-          // 4. If delivered instantly via socket, inform sender
-          if (message.status === 'delivered') {
-            socket.emit('message:delivered', {
-              _id: message._id,
-              clientMessageId: message.clientMessageId,
-              conversationId: message.conversationId,
-              deliveredAt: message.deliveredAt,
-            });
+            }
+          } else {
+            socket.emit('message:sent', message);
           }
         } catch (error) {
           console.error('[Socket] message:send error:', error);
@@ -287,7 +357,7 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     );
 
-    // Toggle Reaction on Message
+    // Toggle Reaction on Message (Direct & Group)
     socket.on(
       'message:react',
       async (data: { messageId: string; conversationId: string; emoji: string }) => {
@@ -317,20 +387,24 @@ export function setupSocketIO(io: SocketIOServer): void {
 
           await msg.save();
 
-          // Broadcast reaction update to conversation participants
+          // Broadcast reaction update to conversation room
           io.to(`conv:${conversationId}`).emit('message:reaction_updated', {
             messageId,
             conversationId,
             reactions: msg.reactions,
           });
 
-          // Also inform direct recipient
-          const otherId = msg.senderId.toString() === userId ? msg.receiverId.toString() : msg.senderId.toString();
-          io.to(`user:${otherId}`).emit('message:reaction_updated', {
-            messageId,
-            conversationId,
-            reactions: msg.reactions,
-          });
+          // Also broadcast to all conversation participants
+          const conv = await Conversation.findById(conversationId).select('participants isGroup');
+          if (conv) {
+            conv.participants.forEach((p) => {
+              io.to(`user:${p.toString()}`).emit('message:reaction_updated', {
+                messageId,
+                conversationId,
+                reactions: msg.reactions,
+              });
+            });
+          }
         } catch (error) {
           console.error('[Socket] message:react error:', error);
         }
@@ -360,12 +434,16 @@ export function setupSocketIO(io: SocketIOServer): void {
               deleteForEveryone: true,
             });
 
-            const otherId = msg.receiverId.toString();
-            io.to(`user:${otherId}`).emit('message:deleted', {
-              messageId,
-              conversationId,
-              deleteForEveryone: true,
-            });
+            const conv = await Conversation.findById(conversationId).select('participants');
+            if (conv) {
+              conv.participants.forEach((p) => {
+                io.to(`user:${p.toString()}`).emit('message:deleted', {
+                  messageId,
+                  conversationId,
+                  deleteForEveryone: true,
+                });
+              });
+            }
           } else {
             // Delete for me only
             await Message.findByIdAndUpdate(messageId, {
@@ -384,33 +462,53 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     );
 
-    // Mark Messages as Read
+    // Mark Messages as Read (Supports 1-to-1 and Group readBy)
     socket.on('message:read', async (data: { conversationId: string }) => {
       try {
         const { conversationId } = data;
         if (!conversationId) return;
 
+        const conv = await Conversation.findById(conversationId);
+        if (!conv) return;
+
         const now = new Date();
 
-        const result = await Message.updateMany(
-          {
+        if (conv.isGroup) {
+          // In Group Chat: add user to readBy array for all messages not sent by user
+          await Message.updateMany(
+            {
+              conversationId,
+              senderId: { $ne: userId },
+              readBy: { $ne: userId },
+            },
+            {
+              $addToSet: { readBy: userId },
+            }
+          );
+
+          io.to(`conv:${conversationId}`).emit('message:read', {
             conversationId,
-            receiverId: userId,
-            status: { $in: ['sent', 'delivered'] },
-          },
-          {
-            $set: { status: 'read', readAt: now },
-          }
-        );
+            readBy: userId,
+            readAt: now,
+          });
+        } else {
+          // In 1-to-1 Chat: update status to 'read'
+          await Message.updateMany(
+            {
+              conversationId,
+              receiverId: userId,
+              status: { $in: ['sent', 'delivered'] },
+            },
+            {
+              $set: { status: 'read', readAt: now },
+            }
+          );
 
-        // Update Conversation.lastMessage.status to read in MongoDB
-        await Conversation.updateOne(
-          { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
-          { $set: { 'lastMessage.status': 'read' } }
-        );
+          await Conversation.updateOne(
+            { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
+            { $set: { 'lastMessage.status': 'read' } }
+          );
 
-        const conv = await Conversation.findById(conversationId);
-        if (conv) {
           const otherParticipantId = conv.participants.find(
             (p) => p.toString() !== userId
           );
@@ -428,9 +526,15 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
-    // Typing Indicators (Throttled)
-    socket.on('typing:start', (data: { conversationId: string; receiverId: string }) => {
-      if (data?.receiverId && data?.conversationId) {
+    // Typing Indicators (Supports Direct and Group Chat Room Broadcast)
+    socket.on('typing:start', (data: { conversationId: string; receiverId?: string }) => {
+      if (data?.conversationId) {
+        socket.to(`conv:${data.conversationId}`).emit('typing:start', {
+          conversationId: data.conversationId,
+          userId,
+        });
+      }
+      if (data?.receiverId) {
         io.to(`user:${data.receiverId}`).emit('typing:start', {
           conversationId: data.conversationId,
           userId,
@@ -438,8 +542,14 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
-    socket.on('typing:stop', (data: { conversationId: string; receiverId: string }) => {
-      if (data?.receiverId && data?.conversationId) {
+    socket.on('typing:stop', (data: { conversationId: string; receiverId?: string }) => {
+      if (data?.conversationId) {
+        socket.to(`conv:${data.conversationId}`).emit('typing:stop', {
+          conversationId: data.conversationId,
+          userId,
+        });
+      }
+      if (data?.receiverId) {
         io.to(`user:${data.receiverId}`).emit('typing:stop', {
           conversationId: data.conversationId,
           userId,
@@ -454,6 +564,9 @@ export function setupSocketIO(io: SocketIOServer): void {
 
     // Register 1-to-1 WebRTC Call Signaling Handlers
     registerCallHandlers(io, socket);
+
+    // Register Multi-Party Group Call Handlers
+    registerGroupCallHandlers(io, socket);
 
     // Disconnection handling
     socket.on('disconnect', async () => {

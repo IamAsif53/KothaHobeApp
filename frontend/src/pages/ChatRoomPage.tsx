@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchMessagesApi, uploadMediaApi, searchInConversationApi } from '../api/messageApi';
-import { fetchConversations } from '../api/conversationApi';
-import { IMessage, IUser, IReplyTo, IAttachment } from '../types';
+import { fetchConversations, fetchConversationDetailsApi } from '../api/conversationApi';
+import { IMessage, IUser, IReplyTo, IAttachment, IConversation } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
 import { useCall } from '../context/CallContext';
+import { useGroupCall } from '../context/GroupCallContext';
 import { Avatar } from '../components/common/Avatar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
 import { MediaViewerModal } from '../components/chat/MediaViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
+import { GroupCallBanner } from '../components/call/GroupCallBanner';
 import { MessageSkeleton } from '../components/common/Skeleton';
 import { formatLastSeen, formatChatListDate } from '../utils/dateUtils';
 import {
@@ -28,15 +30,41 @@ import {
   Video,
   X,
   ChevronDown,
+  Users,
 } from 'lucide-react';
 
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
-  const { socket, isConnected, isReconnecting, reconnectNow, sendMessage, markAsRead, startTyping, stopTyping, setActiveConversationId } = useSocket();
+  const {
+    socket,
+    isConnected,
+    isReconnecting,
+    reconnectNow,
+    sendMessage,
+    markAsRead,
+    startTyping,
+    stopTyping,
+    setActiveConversationId,
+  } = useSocket();
   const { themeConfig } = useTheme();
   const { startCall } = useCall();
+  const { startGroupCall } = useGroupCall();
   const navigate = useNavigate();
+
+  const [conversation, setConversation] = useState<IConversation | null>(() => {
+    try {
+      const cachedConvs = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (cachedConvs && conversationId) {
+        const parsed = JSON.parse(cachedConvs);
+        const match = parsed.find((c: any) => c._id === conversationId);
+        return match || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
 
   const [recipient, setRecipient] = useState<IUser | null>(() => {
     try {
@@ -51,6 +79,9 @@ export const ChatRoomPage: React.FC = () => {
       return null;
     }
   });
+
+  const isGroup = !!conversation?.isGroup;
+  const groupMeta = conversation?.groupMeta;
 
   // Load cached messages immediately
   const [messages, setMessages] = useState<IMessage[]>(() => {
@@ -215,7 +246,19 @@ export const ChatRoomPage: React.FC = () => {
         if (convsRes.success && convsRes.conversations) {
           const currentConv = convsRes.conversations.find((c: any) => c._id === conversationId);
           if (currentConv) {
-            setRecipient(currentConv.recipient);
+            setConversation(currentConv);
+            if (!currentConv.isGroup) {
+              setRecipient(currentConv.recipient || null);
+            }
+          } else {
+            fetchConversationDetailsApi(conversationId).then((res) => {
+              if (res.success && res.conversation) {
+                setConversation(res.conversation);
+                if (!res.conversation.isGroup) {
+                  setRecipient(res.conversation.recipient || null);
+                }
+              }
+            });
           }
         }
 
@@ -387,12 +430,20 @@ export const ChatRoomPage: React.FC = () => {
     };
 
     // 7. Typing Indicators
-    const handleTypingStart = ({ userId }: { userId: string }) => {
-      if (recipient && userId === recipient._id) setIsTyping(true);
+    const handleTypingStart = ({ userId, conversationId: typingConvId }: { userId: string; conversationId?: string }) => {
+      if (typingConvId && typingConvId === conversationId && userId !== user?._id) {
+        setIsTyping(true);
+      } else if (recipient && userId === recipient._id) {
+        setIsTyping(true);
+      }
     };
 
-    const handleTypingStop = ({ userId }: { userId: string }) => {
-      if (recipient && userId === recipient._id) setIsTyping(false);
+    const handleTypingStop = ({ userId, conversationId: typingConvId }: { userId: string; conversationId?: string }) => {
+      if (typingConvId && typingConvId === conversationId) {
+        setIsTyping(false);
+      } else if (recipient && userId === recipient._id) {
+        setIsTyping(false);
+      }
     };
 
     // 8. Presence
@@ -432,7 +483,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('user:offline', handleUserOffline);
       window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
     };
-  }, [socket, conversationId, recipient, persistMessages, scrollToBottom]);
+  }, [socket, conversationId, recipient, user, persistMessages, scrollToBottom]);
 
   // Load older messages with zero-jump scroll anchoring
   const handleLoadMore = async () => {
@@ -470,14 +521,15 @@ export const ChatRoomPage: React.FC = () => {
     replyTo?: IReplyTo,
     localFile?: File | Blob
   ) => {
-    if (!conversationId || !recipient) return;
+    if (!conversationId) return;
+    if (!isGroup && !recipient) return;
 
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage: IMessage = {
       _id: tempId,
       conversationId,
       senderId: user?._id || '',
-      receiverId: recipient._id,
+      receiverId: isGroup ? undefined : recipient?._id,
       text: text.trim(),
       type,
       attachment,
@@ -520,7 +572,7 @@ export const ChatRoomPage: React.FC = () => {
             // Dispatch message via centralized sendMessage engine (handles live socket and offline outbox)
             sendMessage(
               conversationId,
-              recipient._id,
+              isGroup ? undefined : recipient?._id,
               text.trim(),
               tempId,
               type,
@@ -556,7 +608,7 @@ export const ChatRoomPage: React.FC = () => {
     // 3. Regular text message dispatch via centralized sendMessage engine
     sendMessage(
       conversationId,
-      recipient._id,
+      isGroup ? undefined : recipient?._id,
       text.trim(),
       tempId,
       type,
@@ -613,26 +665,31 @@ export const ChatRoomPage: React.FC = () => {
   // Reply to Message
   const handleReply = useCallback((msg: IMessage) => {
     const isMine = msg.senderId === user?._id;
+    const senderName = isMine
+      ? 'You'
+      : msg.senderNickname || recipient?.displayName || recipient?.username || 'User';
+
     setReplyingTo({
       messageId: msg._id,
       text: msg.text,
-      senderName: isMine ? 'You' : recipient?.displayName || recipient?.username || 'User',
+      senderName,
       type: msg.type,
       fileName: msg.attachment?.fileName,
     });
   }, [user, recipient]);
 
   const handleTyping = useCallback(() => {
-    if (!conversationId || !recipient) return;
-    startTyping(conversationId, recipient._id);
+    if (!conversationId) return;
+    startTyping(conversationId, isGroup ? undefined : recipient?._id);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
-      stopTyping(conversationId, recipient._id);
+      stopTyping(conversationId, isGroup ? undefined : recipient?._id);
     }, 2500);
-  }, [conversationId, recipient, startTyping, stopTyping]);
+  }, [conversationId, isGroup, recipient, startTyping, stopTyping]);
 
   const handleRetryMessage = useCallback((msg: IMessage) => {
-    if (!conversationId || !recipient) return;
+    if (!conversationId) return;
+    if (!isGroup && !recipient) return;
 
     setMessages((prev) =>
       prev.map((m) =>
@@ -644,14 +701,14 @@ export const ChatRoomPage: React.FC = () => {
 
     sendMessage(
       conversationId,
-      recipient._id,
+      isGroup ? undefined : recipient?._id,
       msg.text || '',
       msg.clientMessageId || msg._id,
       msg.type,
       msg.attachment,
       msg.replyTo
     );
-  }, [conversationId, recipient, sendMessage]);
+  }, [conversationId, isGroup, recipient, sendMessage]);
 
   const filteredMessages = showSearch && searchQuery.trim()
     ? messages.filter(
@@ -660,6 +717,12 @@ export const ChatRoomPage: React.FC = () => {
           m.attachment?.fileName?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : messages;
+
+  const headerTitle = isGroup
+    ? groupMeta?.name || 'Group Chat'
+    : recipient?.displayName || recipient?.username || 'Chat';
+
+  const headerAvatarUrl = isGroup ? groupMeta?.avatarUrl : recipient?.avatarUrl;
 
   return (
     <div
@@ -704,23 +767,36 @@ export const ChatRoomPage: React.FC = () => {
           </button>
 
           <div
-            onClick={() => navigate(`/chat/${conversationId}/info`)}
+            onClick={() =>
+              navigate(isGroup ? `/group/${conversationId}/info` : `/chat/${conversationId}/info`)
+            }
             className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
           >
-            <Avatar
-              src={recipient?.avatarUrl}
-              name={recipient?.displayName || recipient?.username || 'User'}
-              isOnline={recipient?.isOnline}
-              size="sm"
-            />
+            <div className="relative flex-shrink-0">
+              <Avatar
+                src={headerAvatarUrl}
+                name={headerTitle}
+                isOnline={isGroup ? undefined : recipient?.isOnline}
+                size="sm"
+              />
+              {isGroup && (
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-slate-900 flex items-center justify-center text-white">
+                  <Users className="w-2.5 h-2.5" />
+                </div>
+              )}
+            </div>
 
             <div className="min-w-0 flex-1 overflow-hidden">
               <h2 className="text-sm font-semibold text-white truncate leading-tight">
-                {recipient?.displayName || recipient?.username || 'Chat'}
+                {headerTitle}
               </h2>
               <p className="text-[11px] text-chat-textMuted truncate mt-0.5 leading-none">
                 {isTyping ? (
                   <span className="text-brand-400 font-medium animate-pulse">typing...</span>
+                ) : isGroup ? (
+                  <span className="text-slate-400 font-medium">
+                    {groupMeta?.members?.length || 1} members
+                  </span>
                 ) : recipient?.isOnline ? (
                   <span className="text-emerald-400 font-medium">online</span>
                 ) : recipient?.lastSeen ? (
@@ -739,7 +815,14 @@ export const ChatRoomPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              if (recipient && conversationId) {
+              if (isGroup && conversationId) {
+                startGroupCall(
+                  conversationId,
+                  headerTitle,
+                  headerAvatarUrl,
+                  'video'
+                );
+              } else if (recipient && conversationId) {
                 startCall(
                   {
                     _id: recipient._id,
@@ -753,7 +836,7 @@ export const ChatRoomPage: React.FC = () => {
               }
             }}
             className="p-1.5 rounded-full text-brand-400 hover:text-brand-300 hover:bg-white/5 active:scale-95 transition-all"
-            title="Start Video Call"
+            title={isGroup ? 'Start Group Video Call' : 'Start Video Call'}
           >
             <Video className="w-4 h-4" />
           </button>
@@ -762,7 +845,14 @@ export const ChatRoomPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              if (recipient && conversationId) {
+              if (isGroup && conversationId) {
+                startGroupCall(
+                  conversationId,
+                  headerTitle,
+                  headerAvatarUrl,
+                  'voice'
+                );
+              } else if (recipient && conversationId) {
                 startCall(
                   {
                     _id: recipient._id,
@@ -776,7 +866,7 @@ export const ChatRoomPage: React.FC = () => {
               }
             }}
             className="p-1.5 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-white/5 active:scale-95 transition-all"
-            title="Start Voice Call"
+            title={isGroup ? 'Start Group Voice Call' : 'Start Voice Call'}
           >
             <Phone className="w-4 h-4" />
           </button>
@@ -792,9 +882,11 @@ export const ChatRoomPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => navigate(`/chat/${conversationId}/info`)}
+            onClick={() =>
+              navigate(isGroup ? `/group/${conversationId}/info` : `/chat/${conversationId}/info`)
+            }
             className="p-1.5 rounded-full text-chat-textMuted hover:text-white transition-colors"
-            title="Chat Info"
+            title={isGroup ? 'Group Info' : 'Chat Info'}
           >
             <MoreVertical className="w-4 h-4" />
           </button>
@@ -812,6 +904,15 @@ export const ChatRoomPage: React.FC = () => {
           )}
         </div>
       </header>
+
+      {/* In-Chat Live Group Call Banner */}
+      {isGroup && conversationId && (
+        <GroupCallBanner
+          conversationId={conversationId}
+          groupName={headerTitle}
+          groupAvatar={headerAvatarUrl}
+        />
+      )}
 
       {/* In-Chat Search Bar */}
       {showSearch && (
@@ -856,7 +957,11 @@ export const ChatRoomPage: React.FC = () => {
         ) : filteredMessages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-chat-textMuted">
             <p className="text-xs max-w-xs">
-              {showSearch ? 'No messages matching search.' : 'No messages yet. Say hello to start the conversation!'}
+              {showSearch
+                ? 'No messages matching search.'
+                : isGroup
+                ? 'No messages yet in this group. Say hello to everyone!'
+                : 'No messages yet. Say hello to start the conversation!'}
             </p>
           </div>
         ) : (
@@ -914,7 +1019,7 @@ export const ChatRoomPage: React.FC = () => {
         onTyping={handleTyping}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
-        disabled={!recipient}
+        disabled={!isGroup && !recipient}
       />
     </div>
   );

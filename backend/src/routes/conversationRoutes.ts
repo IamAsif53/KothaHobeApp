@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getOrCreateConversation,
   listConversations,
+  getConversationDetails,
   clearChatHistory,
   deleteConversation,
 } from '../controllers/conversationController';
@@ -14,6 +15,7 @@ router.use(authenticateToken);
 
 router.post('/', getOrCreateConversation);
 router.get('/', listConversations);
+router.get('/:conversationId', getConversationDetails);
 router.post('/:conversationId/clear', clearChatHistory);
 router.delete('/:conversationId', deleteConversation);
 router.get('/:conversationId/media', getSharedMedia);

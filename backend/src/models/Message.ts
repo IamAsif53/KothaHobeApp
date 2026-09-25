@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 export interface ICallDetails {
@@ -37,10 +37,16 @@ export interface IReaction {
   createdAt: Date;
 }
 
+export interface IReadReceipt {
+  user: Types.ObjectId;
+  readAt: Date;
+}
+
 export interface IMessage extends Document {
   conversationId: Types.ObjectId;
   senderId: Types.ObjectId;
-  receiverId: Types.ObjectId;
+  receiverId?: Types.ObjectId;
+  senderNickname?: string;
   text: string;
   type: MessageType;
   status: MessageStatus;
@@ -49,6 +55,8 @@ export interface IMessage extends Document {
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   reactions: IReaction[];
+  readBy: IReadReceipt[];
+  mentions: Types.ObjectId[];
   deletedFor: Types.ObjectId[];
   isDeletedForEveryone: boolean;
   serverSequence: number;
@@ -96,12 +104,20 @@ const CallDetailsSchema = new Schema(
   { _id: false }
 );
 
+const ReadReceiptSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    readAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const ReplyToSchema = new Schema(
   {
     messageId: { type: Schema.Types.ObjectId, ref: 'Message', required: true },
     text: { type: String, default: '' },
     senderName: { type: String, default: '' },
-    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call'], default: 'text' },
+    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system'], default: 'text' },
     fileName: { type: String },
   },
   { _id: false }
@@ -124,8 +140,13 @@ const MessageSchema: Schema = new Schema(
     receiverId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,
       index: true,
+    },
+    senderNickname: {
+      type: String,
+      trim: true,
+      maxlength: 60,
     },
     text: {
       type: String,
@@ -135,7 +156,7 @@ const MessageSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'video', 'audio', 'document', 'call'],
+      enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system'],
       default: 'text',
       index: true,
     },
@@ -166,6 +187,16 @@ const MessageSchema: Schema = new Schema(
       type: [ReactionSchema],
       default: [],
     },
+    readBy: {
+      type: [ReadReceiptSchema],
+      default: [],
+    },
+    mentions: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
     deletedFor: [
       {
         type: Schema.Types.ObjectId,

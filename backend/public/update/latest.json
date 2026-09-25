@@ -1,15 +1,16 @@
 {
-  "versionCode": 63,
-  "versionName": "1.1.18",
+  "versionCode": 64,
+  "versionName": "1.1.19",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "743b55ed7760a785fd7d28851054e4bea568a5c3f5015c47b145708f1a7c0448",
+  "sha256": "db332e00f6592932d6331121643be6d149efca9e697c8d9bd6a31dfd8c035143",
   "releaseNotes": [
-    "Release v1.1.18 (Build 63)",
-    "🔔 Fix notification system completely for messages, voice calls & video calls",
-    "📲 Native background and killed-state message notifications in system tray",
-    "⚡ Full-screen & heads-up wakeup for incoming calls (locked & unlocked states)",
-    "🎯 Direct tap-to-open conversation routing from notification tray",
-    "📝 Unicode & Bengali filename support and 0ms instant media forwarding"
+    "Release v1.1.19 (Build 64)",
+    "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
+    "📩 Invitation & Approval workflow: Accept/Decline invitations directly from chat list",
+    "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",
+    "🏷️ Per-group member nicknames and shared media gallery",
+    "📞 Multi-Party WebRTC Voice & Video Calls with dynamic speaker highlighting and live call banner",
+    "🔔 Background and killed-state call ringing notifications for group calls"
   ],
   "mandatory": false
 }

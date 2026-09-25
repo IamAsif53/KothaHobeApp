@@ -77,11 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🔔 Fix notification system completely for messages, voice calls & video calls",
-      "📲 Native background and killed-state message notifications in system tray",
-      "⚡ Full-screen & heads-up wakeup for incoming calls (locked & unlocked states)",
-      "🎯 Direct tap-to-open conversation routing from notification tray",
-      "📝 Unicode & Bengali filename support and 0ms instant media forwarding"
+      "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
+      "📩 Invitation & Approval workflow: Accept/Decline invitations directly from chat list",
+      "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",
+      "🏷️ Per-group member nicknames and shared media gallery",
+      "📞 Multi-Party WebRTC Voice & Video Calls with dynamic speaker highlighting and live call banner",
+      "🔔 Background and killed-state call ringing notifications for group calls"
     ],
     mandatory: false
   };

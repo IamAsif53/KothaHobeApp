@@ -10,7 +10,7 @@ export interface IUser {
   phoneNumber?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface ICallDetails {
@@ -18,6 +18,7 @@ export interface ICallDetails {
   callType: 'voice' | 'video';
   status: 'completed' | 'missed' | 'declined' | 'cancelled' | 'failed' | 'busy';
   duration: number;
+  isGroup?: boolean;
   startedAt?: string;
   endedAt?: string;
 }
@@ -51,7 +52,8 @@ export interface IMessage {
   _id: string;
   conversationId: string;
   senderId: string;
-  receiverId: string;
+  receiverId?: string;
+  senderNickname?: string;
   text: string;
   type: MessageType;
   status: MessageStatus;
@@ -60,6 +62,8 @@ export interface IMessage {
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   reactions?: IReaction[];
+  readBy?: string[];
+  mentions?: string[];
   isDeletedForEveryone?: boolean;
   deletedFor?: string[];
   serverSequence?: number;
@@ -68,9 +72,30 @@ export interface IMessage {
   readAt?: string;
 }
 
+export interface IGroupMember {
+  user: IUser;
+  role: 'admin' | 'member';
+  status: 'pending' | 'accepted' | 'declined';
+  joinedAt?: string;
+  invitedBy?: IUser | string;
+}
+
+export interface IGroupMeta {
+  name: string;
+  avatarUrl?: string;
+  creator: IUser | string;
+  admins: (IUser | string)[];
+  members: IGroupMember[];
+  nicknames?: Record<string, string>;
+}
+
 export interface IConversation {
   _id: string;
-  recipient: IUser;
+  isGroup?: boolean;
+  groupMeta?: IGroupMeta;
+  participants?: IUser[];
+  recipient?: IUser;
+  myMembershipStatus?: 'pending' | 'accepted' | 'declined';
   lastMessage?: {
     text: string;
     senderId: string;
@@ -79,4 +104,15 @@ export interface IConversation {
   };
   lastMessageAt: string;
   unreadCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface IActiveGroupCallState {
+  isActive: boolean;
+  callId?: string;
+  conversationId?: string;
+  callType?: 'voice' | 'video';
+  participantCount?: number;
+  startedAt?: string;
 }

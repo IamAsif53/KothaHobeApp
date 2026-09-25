@@ -4,8 +4,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { CallProvider } from './context/CallContext';
+import { GroupCallProvider } from './context/GroupCallContext';
 import { CallScreen } from './components/call/CallScreen';
 import { IncomingCallModal } from './components/call/IncomingCallModal';
+import { GroupCallScreen } from './components/call/GroupCallScreen';
+import { IncomingGroupCallModal } from './components/call/IncomingGroupCallModal';
 import { BottomNav } from './components/common/BottomNav';
 import { UpdateModal } from './components/common/UpdateModal';
 import {
@@ -27,6 +30,7 @@ import { ChatListPage } from './pages/ChatListPage';
 import { SearchUserPage } from './pages/SearchUserPage';
 import { ChatRoomPage } from './pages/ChatRoomPage';
 import { ChatInfoPage } from './pages/ChatInfoPage';
+import { GroupInfoPage } from './pages/GroupInfoPage';
 import { SharedMediaPage } from './pages/SharedMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { BlockedUsersPage } from './pages/BlockedUsersPage';
@@ -279,6 +283,14 @@ export const AppContent: React.FC = () => {
             }
           />
           <Route
+            path="/group/:conversationId/info"
+            element={
+              <ProtectedRoute>
+                <GroupInfoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/chat/:conversationId/info"
             element={
               <ProtectedRoute>
@@ -316,9 +328,13 @@ export const AppContent: React.FC = () => {
 
       <BottomNav />
 
-      {/* Global WebRTC Voice Calling UI Modals */}
+      {/* Global 1-on-1 WebRTC Voice & Video Calling UI Modals */}
       <CallScreen />
       <IncomingCallModal />
+
+      {/* Global Multi-Party WebRTC Group Voice & Video Calling UI Modals */}
+      <GroupCallScreen />
+      <IncomingGroupCallModal />
 
       {/* In-App Update Modal */}
       {updateManifest && (
@@ -339,7 +355,9 @@ export const App: React.FC = () => {
         <AuthProvider>
           <SocketProvider>
             <CallProvider>
-              <AppContent />
+              <GroupCallProvider>
+                <AppContent />
+              </GroupCallProvider>
             </CallProvider>
           </SocketProvider>
         </AuthProvider>

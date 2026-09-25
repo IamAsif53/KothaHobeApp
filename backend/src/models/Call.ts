@@ -13,11 +13,20 @@ export type CallStatus =
   | 'busy'
   | 'failed';
 
+export interface ICallParticipantHistory {
+  user: Types.ObjectId;
+  joinedAt: Date;
+  leftAt?: Date;
+}
+
 export interface ICall extends Document {
   callId: string;
+  isGroup: boolean;
   callerId: Types.ObjectId;
-  receiverId: Types.ObjectId;
+  receiverId?: Types.ObjectId;
   conversationId: Types.ObjectId;
+  activeParticipants: Types.ObjectId[];
+  participantsHistory: ICallParticipantHistory[];
   callType: CallType;
   status: CallStatus;
   startedAt: Date;
@@ -37,6 +46,11 @@ const CallSchema = new Schema(
       unique: true,
       index: true,
     },
+    isGroup: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     callerId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -46,7 +60,7 @@ const CallSchema = new Schema(
     receiverId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,
       index: true,
     },
     conversationId: {
@@ -55,6 +69,19 @@ const CallSchema = new Schema(
       required: true,
       index: true,
     },
+    activeParticipants: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    participantsHistory: [
+      {
+        user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        joinedAt: { type: Date, default: Date.now },
+        leftAt: { type: Date },
+      },
+    ],
     callType: {
       type: String,
       enum: ['voice', 'video'],

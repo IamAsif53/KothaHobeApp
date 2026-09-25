@@ -319,7 +319,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       let mem = activeCallsMap.get(callId);
       if (!mem) {
         const call = await Call.findOne({ callId });
-        if (call) {
+        if (call && call.receiverId) {
           mem = {
             callId,
             callerId: call.callerId.toString(),
@@ -375,7 +375,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       let mem = activeCallsMap.get(callId);
       if (!mem) {
         const call = await Call.findOne({ callId });
-        if (call) {
+        if (call && call.receiverId) {
           mem = {
             callId,
             callerId: call.callerId.toString(),
@@ -405,7 +405,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       let mem = activeCallsMap.get(callId);
       if (!mem) {
         const call = await Call.findOne({ callId });
-        if (call) {
+        if (call && call.receiverId) {
           mem = {
             callId,
             callerId: call.callerId.toString(),
@@ -439,7 +439,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       let mem = activeCallsMap.get(callId);
       if (!mem) {
         const call = await Call.findOne({ callId });
-        if (call) {
+        if (call && call.receiverId) {
           mem = {
             callId,
             callerId: call.callerId.toString(),
@@ -495,7 +495,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
-        receiverId: call.receiverId,
+        receiverId: call.receiverId || undefined,
         text: isVideoCall ? '📹 Declined video call' : '📞 Declined voice call',
         type: 'call',
         status: 'delivered',
@@ -513,7 +513,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       io.to(`conv:${call.conversationId.toString()}`).emit('message:new', callMsg);
       io.to(`user:${call.callerId.toString()}`).emit('message:new', callMsg);
-      io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      }
     } catch (err) {
       console.error('[Call] Reject error:', err);
     }
@@ -542,18 +544,22 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       console.log(`[Call] Call ${callId} cancelled by caller.`);
 
-      io.to(`user:${call.receiverId.toString()}`).emit('call:cancelled', { callId });
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('call:cancelled', { callId });
+      }
       socket.emit('call:cancelled', { callId });
 
       // Dismiss native incoming call notification on receiver device
-      sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
+      if (call.receiverId) {
+        sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
+      }
 
       // Save Missed Call event
       const isVideoCancel = call.callType === 'video';
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
-        receiverId: call.receiverId,
+        receiverId: call.receiverId || undefined,
         text: isVideoCancel ? '📹 Missed video call' : '📞 Missed voice call',
         type: 'call',
         status: 'delivered',
@@ -571,7 +577,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       io.to(`conv:${call.conversationId.toString()}`).emit('message:new', callMsg);
       io.to(`user:${call.callerId.toString()}`).emit('message:new', callMsg);
-      io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      }
     } catch (err) {
       console.error('[Call] Cancel error:', err);
     }
@@ -608,7 +616,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       console.log(`[Call] Call ${callId} ended. Total duration: ${duration}s`);
 
       io.to(`user:${call.callerId.toString()}`).emit('call:ended', { callId, duration });
-      io.to(`user:${call.receiverId.toString()}`).emit('call:ended', { callId, duration });
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('call:ended', { callId, duration });
+      }
 
       // Save in-chat Call Record
       const durText = formatDurationText(duration);
@@ -616,7 +626,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const callMsg = new Message({
         conversationId: call.conversationId,
         senderId: call.callerId,
-        receiverId: call.receiverId,
+        receiverId: call.receiverId || undefined,
         text: isVideoEnd ? `📹 Video call (${durText})` : `📞 Voice call (${durText})`,
         type: 'call',
         status: 'delivered',
@@ -634,7 +644,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       io.to(`conv:${call.conversationId.toString()}`).emit('message:new', callMsg);
       io.to(`user:${call.callerId.toString()}`).emit('message:new', callMsg);
-      io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('message:new', callMsg);
+      }
     } catch (err) {
       console.error('[Call] End error:', err);
     }
@@ -657,7 +669,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
 
       console.log(`[Call] Call ${callId} marked as failed by client`);
       io.to(`user:${call.callerId.toString()}`).emit('call:failed', { callId });
-      io.to(`user:${call.receiverId.toString()}`).emit('call:failed', { callId });
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('call:failed', { callId });
+      }
     } catch (err) {
       console.error('[Call] Failed handler error:', err);
     }

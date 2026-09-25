@@ -114,10 +114,26 @@ export const listConversations = async (
       .populate({
         path: 'participants',
         select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
-      });
+      })
+      .populate('groupMeta.creator', '_id displayName username avatarUrl')
+      .populate('groupMeta.admins', '_id displayName username avatarUrl')
+      .populate('groupMeta.members.user', '_id displayName username avatarUrl isOnline lastSeen')
+      .populate('groupMeta.members.invitedBy', '_id displayName username');
 
-    // Filter out conversations with blocked users & calculate unread count
+    // Filter conversations:
+    // - For 1-on-1: filter out blocked users
+    // - For groups: check if user is declined (filter out if declined)
     const validConversations = conversations.filter((conv) => {
+      if (conv.isGroup) {
+        const memberEntry = conv.groupMeta?.members?.find(
+          (m: any) => m.user?._id?.toString() === userId.toString() || m.user?.toString() === userId.toString()
+        );
+        if (memberEntry && memberEntry.status === 'declined') {
+          return false;
+        }
+        return true;
+      }
+
       const recipient = conv.participants.find(
         (p: any) => p._id.toString() !== userId.toString()
       );
@@ -127,25 +143,59 @@ export const listConversations = async (
 
     const result = await Promise.all(
       validConversations.map(async (conv) => {
-        const unreadCount = await Message.countDocuments({
-          conversationId: conv._id,
-          receiverId: userId,
-          status: { $in: ['sending', 'sent', 'delivered'] },
-        });
+        let unreadCount = 0;
+        let myMembershipStatus: 'accepted' | 'pending' | 'declined' = 'accepted';
 
-        const recipient = conv.participants.find(
-          (p: any) => p._id.toString() !== userId.toString()
-        );
+        if (conv.isGroup) {
+          const memberEntry = conv.groupMeta?.members?.find(
+            (m: any) => m.user?._id?.toString() === userId.toString() || m.user?.toString() === userId.toString()
+          );
+          if (memberEntry) {
+            myMembershipStatus = memberEntry.status;
+          }
 
-        return {
-          _id: conv._id,
-          recipient,
-          lastMessage: conv.lastMessage,
-          lastMessageAt: conv.lastMessageAt,
-          unreadCount,
-          createdAt: conv.createdAt,
-          updatedAt: conv.updatedAt,
-        };
+          unreadCount = await Message.countDocuments({
+            conversationId: conv._id,
+            senderId: { $ne: userId },
+            readBy: { $ne: userId },
+            type: { $ne: 'system' },
+          });
+
+          return {
+            _id: conv._id,
+            isGroup: true,
+            groupMeta: conv.groupMeta,
+            participants: conv.participants,
+            myMembershipStatus,
+            lastMessage: conv.lastMessage,
+            lastMessageAt: conv.lastMessageAt,
+            unreadCount,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+          };
+        } else {
+          unreadCount = await Message.countDocuments({
+            conversationId: conv._id,
+            receiverId: userId,
+            status: { $in: ['sending', 'sent', 'delivered'] },
+          });
+
+          const recipient = conv.participants.find(
+            (p: any) => p._id.toString() !== userId.toString()
+          );
+
+          return {
+            _id: conv._id,
+            isGroup: false,
+            recipient,
+            participants: conv.participants,
+            lastMessage: conv.lastMessage,
+            lastMessageAt: conv.lastMessageAt,
+            unreadCount,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+          };
+        }
       })
     );
 
@@ -156,6 +206,77 @@ export const listConversations = async (
   } catch (error) {
     console.error('[Conversation] list error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch conversations' });
+  }
+};
+
+export const getConversationDetails = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const conversationId = req.params.conversationId as string;
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+      res.status(400).json({ success: false, message: 'Invalid conversationId' });
+      return;
+    }
+
+    const conv = await Conversation.findOne({
+      _id: conversationId,
+      participants: req.user._id,
+    })
+      .populate({
+        path: 'participants',
+        select: '_id phoneNumber displayName username avatarUrl isOnline lastSeen',
+      })
+      .populate('groupMeta.creator', '_id displayName username avatarUrl')
+      .populate('groupMeta.admins', '_id displayName username avatarUrl')
+      .populate('groupMeta.members.user', '_id displayName username avatarUrl isOnline lastSeen')
+      .populate('groupMeta.members.invitedBy', '_id displayName username');
+
+    if (!conv) {
+      res.status(404).json({ success: false, message: 'Conversation not found' });
+      return;
+    }
+
+    let recipient = null;
+    let myMembershipStatus: 'accepted' | 'pending' | 'declined' = 'accepted';
+
+    if (conv.isGroup) {
+      const memberEntry = conv.groupMeta?.members?.find(
+        (m: any) => m.user?._id?.toString() === req.user!._id.toString() || m.user?.toString() === req.user!._id.toString()
+      );
+      if (memberEntry) {
+        myMembershipStatus = memberEntry.status;
+      }
+    } else {
+      recipient = conv.participants.find(
+        (p: any) => p._id.toString() !== req.user!._id.toString()
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      conversation: {
+        _id: conv._id,
+        isGroup: conv.isGroup || false,
+        groupMeta: conv.groupMeta,
+        participants: conv.participants,
+        recipient,
+        myMembershipStatus,
+        lastMessage: conv.lastMessage,
+        lastMessageAt: conv.lastMessageAt,
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('[Conversation] get details error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch conversation details' });
   }
 };
 

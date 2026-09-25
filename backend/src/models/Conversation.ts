@@ -7,9 +7,28 @@ export interface ILastMessage {
   status: 'sending' | 'sent' | 'delivered' | 'read';
 }
 
+export interface IGroupMember {
+  user: Types.ObjectId;
+  role: 'admin' | 'member';
+  status: 'pending' | 'accepted' | 'declined';
+  joinedAt?: Date;
+  invitedBy?: Types.ObjectId;
+}
+
+export interface IGroupMeta {
+  name: string;
+  avatarUrl?: string;
+  creator: Types.ObjectId;
+  admins: Types.ObjectId[];
+  members: IGroupMember[];
+  nicknames?: Record<string, string>;
+}
+
 export interface IConversation extends Document {
+  isGroup: boolean;
   participants: Types.ObjectId[];
-  participantsKey: string;
+  participantsKey?: string;
+  groupMeta?: IGroupMeta;
   lastMessage?: ILastMessage;
   lastMessageAt: Date;
   deletedFor: Types.ObjectId[];
@@ -17,8 +36,36 @@ export interface IConversation extends Document {
   updatedAt: Date;
 }
 
+const GroupMemberSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending' },
+    joinedAt: { type: Date },
+    invitedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { _id: false }
+);
+
+const GroupMetaSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 60 },
+    avatarUrl: { type: String, default: '' },
+    creator: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    admins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    members: [GroupMemberSchema],
+    nicknames: { type: Map, of: String, default: {} },
+  },
+  { _id: false }
+);
+
 const ConversationSchema: Schema = new Schema(
   {
+    isGroup: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     participants: [
       {
         type: Schema.Types.ObjectId,
@@ -28,9 +75,12 @@ const ConversationSchema: Schema = new Schema(
     ],
     participantsKey: {
       type: String,
-      required: true,
-      unique: true, // Guarantees uniqueness for UserA <-> UserB
+      sparse: true,
       index: true,
+    },
+    groupMeta: {
+      type: GroupMetaSchema,
+      required: false,
     },
     lastMessage: {
       text: { type: String, default: '' },
@@ -58,6 +108,7 @@ const ConversationSchema: Schema = new Schema(
 // Indexes
 ConversationSchema.index({ participants: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
+ConversationSchema.index({ 'groupMeta.members.user': 1 });
 
 export function generateParticipantsKey(userAId: string, userBId: string): string {
   const sorted = [userAId.toString(), userBId.toString()].sort();
@@ -65,3 +116,4 @@ export function generateParticipantsKey(userAId: string, userBId: string): strin
 }
 
 export const Conversation = mongoose.model<IConversation>('Conversation', ConversationSchema);
+

@@ -185,13 +185,15 @@ export const declineCall = async (req: AuthenticatedRequest, res: Response): Pro
       const io = getGlobalIO();
       if (io) {
         io.to(`user:${call.callerId.toString()}`).emit('call:rejected', { callId });
-        io.to(`user:${call.receiverId.toString()}`).emit('call:rejected', { callId });
+        if (call.receiverId) {
+          io.to(`user:${call.receiverId.toString()}`).emit('call:rejected', { callId });
+        }
 
         // Save Declined Call event in conversation
         const callMsg = new Message({
           conversationId: call.conversationId,
           senderId: call.callerId,
-          receiverId: call.receiverId,
+          receiverId: call.receiverId || undefined,
           text: '📞 Declined voice call',
           type: 'call',
           status: 'delivered',

@@ -10,7 +10,7 @@ import { App as CapApp } from '@capacitor/app';
 
 interface OutboxItem {
   conversationId: string;
-  receiverId: string;
+  receiverId?: string;
   text: string;
   clientMessageId: string;
   type?: string;
@@ -26,7 +26,7 @@ interface SocketContextType {
   reconnectNow: () => void;
   sendMessage: (
     conversationId: string,
-    receiverId: string,
+    receiverId: string | undefined,
     text: string,
     clientMessageId: string,
     type?: string,
@@ -35,8 +35,8 @@ interface SocketContextType {
   ) => void;
   flushPendingOutbox: () => void;
   markAsRead: (conversationId: string) => void;
-  startTyping: (conversationId: string, receiverId: string) => void;
-  stopTyping: (conversationId: string, receiverId: string) => void;
+  startTyping: (conversationId: string, receiverId?: string) => void;
+  stopTyping: (conversationId: string, receiverId?: string) => void;
   activeConversationId: string | null;
   setActiveConversationId: (id: string | null) => void;
   pushToken: string | null;
@@ -542,7 +542,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const sendMessage = (
     conversationId: string,
-    receiverId: string,
+    receiverId: string | undefined,
     text: string,
     clientMessageId: string,
     type: string = 'text',
@@ -589,7 +589,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const startTyping = (conversationId: string, receiverId: string) => {
+  const startTyping = (conversationId: string, receiverId?: string) => {
     if (socket && isConnected) {
       socket.emit('typing:start', { conversationId, receiverId });
 
@@ -602,7 +602,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const stopTyping = (conversationId: string, receiverId: string) => {
+  const stopTyping = (conversationId: string, receiverId?: string) => {
     if (socket && isConnected) {
       socket.emit('typing:stop', { conversationId, receiverId });
       if (typingTimeoutRef.current[conversationId]) {

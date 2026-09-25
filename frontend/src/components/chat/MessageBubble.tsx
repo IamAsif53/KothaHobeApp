@@ -52,6 +52,16 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  if (message.type === 'system') {
+    return (
+      <div className="flex justify-center my-2 px-4 animate-fade-in select-none">
+        <div className="bg-[#111b21]/90 border border-white/10 text-emerald-300 text-xs px-3.5 py-1.5 rounded-full text-center max-w-[90%] shadow-sm font-medium">
+          {message.text}
+        </div>
+      </div>
+    );
+  }
+
   const renderStatusIcon = () => {
     if (!isMe) return null;
 
@@ -257,6 +267,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             : 'bg-chat-bubbleIn text-chat-textPrimary rounded-tl-none border border-white/5'
         } ${message.type === 'image' ? 'p-1 pb-6' : 'px-3.5 py-2'}`}
       >
+        {/* Sender Nickname in Group */}
+        {!isMe && message.senderNickname && (
+          <p className="text-[11px] font-bold text-emerald-400 mb-1 leading-none select-none">
+            {message.senderNickname}
+          </p>
+        )}
+
         {/* Reply Quote Banner */}
         {message.replyTo && (
           <div

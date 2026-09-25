@@ -22,7 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     private static final String TAG = "KothaFCMService";
-    public static final String CALL_CHANNEL_ID = "incoming_calls_ringtone_v3";
+    public static final String CALL_CHANNEL_ID = "incoming_calls_ringtone_v4";
+    public static final String CHAT_CHANNEL_ID = "chat_messages";
 
     // Deduplication tracking: callId -> timestamp
     private static final ConcurrentHashMap<String, Long> activeCallNotifications = new ConcurrentHashMap<>();
@@ -31,6 +32,69 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         if (callId != null) {
             activeCallNotifications.remove(callId);
         }
+    }
+
+    public static void createNotificationChannels(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager == null) return;
+
+            // 1. Chat Messages Channel
+            NotificationChannel chatChannel = new NotificationChannel(
+                CHAT_CHANNEL_ID,
+                "Chat Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            chatChannel.setDescription("Incoming chat and media messages");
+            chatChannel.enableVibration(true);
+            chatChannel.setVibrationPattern(new long[]{0, 250, 250, 250});
+            chatChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            chatChannel.enableLights(true);
+
+            Uri defaultNotifSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            if (defaultNotifSound != null) {
+                AudioAttributes chatAudioAttr = new AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                    .build();
+                chatChannel.setSound(defaultNotifSound, chatAudioAttr);
+            }
+            notificationManager.createNotificationChannel(chatChannel);
+
+            // 2. Incoming Calls Channel (High Priority / Full-Screen / Ringtone)
+            NotificationChannel callChannel = new NotificationChannel(
+                CALL_CHANNEL_ID,
+                "Incoming Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            callChannel.setDescription("Full-screen notifications, sound and vibration for incoming voice and video calls");
+            callChannel.enableVibration(true);
+            long[] vibrationPattern = new long[]{0, 1000, 500, 1000, 500, 1000, 500, 1000};
+            callChannel.setVibrationPattern(vibrationPattern);
+            callChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
+            Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            if (ringtoneUri == null) {
+                ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            }
+
+            AudioAttributes callAudioAttr = new AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                .build();
+            callChannel.setSound(ringtoneUri, callAudioAttr);
+            callChannel.setBypassDnd(true);
+            callChannel.enableLights(true);
+
+            notificationManager.createNotificationChannel(callChannel);
+        }
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createNotificationChannels(this);
     }
 
     @Override
@@ -42,6 +106,8 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
+        createNotificationChannels(this);
+
         Map<String, String> data = remoteMessage.getData();
         Log.d(TAG, "FCM payload received: size=" + data.size() + ", data=" + data);
 
@@ -62,10 +128,16 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             return;
         }
 
-        // 3. Delegate regular text / media chat messages to Capacitor push plugin
-        Log.d(TAG, "[NATIVE FCM] Forwarding chat push to Capacitor plugin");
-        super.onMessageReceived(remoteMessage);
-        PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
+        // 3. Handle Regular Text / Media Chat Messages (Build & Post Native Notification)
+        Log.d(TAG, "[NATIVE FCM] Building and posting native chat message notification");
+        handleChatMessagePush(remoteMessage, data);
+
+        // Also pass to Capacitor plugin for foreground web listeners if active
+        try {
+            PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
+        } catch (Exception e) {
+            Log.w(TAG, "Capacitor push forwarding note: " + e.getMessage());
+        }
     }
 
     private void handleIncomingCallPush(Map<String, String> data, String callId) {
@@ -73,6 +145,8 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     public static void triggerCallNotification(Context context, Map<String, String> data, String callId) {
+        createNotificationChannels(context);
+
         long now = System.currentTimeMillis();
         Long previousTimestamp = activeCallNotifications.get(callId);
 
@@ -95,7 +169,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "Showing native incoming call notification for callId: " + callId + " from: " + callerName);
 
-        // Wake screen safely with short-lived WakeLock (5-second auto-release by OS)
+        // Wake screen safely with WakeLock
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             try {
@@ -106,7 +180,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
                     "kothahobe:incoming_call_wake"
                 );
                 wakeLock.setReferenceCounted(false);
-                wakeLock.acquire(5000);
+                wakeLock.acquire(8000);
             } catch (Exception e) {
                 Log.w(TAG, "WakeLock acquisition notice: " + e.getMessage());
             }
@@ -120,30 +194,6 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         }
         long[] vibrationPattern = new long[]{0, 1000, 500, 1000, 500, 1000, 500, 1000};
-
-        // Create high-priority incoming calls notification channel for Android 8.0+ (API 26+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                CALL_CHANNEL_ID,
-                "Incoming Calls",
-                NotificationManager.IMPORTANCE_HIGH
-            );
-            channel.setDescription("Full-screen notifications, sound and vibration for incoming voice and video calls");
-            channel.enableVibration(true);
-            channel.setVibrationPattern(vibrationPattern);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-
-            AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-                .build();
-            channel.setSound(ringtoneUri, audioAttributes);
-            channel.setBypassDnd(true);
-            channel.enableLights(true);
-
-            notificationManager.createNotificationChannel(channel);
-        }
 
         // Full-screen / Tap Intent: Launches MainActivity
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
@@ -235,5 +285,83 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             notificationManager.cancel(Math.abs(callId.hashCode()));
         }
         removeActiveCall(callId);
+    }
+
+    private void handleChatMessagePush(RemoteMessage remoteMessage, Map<String, String> data) {
+        String title = null;
+        String body = null;
+
+        if (remoteMessage.getNotification() != null) {
+            title = remoteMessage.getNotification().getTitle();
+            body = remoteMessage.getNotification().getBody();
+        }
+
+        if (title == null || title.trim().isEmpty()) {
+            title = data.get("senderName");
+        }
+        if (title == null || title.trim().isEmpty()) {
+            title = "Kotha Hobe";
+        }
+
+        if (body == null || body.trim().isEmpty()) {
+            body = data.get("messageText");
+        }
+        if (body == null || body.trim().isEmpty()) {
+            body = data.get("text");
+        }
+        if (body == null || body.trim().isEmpty()) {
+            body = "Sent you a message";
+        }
+
+        String conversationId = data.get("conversationId");
+        String senderId = data.get("senderId");
+        String messageId = data.get("messageId");
+
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager == null) return;
+
+        createNotificationChannels(this);
+
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setAction(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK |
+            Intent.FLAG_ACTIVITY_CLEAR_TOP |
+            Intent.FLAG_ACTIVITY_SINGLE_TOP
+        );
+        intent.putExtra("action", "open_chat");
+        if (conversationId != null) intent.putExtra("conversationId", conversationId);
+        if (senderId != null) intent.putExtra("senderId", senderId);
+        if (messageId != null) intent.putExtra("messageId", messageId);
+
+        int notifId = conversationId != null ? Math.abs(conversationId.hashCode()) : (int) System.currentTimeMillis();
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this,
+            notifId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+
+        Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHAT_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setSound(defaultSoundUri)
+            .setVibrate(new long[]{0, 250, 250, 250})
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(pendingIntent);
+
+        if (conversationId != null && !conversationId.isEmpty()) {
+            builder.setGroup(conversationId);
+        }
+
+        notificationManager.notify(notifId, builder.build());
     }
 }

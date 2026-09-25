@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "📝 Fix corrupted Unicode & Bengali filenames on document uploads",
-      "🚀 Instant 0ms rendering when forwarding images to chats",
-      "💬 Direct in-app Share to Chat list + native OS share integration",
-      "📱 Compact, unclipped Last Seen display in chat header",
-      "🖼️ Polished full-screen image viewer with responsive zoom, rotate & save controls"
+      "🔔 Fix notification system completely for messages, voice calls & video calls",
+      "📲 Native background and killed-state message notifications in system tray",
+      "⚡ Full-screen & heads-up wakeup for incoming calls (locked & unlocked states)",
+      "🎯 Direct tap-to-open conversation routing from notification tray",
+      "📝 Unicode & Bengali filename support and 0ms instant media forwarding"
     ],
     mandatory: false
   };

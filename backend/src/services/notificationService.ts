@@ -63,6 +63,7 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
         senderId: String(senderId || ''),
         messageId: String(messageId || ''),
         senderName: safeTitle,
+        messageText: safeBody,
       },
       android: {
         priority: 'high' as const,

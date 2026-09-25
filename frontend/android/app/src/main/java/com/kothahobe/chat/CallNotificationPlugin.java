@@ -32,37 +32,48 @@ public class CallNotificationPlugin extends Plugin {
 
         String action = extras.getString("action");
         String callId = extras.getString("callId");
-
-        if (callId == null || callId.isEmpty()) return;
-        if (!"incoming_call".equals(action) && !"accept_call".equals(action)) return;
+        String conversationId = extras.getString("conversationId");
 
         JSObject data = new JSObject();
-        data.put("action", action);
-        data.put("callId", callId);
-        data.put("callerId", extras.getString("callerId", ""));
-        data.put("callerName", extras.getString("callerName", "User"));
-        data.put("callerAvatar", extras.getString("callerAvatar", ""));
-        data.put("conversationId", extras.getString("conversationId", ""));
-        data.put("callType", extras.getString("callType", "voice"));
-
-        Log.d(TAG, "Handling incoming call intent: " + action + " for callId: " + callId);
-        pendingCallAction = data;
-
-        // Auto-dismiss native notification from Android notification shade immediately
-        if (instance != null && instance.getContext() != null) {
-            try {
-                NotificationManager nm = (NotificationManager) instance.getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-                if (nm != null) {
-                    nm.cancel(Math.abs(callId.hashCode()));
-                }
-                KothaFirebaseMessagingService.removeActiveCall(callId);
-            } catch (Exception e) {
-                Log.w(TAG, "Error cancelling notification on intent: " + e.getMessage());
+        for (String key : extras.keySet()) {
+            Object val = extras.get(key);
+            if (val != null) {
+                data.put(key, val.toString());
             }
         }
 
-        if (instance != null) {
-            instance.notifyListeners("callActionReceived", data, true);
+        // 1. Incoming / Accept Call Intent
+        if (callId != null && !callId.isEmpty() && ("incoming_call".equals(action) || "accept_call".equals(action))) {
+            Log.d(TAG, "Handling incoming call intent: " + action + " for callId: " + callId);
+            pendingCallAction = data;
+
+            // Auto-dismiss native call notification from Android notification shade immediately
+            if (instance != null && instance.getContext() != null) {
+                try {
+                    NotificationManager nm = (NotificationManager) instance.getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (nm != null) {
+                        nm.cancel(Math.abs(callId.hashCode()));
+                    }
+                    KothaFirebaseMessagingService.removeActiveCall(callId);
+                } catch (Exception e) {
+                    Log.w(TAG, "Error cancelling notification on intent: " + e.getMessage());
+                }
+            }
+
+            if (instance != null) {
+                instance.notifyListeners("callActionReceived", data, true);
+            }
+            return;
+        }
+
+        // 2. Chat Message Notification Tap Intent
+        if (conversationId != null && !conversationId.isEmpty()) {
+            Log.d(TAG, "Handling chat notification tap intent for conversationId: " + conversationId);
+            pendingCallAction = data;
+
+            if (instance != null) {
+                instance.notifyListeners("chatNotificationOpened", data, true);
+            }
         }
     }
 

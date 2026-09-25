@@ -28,6 +28,8 @@ if (!admin.apps.length) {
     // 2. Check local file paths
     if (!serviceAccount) {
       const candidatePaths = [
+        path.resolve(process.cwd(), 'service-account.json'),
+        path.resolve(process.cwd(), 'backend/service-account.json'),
         path.resolve(__dirname, '../../service-account.json'),
         path.resolve(__dirname, '../../firebase-service-account.json'),
         path.resolve(__dirname, '../../../firebase-service-account.json'),

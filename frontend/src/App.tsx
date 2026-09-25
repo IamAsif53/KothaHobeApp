@@ -112,14 +112,25 @@ export const AppContent: React.FC = () => {
             }
           });
 
-          // Check if app was launched via pending call intent
+          callNotifPlugin.addListener('chatNotificationOpened', (data: any) => {
+            console.log('[App] Chat notification opened:', data);
+            if (data && data.conversationId) {
+              navigate(`/chat/${data.conversationId}`, { replace: false });
+            }
+          });
+
+          // Check if app was launched via pending call / chat intent
           callNotifPlugin.getPendingCallAction().then((pending: any) => {
-            if (pending && pending.callId) {
-              console.log('[App] Pending call action found on launch:', pending);
-              if (pending.action === 'accept_call') {
-                window.dispatchEvent(new CustomEvent('kothahobe:accept_call', { detail: pending }));
-              } else {
-                window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: pending }));
+            if (pending && pending.hasPending) {
+              console.log('[App] Pending action found on launch:', pending);
+              if (pending.callId) {
+                if (pending.action === 'accept_call') {
+                  window.dispatchEvent(new CustomEvent('kothahobe:accept_call', { detail: pending }));
+                } else {
+                  window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: pending }));
+                }
+              } else if (pending.conversationId) {
+                navigate(`/chat/${pending.conversationId}`, { replace: false });
               }
             }
           });

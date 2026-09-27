@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Camera,
@@ -207,16 +207,6 @@ export const StoriesPage: React.FC = () => {
                 </p>
               </div>
             </div>
-
-            {/* Quick Add Button */}
-            <button
-              type="button"
-              onClick={() => setShowComposer(true)}
-              className="p-2.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 active:scale-95 transition-all"
-              title="Add Story"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -327,18 +317,6 @@ export const StoriesPage: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Floating Action Button for Quick Story Creation */}
-      <div className="absolute bottom-20 right-5 flex flex-col gap-2.5 items-end z-20">
-        <button
-          type="button"
-          onClick={() => setShowComposer(true)}
-          className="w-13 h-13 p-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-2xl shadow-emerald-500/40 flex items-center justify-center active:scale-90 transition-transform"
-          title="Create Story"
-        >
-          <Camera className="w-6 h-6 stroke-[2.5]" />
-        </button>
       </div>
 
       {/* Modals */}

@@ -672,6 +672,7 @@ export const SettingsPage: React.FC = () => {
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
+                  { id: 'light' as AppTheme, name: 'Pure White (Light)', color: '#ffffff', accent: '#059669' },
                   { id: 'dark' as AppTheme, name: 'Default Dark', color: '#0b141a', accent: '#00a884' },
                   { id: 'midnight' as AppTheme, name: 'Midnight Slate', color: '#0f172a', accent: '#38bdf8' },
                   { id: 'emerald' as AppTheme, name: 'Deep Emerald', color: '#06281e', accent: '#10b981' },

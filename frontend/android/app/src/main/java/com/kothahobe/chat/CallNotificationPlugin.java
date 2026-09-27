@@ -25,6 +25,10 @@ public class CallNotificationPlugin extends Plugin {
     }
 
     public static void handleIncomingIntent(Intent intent) {
+        handleIncomingIntent(instance != null ? instance.getContext() : null, intent);
+    }
+
+    public static void handleIncomingIntent(Context context, Intent intent) {
         if (intent == null) return;
 
         Bundle extras = intent.getExtras();
@@ -48,17 +52,18 @@ public class CallNotificationPlugin extends Plugin {
             pendingCallAction = data;
 
             // Auto-dismiss native call notification from Android notification shade immediately
-            if (instance != null && instance.getContext() != null) {
+            Context ctx = context != null ? context : (instance != null ? instance.getContext() : null);
+            if (ctx != null) {
                 try {
-                    NotificationManager nm = (NotificationManager) instance.getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
                     if (nm != null) {
                         nm.cancel(Math.abs(callId.hashCode()));
                     }
-                    KothaFirebaseMessagingService.removeActiveCall(callId);
                 } catch (Exception e) {
                     Log.w(TAG, "Error cancelling notification on intent: " + e.getMessage());
                 }
             }
+            KothaFirebaseMessagingService.removeActiveCall(callId);
 
             if (instance != null) {
                 instance.notifyListeners("callActionReceived", data, true);
@@ -94,11 +99,22 @@ public class CallNotificationPlugin extends Plugin {
     @PluginMethod
     public void dismissCallNotification(PluginCall call) {
         String callId = call.getString("callId");
-        if (callId != null && !callId.isEmpty()) {
-            NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.cancel(Math.abs(callId.hashCode()));
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    if (callId != null && !callId.isEmpty()) {
+                        nm.cancel(Math.abs(callId.hashCode()));
+                    } else {
+                        nm.cancelAll();
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Error in dismissCallNotification: " + e.getMessage());
             }
+        }
+        if (callId != null && !callId.isEmpty()) {
             KothaFirebaseMessagingService.removeActiveCall(callId);
         }
         call.resolve();

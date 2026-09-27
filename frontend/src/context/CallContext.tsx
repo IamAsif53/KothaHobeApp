@@ -14,6 +14,7 @@ import {
   disableCallAudioMode,
   toggleNativeSpeakerphone,
 } from '../services/nativeMediaService';
+import { dismissCallNotification, NativeCallNotification } from '../services/callNotificationService';
 
 export type CallState =
   | 'IDLE'
@@ -154,6 +155,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     webrtcVideoService.cleanup();
 
     disableCallAudioMode();
+    dismissCallNotification(activeCallRef.current?.callId);
     setIsMuted(false);
     setIsSpeakerOn(true);
     setIsVideoEnabled(true);
@@ -365,15 +367,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCallState('CONNECTING');
     callStateRef.current = 'CONNECTING';
 
-    // Auto-dismiss native Android notification immediately
-    try {
-      const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-      if (CallPlugin && typeof CallPlugin.dismissCallNotification === 'function') {
-        CallPlugin.dismissCallNotification({ callId: current.callId });
-      }
-    } catch (e) {
-      console.warn('[CallContext] Dismiss notification note:', e);
-    }
+    // Auto-dismiss native Android & Local notifications immediately
+    dismissCallNotification(current.callId);
 
     // 1. Check microphone permission
     const audioPerm = await ensureAudioPermission();
@@ -460,6 +455,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (current && activeSocket) {
       activeSocket.emit('call:reject', { callId: current.callId });
     }
+    dismissCallNotification(current?.callId);
     soundService.playCallEndTone();
     setCallState('REJECTED');
     callStateRef.current = 'REJECTED';
@@ -473,6 +469,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (current && activeSocket) {
       activeSocket.emit('call:cancel', { callId: current.callId });
     }
+    dismissCallNotification(current?.callId);
     soundService.playCallEndTone();
     setCallState('CANCELLED');
     callStateRef.current = 'CANCELLED';
@@ -486,6 +483,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (current && activeSocket) {
       activeSocket.emit('call:end', { callId: current.callId });
     }
+    dismissCallNotification(current?.callId);
     soundService.playCallEndTone();
     setCallState('ENDED');
     callStateRef.current = 'ENDED';
@@ -678,6 +676,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 9. Call Rejection
     const handleCallRejected = () => {
       console.log('[Signaling] Call was rejected by recipient');
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('REJECTED');
       callStateRef.current = 'REJECTED';
@@ -687,6 +686,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 10. Call Cancellation
     const handleCallCancelled = () => {
       console.log('[Signaling] Call was cancelled by caller');
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('CANCELLED');
       callStateRef.current = 'CANCELLED';
@@ -696,6 +696,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 11. Call Ended
     const handleCallEnded = (data: { duration: number }) => {
       console.log('[Signaling] Call ended. Total duration:', data.duration);
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('ENDED');
       callStateRef.current = 'ENDED';
@@ -705,6 +706,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 12. Recipient Busy
     const handleCallBusy = (data: { message?: string }) => {
       console.log('[Signaling] Recipient is busy:', data.message);
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('BUSY');
       callStateRef.current = 'BUSY';
@@ -714,6 +716,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 13. Call Timeout (Missed Call)
     const handleCallTimeout = () => {
       console.log('[Signaling] Call timed out (missed call)');
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('FAILED');
       callStateRef.current = 'FAILED';
@@ -723,6 +726,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 14. Call Failed
     const handleCallFailed = (data: { message?: string }) => {
       console.log('[Signaling] Call failed:', data.message);
+      dismissCallNotification();
       soundService.playCallEndTone();
       setCallState('FAILED');
       callStateRef.current = 'FAILED';
@@ -732,6 +736,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 15. Call Error
     const handleCallError = (data: { message: string }) => {
       console.warn('[Signaling] Call error:', data.message);
+      dismissCallNotification();
       setPermissionAlert(data.message || 'Call error occurred');
       soundService.playCallEndTone();
       setCallState('FAILED');
@@ -794,13 +799,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data && data.callId) {
         console.log('[CallContext] Received kothahobe:accept_call action from notification:', data);
 
-        // Auto-dismiss native Android notification immediately
-        try {
-          const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-          if (CallPlugin && typeof CallPlugin.dismissCallNotification === 'function') {
-            CallPlugin.dismissCallNotification({ callId: data.callId });
-          }
-        } catch (e) {}
+        // Auto-dismiss native Android & Local notifications immediately
+        dismissCallNotification(data.callId);
 
         if (!activeCallRef.current || activeCallRef.current.callId !== data.callId) {
           const session: CallSession = {
@@ -829,27 +829,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check if there was a pending call action recorded before React mounted
     try {
-      const CallPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-      if (CallPlugin && typeof CallPlugin.getPendingCallAction === 'function') {
-        CallPlugin.getPendingCallAction().then((res: any) => {
-          if (res && res.hasPending && res.action && res.callId) {
-            console.log('[CallContext] Discovered pending call action on boot:', res);
-            const pending = {
-              callId: res.callId,
-              conversationId: res.conversationId,
-              callerId: res.callerId,
-              callerName: res.callerName,
-              callerAvatar: res.callerAvatar,
-              callType: res.callType || 'voice',
-            };
-            if (res.action === 'accept_call') {
-              handleCustomAcceptCall({ detail: pending });
-            } else {
-              handleCustomIncomingCall({ detail: pending });
-            }
+      NativeCallNotification.getPendingCallAction().then((res: any) => {
+        if (res && res.hasPending && res.action && res.callId) {
+          console.log('[CallContext] Discovered pending call action on boot:', res);
+          const pending = {
+            callId: res.callId,
+            conversationId: res.conversationId,
+            callerId: res.callerId,
+            callerName: res.callerName,
+            callerAvatar: res.callerAvatar,
+            callType: res.callType || 'voice',
+          };
+          if (res.action === 'accept_call') {
+            handleCustomAcceptCall({ detail: pending });
+          } else {
+            handleCustomIncomingCall({ detail: pending });
           }
-        }).catch(() => {});
-      }
+        }
+      }).catch(() => {});
     } catch (e) {}
 
     // Proactively check if there's a live incoming call when app opens or reconnects

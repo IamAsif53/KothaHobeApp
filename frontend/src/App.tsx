@@ -22,6 +22,7 @@ import { PushNotifications, ActionPerformed } from '@capacitor/push-notification
 import { Capacitor } from '@capacitor/core';
 import { CURRENT_VERSION } from './config/version';
 import { modalStack } from './utils/modalStack';
+import { NativeCallNotification } from './services/callNotificationService';
 
 import { SplashPage } from './pages/SplashPage';
 import { LoginPage } from './pages/LoginPage';
@@ -103,10 +104,9 @@ export const AppContent: React.FC = () => {
       );
 
       // Listen to native CallNotification plugin events (from Native Android Heads-Up / Full-Screen Intent)
-      const callNotifPlugin = (window as any).Capacitor?.Plugins?.CallNotification;
-      if (callNotifPlugin) {
+      if (Capacitor.isNativePlatform()) {
         try {
-          callNotifPlugin.addListener('callActionReceived', (data: any) => {
+          NativeCallNotification.addListener('callActionReceived', (data: any) => {
             console.log('[App] CallNotification plugin event received:', data);
             if (data && data.callId) {
               if (data.action === 'accept_call') {
@@ -117,7 +117,7 @@ export const AppContent: React.FC = () => {
             }
           });
 
-          callNotifPlugin.addListener('chatNotificationOpened', (data: any) => {
+          NativeCallNotification.addListener('chatNotificationOpened', (data: any) => {
             console.log('[App] Chat notification opened:', data);
             if (data && data.conversationId) {
               navigate(`/chat/${data.conversationId}`, { replace: false });
@@ -125,7 +125,7 @@ export const AppContent: React.FC = () => {
           });
 
           // Check if app was launched via pending call / chat intent
-          callNotifPlugin.getPendingCallAction().then((pending: any) => {
+          NativeCallNotification.getPendingCallAction().then((pending: any) => {
             if (pending && pending.hasPending) {
               console.log('[App] Pending action found on launch:', pending);
               if (pending.callId) {

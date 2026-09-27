@@ -28,7 +28,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // Check if app was launched via incoming/accept call intent
-        CallNotificationPlugin.handleIncomingIntent(getIntent());
+        CallNotificationPlugin.handleIncomingIntent(this, getIntent());
     }
 
     @Override
@@ -36,7 +36,7 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         unlockAndTurnScreenOn();
-        CallNotificationPlugin.handleIncomingIntent(intent);
+        CallNotificationPlugin.handleIncomingIntent(this, intent);
     }
 
     @Override

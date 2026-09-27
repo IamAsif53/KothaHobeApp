@@ -77,13 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🖼️ In-App Media Viewer: Fixed shared media in group chat and group info opening externally in browser; now opens seamlessly inside the app with zoom, pan, rotate, and save",
-      "🔙 Modal & Back Navigation: Back button/backspace while viewing images or modals now dismisses the modal and keeps you in the active chat or media page",
-      "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
-      "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",
-      "🏷️ Per-group member nicknames and shared media gallery",
-      "📞 Multi-Party WebRTC Voice & Video Calls with dynamic speaker highlighting and live call banner",
-      "🔔 Background and killed-state call ringing notifications for group calls"
+      "🧹 UI Streamlining: Removed unnecessary top-right search icon and bottom-right floating action buttons from chat list",
+      "📞 Instant Call Balance & Notification Sync: Accepting a call immediately connects audio/video and dismisses notifications from all panels",
+      "🛑 Symmetric Call Termination: Ending or rejecting a call from either user instantly closes the call screen and dismisses notifications on both devices",
+      "🖼️ In-App Media Viewer: High-performance in-app photo & document viewer for 1-on-1 and group chats",
+      "🔙 Modal Backstack: Android hardware back button and backspace cleanly close topmost active modals without exiting chats",
+      "👥 Group Chat & Calling: Up to 10 members with rich messaging, nicknames, and WebRTC audio/video calls"
     ],
     mandatory: false
   };

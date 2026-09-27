@@ -26,6 +26,7 @@ export const CallScreen: React.FC = () => {
     remoteStream,
     endCall,
     cancelCall,
+    rejectCall,
     toggleMute,
     toggleSpeaker,
     toggleVideo,
@@ -33,6 +34,16 @@ export const CallScreen: React.FC = () => {
     attachLocalVideo,
     attachRemoteVideo,
   } = useCall();
+
+  const handleEndOrCancel = () => {
+    if (callState === 'CONNECTED' || callState === 'CONNECTING' || callState === 'ACCEPTED') {
+      endCall();
+    } else if (activeCall?.isIncoming) {
+      rejectCall();
+    } else {
+      cancelCall();
+    }
+  };
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -343,7 +354,7 @@ export const CallScreen: React.FC = () => {
           {/* End / Cancel Call Button */}
           <button
             type="button"
-            onClick={isConnected ? endCall : cancelCall}
+            onClick={handleEndOrCancel}
             disabled={isEnding}
             className="w-14 h-14 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-red-600/50 transition-transform"
             title="End Call"

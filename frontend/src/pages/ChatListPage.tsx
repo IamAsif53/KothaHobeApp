@@ -305,14 +305,6 @@ export const ChatListPage: React.FC = () => {
             <Users className="w-3.5 h-3.5" />
             <span>+ Group</span>
           </button>
-
-          <button
-            onClick={() => navigate('/search')}
-            className="p-2 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
-            title="Find User"
-          >
-            <Search className="w-5 h-5" />
-          </button>
         </div>
       </header>
 
@@ -475,24 +467,6 @@ export const ChatListPage: React.FC = () => {
             );
           })
         )}
-      </div>
-
-      {/* Floating Action Button */}
-      <div className="fixed right-5 bottom-20 flex flex-col items-center gap-3 z-20">
-        <button
-          onClick={() => setShowCreateGroupModal(true)}
-          className="w-12 h-12 rounded-full bg-emerald-600 hover:bg-emerald-500 pressable text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
-          title="Create Group"
-        >
-          <Users className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => navigate('/search')}
-          className="w-14 h-14 rounded-full bg-brand-500 hover:bg-brand-600 pressable text-white flex items-center justify-center shadow-xl shadow-brand-500/30 transition-all active:scale-95"
-          title="Start New Chat"
-        >
-          <UserPlus className="w-6 h-6" />
-        </button>
       </div>
 
       {/* Create Group Modal */}

@@ -12,6 +12,7 @@ import {
   disableCallAudioMode,
   toggleNativeSpeakerphone,
 } from '../services/nativeMediaService';
+import { dismissCallNotification } from '../services/callNotificationService';
 
 export interface GroupCallSession {
   callId: string;
@@ -139,6 +140,7 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsMuted(false);
     setIsVideoEnabled(true);
     disableCallAudioMode();
+    dismissCallNotification();
   }, [stopDurationTimer]);
 
   // 1. Start a New Group Call
@@ -259,15 +261,19 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!incomingGroupCall) return;
     const { callId, conversationId, groupName, groupAvatar, callType } = incomingGroupCall;
     soundService.stopAll();
+    dismissCallNotification(callId);
     setIncomingGroupCall(null);
     await joinGroupCall(callId, conversationId, groupName, groupAvatar, callType);
   }, [incomingGroupCall, joinGroupCall]);
 
   // 5. Decline Incoming Group Call
   const declineIncomingGroupCall = useCallback(() => {
+    if (incomingGroupCall) {
+      dismissCallNotification(incomingGroupCall.callId);
+    }
     soundService.stopAll();
     setIncomingGroupCall(null);
-  }, []);
+  }, [incomingGroupCall]);
 
   // 6. Media Controls
   const toggleMute = useCallback(() => {

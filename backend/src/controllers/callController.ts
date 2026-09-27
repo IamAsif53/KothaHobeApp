@@ -4,6 +4,7 @@ import { ENV } from '../config/env';
 import { Call } from '../models/Call';
 import { Message } from '../models/Message';
 import { getGlobalIO } from '../sockets/socketManager';
+import { sendCallCancelledPushNotification } from '../services/notificationService';
 import crypto from 'crypto';
 
 interface RTCIceServer {
@@ -212,6 +213,12 @@ export const declineCall = async (req: AuthenticatedRequest, res: Response): Pro
         io.to(`conv:${call.conversationId.toString()}`).emit('message:new', callMsg);
         io.to(`user:${call.callerId.toString()}`).emit('message:new', callMsg);
       }
+
+      // Dismiss native incoming call notification on receiver & caller devices
+      if (call.receiverId) {
+        sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
+      }
+      sendCallCancelledPushNotification({ recipientId: call.callerId.toString(), callId }).catch(() => {});
     }
 
     res.status(200).json({ success: true, message: 'Call declined successfully' });

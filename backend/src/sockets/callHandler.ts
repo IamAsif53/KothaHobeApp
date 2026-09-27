@@ -340,6 +340,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       // Forward immediately to caller ONLY so only caller creates SDP Offer (prevents DTLS role glare)
       io.to(`user:${mem.callerId}`).emit('call:accepted', { callId });
 
+      // Dismiss native incoming call notification on receiver devices
+      sendCallCancelledPushNotification({ recipientId: mem.receiverId, callId }).catch(() => {});
+
       Call.updateOne({ callId }, { status: 'accepted', answeredAt: new Date() }).catch(() => {});
     } catch (err) {
       console.error('[Call] Accept error:', err);
@@ -488,7 +491,15 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       console.log(`[Call] Call ${callId} declined by receiver.`);
 
       io.to(`user:${call.callerId.toString()}`).emit('call:rejected', { callId });
-      socket.emit('call:rejected', { callId });
+      if (call.receiverId) {
+        io.to(`user:${call.receiverId.toString()}`).emit('call:rejected', { callId });
+      }
+
+      // Dismiss native incoming call notification on receiver & caller devices
+      if (call.receiverId) {
+        sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
+      }
+      sendCallCancelledPushNotification({ recipientId: call.callerId.toString(), callId }).catch(() => {});
 
       // Save Declined Call event in conversation
       const isVideoCall = call.callType === 'video';
@@ -521,7 +532,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
     }
   });
 
-  // 9. Caller Cancels Before Answer
+  // 9. Caller or Receiver Cancels Before Answer
   socket.on('call:cancel', async (data: { callId: string }) => {
     try {
       const { callId } = data;
@@ -542,17 +553,18 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       call.endedAt = new Date();
       await call.save();
 
-      console.log(`[Call] Call ${callId} cancelled by caller.`);
+      console.log(`[Call] Call ${callId} cancelled.`);
 
+      io.to(`user:${call.callerId.toString()}`).emit('call:cancelled', { callId });
       if (call.receiverId) {
         io.to(`user:${call.receiverId.toString()}`).emit('call:cancelled', { callId });
       }
-      socket.emit('call:cancelled', { callId });
 
-      // Dismiss native incoming call notification on receiver device
+      // Dismiss native incoming call notification on receiver & caller devices
       if (call.receiverId) {
         sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
       }
+      sendCallCancelledPushNotification({ recipientId: call.callerId.toString(), callId }).catch(() => {});
 
       // Save Missed Call event
       const isVideoCancel = call.callType === 'video';
@@ -619,6 +631,12 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       if (call.receiverId) {
         io.to(`user:${call.receiverId.toString()}`).emit('call:ended', { callId, duration });
       }
+
+      // Dismiss native notification push on both devices
+      if (call.receiverId) {
+        sendCallCancelledPushNotification({ recipientId: call.receiverId.toString(), callId }).catch(() => {});
+      }
+      sendCallCancelledPushNotification({ recipientId: call.callerId.toString(), callId }).catch(() => {});
 
       // Save in-chat Call Record
       const durText = formatDurationText(duration);

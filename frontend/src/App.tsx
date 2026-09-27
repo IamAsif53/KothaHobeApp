@@ -16,11 +16,12 @@ import {
   getCurrentAppVersion,
   ReleaseManifest,
 } from './services/appUpdateService';
-import { CURRENT_VERSION } from './config/version';
 import { App as CapApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications, ActionPerformed } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { CURRENT_VERSION } from './config/version';
+import { modalStack } from './utils/modalStack';
 
 import { SplashPage } from './pages/SplashPage';
 import { LoginPage } from './pages/LoginPage';
@@ -160,29 +161,36 @@ export const AppContent: React.FC = () => {
 
     const setupBackButton = async () => {
       listenerHandle = await CapApp.addListener('backButton', () => {
+        // 1. If any modal is currently open, dismiss it first
+        if (modalStack.hasOpenModal()) {
+          modalStack.popTop();
+          return;
+        }
+
         const path = window.location.pathname;
 
-        // Sub-screens navigate back to previous screen
-        if (
-          path.startsWith('/chat/') ||
-          path === '/search' ||
-          path === '/settings' ||
-          path === '/profile-setup' ||
-          path === '/otp'
-        ) {
-          if (path.startsWith('/chat/') && path.endsWith('/shared')) {
-            const convId = path.split('/')[2];
-            navigate(`/chat/${convId}`, { replace: true });
-          } else if (path.startsWith('/chat/') && path.endsWith('/info')) {
-            const convId = path.split('/')[2];
-            navigate(`/chat/${convId}`, { replace: true });
-          } else if (path.startsWith('/chat/')) {
-            navigate('/chats', { replace: true });
-          } else if (path === '/otp') {
-            navigate('/login', { replace: true });
-          } else {
-            navigate(-1);
-          }
+        // Sub-screens navigate back to previous parent screen
+        if (path.startsWith('/chat/') && path.endsWith('/shared')) {
+          const convId = path.split('/')[2];
+          navigate(`/chat/${convId}`, { replace: true });
+        } else if (path.startsWith('/chat/') && path.endsWith('/info')) {
+          const convId = path.split('/')[2];
+          navigate(`/chat/${convId}`, { replace: true });
+        } else if (path.startsWith('/group/') && path.endsWith('/info')) {
+          const convId = path.split('/')[2];
+          navigate(`/chat/${convId}`, { replace: true });
+        } else if (path.startsWith('/chat/')) {
+          navigate('/chats', { replace: true });
+        } else if (path === '/search') {
+          navigate('/chats', { replace: true });
+        } else if (path === '/settings') {
+          navigate('/chats', { replace: true });
+        } else if (path === '/blocked') {
+          navigate('/settings', { replace: true });
+        } else if (path === '/otp') {
+          navigate('/login', { replace: true });
+        } else if (path === '/profile-setup') {
+          navigate('/chats', { replace: true });
         } else if (path === '/chats' || path === '/login' || path === '/') {
           // On main root screen, double-tap or exit app
           const now = Date.now();

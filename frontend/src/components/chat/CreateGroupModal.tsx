@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { IUser } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useNavigate } from 'react-router-dom';
+import { modalStack } from '../../utils/modalStack';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
@@ -30,6 +31,11 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const [selectedUsers, setSelectedUsers] = useState<IUser[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return modalStack.register('create_group_modal', onClose);
+  }, [isOpen, onClose]);
 
   // Load recent contacts from existing conversations on open
   useEffect(() => {

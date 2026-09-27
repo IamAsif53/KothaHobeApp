@@ -1,12 +1,13 @@
 {
-  "versionCode": 70,
-  "versionName": "1.1.25",
+  "versionCode": 71,
+  "versionName": "1.1.26",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "8fe8badc95d384d9fe511aaf5b026f7caa31847f5256f5760c994d83cd3abb5e",
+  "sha256": "f49be27611898efb9d3bedf7c2d9ac2385d967aa592b819ca5702fb326319ec5",
   "releaseNotes": [
-    "Release v1.1.25 (Build 70)",
+    "Release v1.1.26 (Build 71)",
+    "🖼️ In-App Media Viewer: Fixed shared media in group chat and group info opening externally in browser; now opens seamlessly inside the app with zoom, pan, rotate, and save",
+    "🔙 Modal & Back Navigation: Back button/backspace while viewing images or modals now dismisses the modal and keeps you in the active chat or media page",
     "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
-    "📩 Invitation & Approval workflow: Accept/Decline invitations directly from chat list",
     "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",
     "🏷️ Per-group member nicknames and shared media gallery",
     "📞 Multi-Party WebRTC Voice & Video Calls with dynamic speaker highlighting and live call banner",

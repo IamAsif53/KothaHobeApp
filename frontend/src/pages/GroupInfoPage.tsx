@@ -17,6 +17,7 @@ import {
   FileText,
   Loader2,
   Check,
+  ChevronRight,
 } from 'lucide-react';
 import {
   fetchGroupDetailsApi,
@@ -33,6 +34,8 @@ import { useGroupCall } from '../context/GroupCallContext';
 import { IConversation, IGroupMember, IUser } from '../types';
 import { Avatar } from '../components/common/Avatar';
 import { SetNicknameModal } from '../components/chat/SetNicknameModal';
+import { MediaViewerModal } from '../components/chat/MediaViewerModal';
+import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { searchUserApi } from '../api/userApi';
 
 export const GroupInfoPage: React.FC = () => {
@@ -50,6 +53,8 @@ export const GroupInfoPage: React.FC = () => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [nicknameModalUser, setNicknameModalUser] = useState<IUser | null>(null);
+  const [activeMediaModal, setActiveMediaModal] = useState<any | null>(null);
+  const [activeDocModal, setActiveDocModal] = useState<any | null>(null);
 
   // Invite Modal
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -452,7 +457,26 @@ export const GroupInfoPage: React.FC = () => {
           </div>
         ) : (
           /* Media Gallery Tab */
-          <div className="p-4">
+          <div className="p-4 space-y-3">
+            {/* Link to Full Categorized Shared Media Page */}
+            <div
+              onClick={() => navigate(`/chat/${conversationId}/shared`)}
+              className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 flex items-center justify-between cursor-pointer transition-all active:scale-98"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white">All Media, Docs & Voice</h4>
+                  <p className="text-[10px] text-slate-400">View organized categories & files</p>
+                </div>
+              </div>
+              <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                Open <ChevronRight className="w-4 h-4" />
+              </span>
+            </div>
+
             {sharedMedia.length === 0 ? (
               <div className="py-16 text-center text-slate-500 text-xs">
                 No shared photos, videos, or documents yet.
@@ -466,15 +490,26 @@ export const GroupInfoPage: React.FC = () => {
                   return (
                     <div
                       key={m._id || idx}
-                      onClick={() => window.open(getMediaUrl(att.url), '_blank')}
+                      onClick={() => {
+                        if (isImg) {
+                          setActiveMediaModal(m);
+                        } else {
+                          setActiveDocModal(m);
+                        }
+                      }}
                       className="aspect-square rounded-2xl bg-slate-800 overflow-hidden cursor-pointer relative border border-slate-700/60 hover:border-emerald-500/50 transition-all group"
                     >
                       {isImg ? (
-                        <img src={getMediaUrl(att.url)} alt="Shared" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <img
+                          src={getMediaUrl(att.url)}
+                          alt="Shared"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          loading="lazy"
+                        />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center p-2 text-slate-400">
-                          <FileText className="w-6 h-6 mb-1" />
-                          <span className="text-[10px] truncate max-w-full text-center">{att.fileName}</span>
+                          <FileText className="w-6 h-6 mb-1 text-emerald-400" />
+                          <span className="text-[10px] truncate max-w-full text-center text-white font-medium">{att.fileName}</span>
                         </div>
                       )}
                     </div>
@@ -560,6 +595,22 @@ export const GroupInfoPage: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Fullscreen Media Viewer */}
+      {activeMediaModal && (
+        <MediaViewerModal
+          message={activeMediaModal}
+          onClose={() => setActiveMediaModal(null)}
+        />
+      )}
+
+      {/* Fullscreen Document Viewer */}
+      {activeDocModal && (
+        <DocumentViewerModal
+          message={activeDocModal}
+          onClose={() => setActiveDocModal(null)}
+        />
       )}
     </div>
   );

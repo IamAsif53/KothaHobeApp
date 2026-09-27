@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, Share2, ZoomIn, ZoomOut, RotateCcw, Check, Loader2 } from 'lucide-react';
 import { IMessage } from '../../types';
 import { getMediaUrl } from '../../api/messageApi';
 import { formatMessageTime } from '../../utils/dateUtils';
 import { saveImageToDevice } from '../../services/nativeMediaService';
 import { ForwardMediaModal } from './ForwardMediaModal';
+import { modalStack } from '../../utils/modalStack';
 
 interface MediaViewerModalProps {
   message: IMessage;
@@ -17,6 +18,10 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({ message, onC
   const [downloading, setDownloading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
+
+  useEffect(() => {
+    return modalStack.register('media_viewer', onClose);
+  }, [onClose]);
 
   const fullUrl = getMediaUrl(message.attachment?.url || '');
   const fileName = message.attachment?.fileName || `image_${Date.now()}.jpg`;

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Tag, Loader2, Check } from 'lucide-react';
 import { setGroupNicknameApi } from '../../api/groupApi';
 import { IUser } from '../../types';
 import { Avatar } from '../common/Avatar';
+import { modalStack } from '../../utils/modalStack';
 
 interface SetNicknameModalProps {
   isOpen: boolean;
@@ -24,6 +25,11 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
   const [nickname, setNickname] = useState(currentNickname);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return modalStack.register('set_nickname_modal', onClose);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

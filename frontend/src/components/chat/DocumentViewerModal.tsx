@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, ExternalLink, AlertCircle, Share2, Check } from 'lucide-react';
 import { IMessage } from '../../types';
 import { getMediaUrl } from '../../api/messageApi';
 import { downloadDocumentToDevice, openDocumentInNativeApp } from '../../services/nativeMediaService';
 import { ForwardMediaModal } from './ForwardMediaModal';
+import { modalStack } from '../../utils/modalStack';
 
 interface DocumentViewerModalProps {
   message: IMessage;
@@ -14,6 +15,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ messag
   const [downloading, setDownloading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
+
+  useEffect(() => {
+    return modalStack.register('doc_viewer', onClose);
+  }, [onClose]);
 
   const fullUrl = getMediaUrl(message.attachment?.url || '');
   const fileName = message.attachment?.fileName || 'document.pdf';

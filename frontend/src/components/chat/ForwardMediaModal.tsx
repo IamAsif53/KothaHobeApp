@@ -6,6 +6,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
 import { getMediaUrl } from '../../api/messageApi';
+import { modalStack } from '../../utils/modalStack';
 
 interface ForwardMediaModalProps {
   isOpen: boolean;
@@ -28,6 +29,11 @@ export const ForwardMediaModal: React.FC<ForwardMediaModalProps> = ({
 }) => {
   const { user } = useAuth();
   const { sendMessage } = useSocket();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return modalStack.register('forward_modal', onClose);
+  }, [isOpen, onClose]);
   const [conversations, setConversations] = useState<IConversation[]>(() => {
     try {
       const cached = localStorage.getItem('kotha_hobe_cached_conversations');

@@ -77,8 +77,9 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
+      "🖼️ In-App Media Viewer: Fixed shared media in group chat and group info opening externally in browser; now opens seamlessly inside the app with zoom, pan, rotate, and save",
+      "🔙 Modal & Back Navigation: Back button/backspace while viewing images or modals now dismisses the modal and keeps you in the active chat or media page",
       "👥 Group Chat: Create groups with up to 10 members, custom avatars, and instant invites",
-      "📩 Invitation & Approval workflow: Accept/Decline invitations directly from chat list",
       "💬 Full Group Messaging parity: Text, photos, files, voice notes, emojis, reactions & replies",
       "🏷️ Per-group member nicknames and shared media gallery",
       "📞 Multi-Party WebRTC Voice & Video Calls with dynamic speaker highlighting and live call banner",

@@ -1,11 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Archive,
   Eye,
   Trash2,
   Loader2,
-  Calendar,
   Image as ImageIcon,
   Type,
 } from 'lucide-react';
@@ -77,11 +77,14 @@ export const StoryArchiveModal: React.FC<StoryArchiveModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 safe-top safe-bottom select-none animate-fadeIn">
-      <div className="w-full max-w-lg max-h-[85vh] bg-slate-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-slide-up">
+  const content = (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[999] w-screen h-screen bg-black/75 backdrop-blur-md flex items-center justify-center p-4 select-none animate-fadeIn"
+    >
+      <div className="w-full max-w-lg max-h-[85vh] bg-slate-900 border border-white/15 rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-slide-up">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+        <div className="px-5 py-4 pt-6 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
               <Archive className="w-4 h-4" />
@@ -193,4 +196,6 @@ export const StoryArchiveModal: React.FC<StoryArchiveModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 };

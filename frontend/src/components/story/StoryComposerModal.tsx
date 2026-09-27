@@ -1,4 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Image as ImageIcon,
@@ -9,9 +10,7 @@ import {
   AlignRight,
   Palette,
   Loader2,
-  Check,
   Camera,
-  Smile,
 } from 'lucide-react';
 import { createStoryApi } from '../../api/storyApi';
 import { compressImageFile } from '../../utils/groupAvatarPresets';
@@ -75,7 +74,11 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
       setImagePreview(null);
       setErrorMessage('');
       setMode('text');
+      document.body.style.overflow = 'hidden';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -95,7 +98,6 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
     try {
       setIsProcessingImage(true);
       setErrorMessage('');
-      // Compress for high quality 1080p full screen story display with sub-150KB payload
       const compressedDataUrl = await compressImageFile(file, 1080, 0.85);
       setImagePreview(compressedDataUrl);
       setMode('image');
@@ -149,7 +151,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
         background: currentBg.css,
         fontFamily: currentFont.id,
         textAlign,
-        duration: 6,
+        duration: 5,
         privacy: 'connections',
       });
 
@@ -166,8 +168,12 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black safe-top safe-bottom select-none animate-fadeIn">
+  const content = (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[999] w-screen h-screen flex flex-col bg-black text-white select-none animate-fadeIn overflow-hidden"
+    >
       {/* Hidden File Input for Image Selection */}
       <input
         type="file"
@@ -177,23 +183,23 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
         onChange={handleImageFileChange}
       />
 
-      {/* Top Navigation & Toolbar Bar */}
-      <div className="px-4 py-3 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between z-20">
+      {/* Top Navigation & Toolbar Bar with Safe Status Bar Spacing */}
+      <div className="pt-12 sm:pt-10 pb-3 px-4 bg-gradient-to-b from-black/90 via-black/60 to-transparent flex items-center justify-between z-30 flex-shrink-0">
         {/* Left: Close Button */}
         <button
           type="button"
           onClick={onClose}
-          className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors"
+          className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors active:scale-90"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Center: Mode Switcher Pills */}
-        <div className="flex items-center p-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
+        <div className="flex items-center p-1 rounded-full bg-black/60 backdrop-blur-md border border-white/15 shadow-lg">
           <button
             type="button"
             onClick={() => setMode('text')}
-            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
               mode === 'text'
                 ? 'bg-white text-black shadow-md'
                 : 'text-white/70 hover:text-white'
@@ -207,26 +213,26 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
               if (imagePreview) setMode('image');
               else fileInputRef.current?.click();
             }}
-            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
               mode === 'image'
                 ? 'bg-white text-black shadow-md'
                 : 'text-white/70 hover:text-white'
             }`}
           >
-            <Camera className="w-3 h-3" />
+            <Camera className="w-3.5 h-3.5" />
             <span>Photo</span>
           </button>
         </div>
 
         {/* Right: Creative Controls (Text Mode) or Change Photo (Image Mode) */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {mode === 'text' ? (
             <>
               {/* Cycle Font */}
               <button
                 type="button"
                 onClick={handleCycleFont}
-                className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all text-xs font-bold border border-white/10"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all text-xs font-bold border border-white/10 active:scale-90"
                 title={`Font: ${currentFont.name}`}
               >
                 <Type className="w-4 h-4" />
@@ -236,7 +242,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
               <button
                 type="button"
                 onClick={handleCycleBackground}
-                className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all border border-white/10"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 active:scale-90"
                 title="Change Background"
               >
                 <Palette className="w-4 h-4" />
@@ -246,7 +252,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
               <button
                 type="button"
                 onClick={handleCycleAlign}
-                className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all border border-white/10"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 active:scale-90"
                 title="Align text"
               >
                 {textAlign === 'center' ? (
@@ -263,7 +269,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all text-xs font-semibold border border-white/10 flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all text-xs font-semibold border border-white/15 flex items-center gap-1.5 active:scale-90"
             >
               <ImageIcon className="w-3.5 h-3.5" />
               <span>Change</span>
@@ -320,7 +326,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
                     onChange={(e) => setCaption(e.target.value)}
                     placeholder="Add a caption..."
                     maxLength={300}
-                    className="w-full px-4 py-3 rounded-2xl bg-black/60 backdrop-blur-md border border-white/20 text-white placeholder-white/50 text-sm focus:outline-none focus:border-emerald-400 transition-colors shadow-2xl"
+                    className="w-full px-4 py-3 rounded-2xl bg-black/70 backdrop-blur-md border border-white/20 text-white placeholder-white/50 text-sm focus:outline-none focus:border-emerald-400 transition-colors shadow-2xl"
                   />
                 </div>
               </>
@@ -343,7 +349,7 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
       </div>
 
       {/* Bottom Toolbar & Share Action */}
-      <div className="p-4 bg-gradient-to-t from-black/90 to-transparent flex flex-col gap-3 z-20">
+      <div className="p-4 pb-8 sm:pb-5 bg-gradient-to-t from-black via-black/95 to-transparent flex flex-col gap-3 z-30 flex-shrink-0">
         {/* Quick Emoji Bar */}
         <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-1">
           {QUICK_EMOJIS.map((emoji) => (
@@ -380,4 +386,6 @@ export const StoryComposerModal: React.FC<StoryComposerModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 };

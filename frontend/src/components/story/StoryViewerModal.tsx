@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Eye,
@@ -72,11 +73,16 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [floatingReaction, setFloatingReaction] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Gesture tracking
-  const touchStartRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 });
-  const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Time & gesture tracking refs
+  const isPausedRef = useRef(false);
+  const startTimeRef = useRef<number>(0);
+  const elapsedBeforePauseRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number>(0);
+
+  // Pointer hold tracking
+  const pointerDownTimeRef = useRef<number>(0);
+  const pointerDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isHoldingRef = useRef(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -88,17 +94,23 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return modalStack.register('story_viewer_modal', onClose);
   }, [isOpen, onClose]);
 
-  // Sync initial indices when modal opens
   useEffect(() => {
     if (isOpen) {
+      document.body.style.overflow = 'hidden';
       setFeedIndex(Math.max(0, Math.min(initialFeedIndex, feed.length - 1)));
       setSlideIndex(Math.max(0, initialSlideIndex));
       setProgress(0);
       setIsPaused(false);
+      isPausedRef.current = false;
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
       setShowViewersSheet(false);
       setIsReplying(false);
       setReplyText('');
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen, initialFeedIndex, initialSlideIndex, feed.length]);
 
   const currentFeedItem = feed[feedIndex];
@@ -106,15 +118,19 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const currentSlide: IStorySlide | undefined = slides[slideIndex];
   const isAuthor = currentFeedItem?.isMe || false;
 
-  // Auto-advance progress timer
+  // Auto-advance
   const advanceToNext = useCallback(() => {
     if (slideIndex < slides.length - 1) {
       setSlideIndex((prev) => prev + 1);
       setProgress(0);
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
     } else if (feedIndex < feed.length - 1) {
       setFeedIndex((prev) => prev + 1);
       setSlideIndex(0);
       setProgress(0);
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
     } else {
       onClose();
     }
@@ -124,17 +140,23 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     if (slideIndex > 0) {
       setSlideIndex((prev) => prev - 1);
       setProgress(0);
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
     } else if (feedIndex > 0) {
       const prevFeedItem = feed[feedIndex - 1];
       setFeedIndex((prev) => prev - 1);
       setSlideIndex(Math.max(0, (prevFeedItem?.slides.length || 1) - 1));
       setProgress(0);
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
     } else {
       setProgress(0);
+      elapsedBeforePauseRef.current = 0;
+      startTimeRef.current = Date.now();
     }
   }, [slideIndex, feedIndex, feed]);
 
-  // View tracking: mark as viewed when slide becomes active
+  // View tracking
   useEffect(() => {
     if (!isOpen || !currentSlide) return;
     if (!isAuthor && !currentSlide.hasViewed) {
@@ -143,30 +165,44 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   }, [isOpen, currentSlide, isAuthor]);
 
-  // Animation frame loop for smooth progress bar
+  // Pause / Resume helper
+  const pauseTimer = useCallback(() => {
+    if (isPausedRef.current) return;
+    isPausedRef.current = true;
+    setIsPaused(true);
+    elapsedBeforePauseRef.current += Date.now() - startTimeRef.current;
+  }, []);
+
+  const resumeTimer = useCallback(() => {
+    if (!isPausedRef.current) return;
+    if (showViewersSheet || isReplying) return;
+    isPausedRef.current = false;
+    setIsPaused(false);
+    startTimeRef.current = Date.now();
+  }, [showViewersSheet, isReplying]);
+
+  // Progress Bar Animation Loop
   useEffect(() => {
-    if (!isOpen || !currentSlide || isPaused || showViewersSheet || isReplying) {
-      lastTimeRef.current = 0;
-      return;
-    }
+    if (!isOpen || !currentSlide) return;
 
-    const durationMs = (currentSlide.duration || 6) * 1000;
+    // Reset timer on slide change
+    startTimeRef.current = Date.now();
+    elapsedBeforePauseRef.current = 0;
+    setProgress(0);
 
-    const tick = (time: number) => {
-      if (!lastTimeRef.current) {
-        lastTimeRef.current = time;
-      }
-      const delta = time - lastTimeRef.current;
-      lastTimeRef.current = time;
+    const slideDurationMs = (currentSlide.duration || 5) * 1000;
 
-      setProgress((prev) => {
-        const nextProgress = prev + (delta / durationMs) * 100;
-        if (nextProgress >= 100) {
+    const tick = () => {
+      if (!isPausedRef.current && !showViewersSheet && !isReplying) {
+        const currentElapsed = elapsedBeforePauseRef.current + (Date.now() - startTimeRef.current);
+        const currentProgress = Math.min(100, (currentElapsed / slideDurationMs) * 100);
+        setProgress(currentProgress);
+
+        if (currentProgress >= 100) {
           advanceToNext();
-          return 0;
+          return;
         }
-        return nextProgress;
-      });
+      }
 
       animFrameRef.current = requestAnimationFrame(tick);
     };
@@ -178,12 +214,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [isOpen, currentSlide, isPaused, showViewersSheet, isReplying, advanceToNext]);
+  }, [isOpen, currentSlide, feedIndex, slideIndex, showViewersSheet, isReplying, advanceToNext]);
 
   // Viewers Sheet Fetcher
   const handleOpenViewers = async () => {
     if (!currentSlide || !isAuthor) return;
-    setIsPaused(true);
+    pauseTimer();
     setShowViewersSheet(true);
     setLoadingViewers(true);
     try {
@@ -201,6 +237,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   // Delete Story Slide
   const handleDeleteSlide = async () => {
     if (!currentSlide || !isAuthor) return;
+    pauseTimer();
     if (confirm('Delete this story slide?')) {
       setIsDeleting(true);
       try {
@@ -217,12 +254,16 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         } else {
           setSlideIndex((prev) => Math.max(0, prev - 1));
           setProgress(0);
+          resumeTimer();
         }
       } catch (err: any) {
         showToast(err?.message || 'Failed to delete story');
+        resumeTimer();
       } finally {
         setIsDeleting(false);
       }
+    } else {
+      resumeTimer();
     }
   };
 
@@ -241,7 +282,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
-  // Reply to story (Creates real chat message)
+  // Reply to story
   const handleSendReply = async () => {
     if (!currentSlide || !replyText.trim() || isAuthor) return;
     setIsSendingReply(true);
@@ -250,7 +291,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       if (res.success) {
         setReplyText('');
         setIsReplying(false);
-        setIsPaused(false);
+        resumeTimer();
         showToast('Reply sent as message!');
       } else {
         showToast(res.message || 'Failed to send reply');
@@ -262,79 +303,87 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
-  // Gesture handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches && e.touches.length > 0) {
-      touchStartRef.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-        time: Date.now(),
-      };
-    }
-    pressTimerRef.current = setTimeout(() => {
-      setIsPaused(true);
-    }, 200);
+  // Canvas Pointer Events (Touch & Hold to pause, Tap Left / Right to navigate, Swipe down to close)
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    pointerDownTimeRef.current = Date.now();
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
+    isHoldingRef.current = false;
+
+    // Start hold pause after 180ms
+    setTimeout(() => {
+      if (pointerDownTimeRef.current > 0) {
+        isHoldingRef.current = true;
+        pauseTimer();
+      }
+    }, 180);
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
+  const handleCanvasPointerUp = (e: React.PointerEvent) => {
+    const pressDuration = Date.now() - pointerDownTimeRef.current;
+    const deltaX = e.clientX - pointerDownPosRef.current.x;
+    const deltaY = e.clientY - pointerDownPosRef.current.y;
+    pointerDownTimeRef.current = 0;
+
+    // If user was holding, unpause
+    if (isHoldingRef.current) {
+      isHoldingRef.current = false;
+      resumeTimer();
+      return;
     }
-    setIsPaused(false);
 
-    if (e.changedTouches && e.changedTouches.length > 0) {
-      const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
-      const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
-      const deltaTime = Date.now() - touchStartRef.current.time;
+    // Swipe down to close
+    if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
+      onClose();
+      return;
+    }
 
-      // Swipe down to close
-      if (deltaY > 80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
-        onClose();
-        return;
-      }
-
-      // Swipe horizontal to switch users
-      if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-        if (deltaX < 0) {
-          if (feedIndex < feed.length - 1) {
-            setFeedIndex((prev) => prev + 1);
-            setSlideIndex(0);
-            setProgress(0);
-          } else {
-            onClose();
-          }
+    // Swipe horizontal to change user
+    if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX < 0) {
+        if (feedIndex < feed.length - 1) {
+          setFeedIndex((prev) => prev + 1);
+          setSlideIndex(0);
         } else {
-          if (feedIndex > 0) {
-            setFeedIndex((prev) => prev - 1);
-            setSlideIndex(0);
-            setProgress(0);
-          }
+          onClose();
         }
-        return;
-      }
-
-      // Quick Tap Navigation
-      if (deltaTime < 250 && Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
-        const screenWidth = window.innerWidth;
-        const tapX = e.changedTouches[0].clientX;
-        if (tapX < screenWidth * 0.35) {
-          goToPrevious();
-        } else {
-          advanceToNext();
+      } else {
+        if (feedIndex > 0) {
+          setFeedIndex((prev) => prev - 1);
+          setSlideIndex(0);
         }
       }
+      return;
+    }
+
+    // Quick Tap Navigation (<200ms)
+    if (pressDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+
+      if (clickX < width * 0.35) {
+        goToPrevious();
+      } else {
+        advanceToNext();
+      }
+    }
+  };
+
+  const handleCanvasPointerCancel = () => {
+    pointerDownTimeRef.current = 0;
+    if (isHoldingRef.current) {
+      isHoldingRef.current = false;
+      resumeTimer();
     }
   };
 
   if (!isOpen || !currentFeedItem || !currentSlide) return null;
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black text-white select-none animate-fadeIn overflow-hidden"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={() => setIsPaused(true)}
-      onMouseUp={() => setIsPaused(false)}
+      onClick={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[999] w-screen h-screen flex flex-col bg-black text-white select-none animate-fadeIn overflow-hidden"
     >
       {/* Floating Reaction Animation */}
       {floatingReaction && (
@@ -345,13 +394,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs px-4 py-2 rounded-full shadow-2xl animate-fadeIn font-semibold">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs px-4 py-2 rounded-full shadow-2xl animate-fadeIn font-semibold">
           {toastMessage}
         </div>
       )}
 
-      {/* Segmented Progress Bars */}
-      <div className="absolute top-0 left-0 right-0 z-40 px-3 pt-3 pb-2 flex gap-1.5 safe-top bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+      {/* Segmented Progress Bars (Safe status bar margin) */}
+      <div className="absolute top-0 left-0 right-0 z-40 px-3 pt-10 sm:pt-4 pb-2 flex gap-1.5 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex-shrink-0">
         {slides.map((slide, idx) => {
           let barWidth = '0%';
           if (idx < slideIndex) {
@@ -374,8 +423,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         })}
       </div>
 
-      {/* Top Header: Author Info & Controls */}
-      <div className="absolute top-7 left-0 right-0 z-40 px-4 py-2 flex items-center justify-between">
+      {/* Top Header: Author Info & Controls (Safely below status bar) */}
+      <div className="absolute top-14 sm:top-7 left-0 right-0 z-40 px-4 py-2 flex items-center justify-between">
         {/* Left: User Avatar + Display Name + Time */}
         <div className="flex items-center gap-2.5 min-w-0">
           <Avatar
@@ -410,7 +459,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 e.stopPropagation();
                 handleOpenViewers();
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 hover:bg-black/60 border border-white/15 backdrop-blur-md text-xs font-semibold text-white/90 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 backdrop-blur-md text-xs font-semibold text-white/90 active:scale-95 transition-all"
               title="Viewers"
             >
               <Eye className="w-3.5 h-3.5 text-emerald-400" />
@@ -427,7 +476,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 e.stopPropagation();
                 handleDeleteSlide();
               }}
-              className="p-1.5 rounded-full bg-black/40 hover:bg-red-500/30 border border-white/15 hover:border-red-500/40 text-white/80 hover:text-red-400 backdrop-blur-md active:scale-95 transition-all"
+              className="p-1.5 rounded-full bg-black/50 hover:bg-red-500/30 border border-white/15 hover:border-red-500/40 text-white/80 hover:text-red-400 backdrop-blur-md active:scale-95 transition-all"
               title="Delete Slide"
             >
               {isDeleting ? (
@@ -445,7 +494,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               e.stopPropagation();
               onClose();
             }}
-            className="p-1.5 rounded-full bg-black/40 hover:bg-black/60 border border-white/15 text-white backdrop-blur-md active:scale-95 transition-all"
+            className="p-1.5 rounded-full bg-black/50 hover:bg-white/20 border border-white/15 text-white backdrop-blur-md active:scale-95 transition-all"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -453,8 +502,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         </div>
       </div>
 
-      {/* Main Slide Content Canvas */}
-      <div className="flex-1 w-full h-full relative flex items-center justify-center overflow-hidden">
+      {/* Middle Interactive Canvas Area (Handles Left/Right Tap and Touch-Hold to Pause) */}
+      <div
+        className="flex-1 w-full h-full relative flex items-center justify-center overflow-hidden cursor-pointer touch-none"
+        onPointerDown={handleCanvasPointerDown}
+        onPointerUp={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerCancel}
+      >
         {currentSlide.type === 'text' ? (
           /* TEXT STORY SLIDE */
           <div
@@ -491,7 +545,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             {/* Caption Overlay */}
             {currentSlide.text && (
               <div className="absolute bottom-20 left-4 right-4 z-20 flex justify-center pointer-events-none">
-                <div className="px-4 py-2.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 text-white text-sm text-center max-w-md shadow-2xl font-medium">
+                <div className="px-4 py-2.5 rounded-2xl bg-black/70 backdrop-blur-md border border-white/10 text-white text-sm text-center max-w-md shadow-2xl font-medium">
                   {currentSlide.text}
                 </div>
               </div>
@@ -526,8 +580,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       {/* Bottom Footer: Quick Reactions + Reply Bar (Non-author) */}
       {!isAuthor && (
         <div
-          className="p-3 bg-gradient-to-t from-black via-black/80 to-transparent z-40 safe-bottom flex flex-col gap-2"
+          className="p-3 pb-8 sm:pb-4 bg-gradient-to-t from-black via-black/90 to-transparent z-40 flex flex-col gap-2 flex-shrink-0"
           onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           {/* Quick Reaction Row */}
           <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-1">
@@ -554,12 +611,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               value={replyText}
               onFocus={() => {
                 setIsReplying(true);
-                setIsPaused(true);
+                pauseTimer();
               }}
               onBlur={() => {
                 if (!replyText.trim()) {
                   setIsReplying(false);
-                  setIsPaused(false);
+                  resumeTimer();
                 }
               }}
               onChange={(e) => setReplyText(e.target.value)}
@@ -593,13 +650,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         <div
           onClick={() => {
             setShowViewersSheet(false);
-            setIsPaused(false);
+            resumeTimer();
           }}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center animate-fadeIn"
+          className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-end justify-center animate-fadeIn"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md max-h-[70vh] bg-slate-900 border-t border-white/15 rounded-t-3xl p-5 flex flex-col gap-4 animate-slide-up shadow-2xl safe-bottom"
+            className="w-full max-w-md max-h-[70vh] bg-slate-900 border-t border-white/15 rounded-t-3xl p-5 pb-8 flex flex-col gap-4 animate-slide-up shadow-2xl"
           >
             {/* Sheet Handle & Header */}
             <div className="flex flex-col items-center gap-3 border-b border-white/10 pb-3">
@@ -615,7 +672,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   type="button"
                   onClick={() => {
                     setShowViewersSheet(false);
-                    setIsPaused(false);
+                    resumeTimer();
                   }}
                   className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white"
                 >
@@ -670,4 +727,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       )}
     </div>
   );
+
+  return createPortal(content, document.body);
 };

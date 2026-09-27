@@ -10,8 +10,22 @@ export interface IUser {
   phoneNumber?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface IStoryContext {
+  storyId: string;
+  slideId?: string;
+  storyType?: 'text' | 'image';
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  originalText?: string;
+  storyOwnerName?: string;
+  storyOwnerId?: string;
+  storyCreatedAt?: string;
+  reaction?: string;
+  isExpired?: boolean;
+}
 
 export interface ICallDetails {
   callId: string;
@@ -48,6 +62,53 @@ export interface IReaction {
   createdAt: string;
 }
 
+export interface IStorySlide {
+  _id: string;
+  type: 'text' | 'image';
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  text?: string;
+  background?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  textColor?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  duration: number;
+  createdAt: string;
+  expiresAt: string;
+  viewsCount: number;
+  hasViewed: boolean;
+  myReaction?: string | null;
+  isMe: boolean;
+}
+
+export interface IStoryUser {
+  _id: string;
+  displayName: string;
+  username: string;
+  avatarUrl: string;
+  isOnline?: boolean;
+  lastSeen?: string;
+}
+
+export interface IStoryFeedItem {
+  user: IStoryUser;
+  slides: IStorySlide[];
+  totalSlides: number;
+  viewedSlides: number;
+  hasUnseen: boolean;
+  hasPartial: boolean;
+  isFullyViewed: boolean;
+  isMe: boolean;
+  lastUpdated: string;
+}
+
+export interface IStoryViewer {
+  user: IStoryUser;
+  viewedAt: string;
+  reaction?: string | null;
+}
+
 export interface IMessage {
   _id: string;
   conversationId: string;
@@ -61,6 +122,7 @@ export interface IMessage {
   attachment?: IAttachment;
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
+  storyContext?: IStoryContext;
   reactions?: IReaction[];
   readBy?: string[];
   mentions?: string[];

@@ -1,7 +1,21 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
+
+export interface IStoryContext {
+  storyId: Types.ObjectId | string;
+  slideId?: string;
+  storyType?: 'text' | 'image';
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  originalText?: string;
+  storyOwnerName?: string;
+  storyOwnerId?: Types.ObjectId | string;
+  storyCreatedAt?: Date;
+  reaction?: string;
+  isExpired?: boolean;
+}
 
 export interface ICallDetails {
   callId: string;
@@ -54,6 +68,7 @@ export interface IMessage extends Document {
   attachment?: IAttachment;
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
+  storyContext?: IStoryContext;
   reactions: IReaction[];
   readBy: IReadReceipt[];
   mentions: Types.ObjectId[];
@@ -117,8 +132,25 @@ const ReplyToSchema = new Schema(
     messageId: { type: Schema.Types.ObjectId, ref: 'Message', required: true },
     text: { type: String, default: '' },
     senderName: { type: String, default: '' },
-    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system'], default: 'text' },
+    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply'], default: 'text' },
     fileName: { type: String },
+  },
+  { _id: false }
+);
+
+const StoryContextSchema = new Schema(
+  {
+    storyId: { type: Schema.Types.ObjectId, ref: 'Story', required: true },
+    slideId: { type: String },
+    storyType: { type: String, enum: ['text', 'image'], default: 'text' },
+    thumbnailUrl: { type: String },
+    mediaUrl: { type: String },
+    originalText: { type: String },
+    storyOwnerName: { type: String },
+    storyOwnerId: { type: Schema.Types.ObjectId, ref: 'User' },
+    storyCreatedAt: { type: Date },
+    reaction: { type: String },
+    isExpired: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -156,7 +188,7 @@ const MessageSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system'],
+      enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply'],
       default: 'text',
       index: true,
     },
@@ -181,6 +213,10 @@ const MessageSchema: Schema = new Schema(
     },
     replyTo: {
       type: ReplyToSchema,
+      default: null,
+    },
+    storyContext: {
+      type: StoryContextSchema,
       default: null,
     },
     reactions: {

@@ -1,16 +1,17 @@
 {
-  "versionCode": 73,
-  "versionName": "1.1.28",
+  "versionCode": 74,
+  "versionName": "1.1.29",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a3fcaf929734589fe79303b9fb551fde4a31c4d2bb1a8a446bf8d2f87c05673f",
+  "sha256": "e9bd501b203d49c00b82c165737f6defe3df677b67e022bb3046281600892ad9",
   "releaseNotes": [
-    "Release v1.1.28 (Build 73)",
-    "👑 Group Admin Removal: Group admins can permanently delete groups with instant real-time sync across all participants",
-    "🖼️ Gallery & Custom Avatars: Pick group avatars directly from device gallery/camera or choose from vibrant colorful presets",
-    "⚡ 0ms Group Info Caching: Instant group info page rendering with background stale-while-revalidate caching",
-    "🎨 Admin Avatar Editing: Group admins can tap and update the group profile picture at any time",
-    "📞 Group Voice & Video Calling: Multi-party WebRTC audio and video calling for up to 10 members",
-    "🔒 Secure Membership Management: Dedicated group roles, nicknames, and member invites"
+    "Release v1.1.29 (Build 74)",
+    "✨ 24h Ephemeral Stories: Share text thoughts with beautiful gradient presets or photos with captions that vanish after 24 hours",
+    "🎨 Immersive Story Composer: Create text stories with custom fonts, colors, and alignments, or pick photos from gallery with smart compression",
+    "👁️ Multi-Segment Story Viewer: Smooth segmented progress bars, touch-and-hold pause, swipe down to dismiss, and instant tap navigation",
+    "❤️ Quick Emoji Reactions: Tap floating reactions (❤️, 🔥, 😂, 😍, 😮, 😢, 👏, 🎉) that animate instantly on screen",
+    "💬 Story-to-Chat Replies: Replying to any story automatically dispatches a message with story context into your 1-on-1 chat",
+    "📊 Story Viewers & Analytics: See who viewed your stories in real time, view counts, and custom viewer lists",
+    "🗄️ Private Story Archive: Revisit and manage your expired stories safely in your personal archive"
   ],
   "mandatory": false
 }

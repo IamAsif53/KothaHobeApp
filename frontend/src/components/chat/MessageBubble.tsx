@@ -19,6 +19,7 @@ import {
   PhoneOutgoing,
   PhoneMissed,
   PhoneOff,
+  Sparkles,
 } from 'lucide-react';
 
 interface MessageBubbleProps {
@@ -282,6 +283,46 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </p>
         )}
 
+        {/* 4.5. Story Reply Message Card */}
+        {message.type === 'story_reply' && (
+          <div className="flex flex-col gap-2 min-w-[200px] pr-8 select-none">
+            <div className="p-2 rounded-xl bg-black/20 border border-white/10 flex items-center gap-2.5">
+              {message.storyContext?.storyType === 'image' && (message.storyContext.thumbnailUrl || message.storyContext.mediaUrl) ? (
+                <img
+                  src={message.storyContext.thumbnailUrl || message.storyContext.mediaUrl}
+                  alt="Story preview"
+                  className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-[10px] text-white font-bold p-1 text-center line-clamp-2 flex-shrink-0 shadow-sm">
+                  Story
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Story Reply</span>
+                </div>
+                <p className="text-xs text-white/80 truncate font-medium mt-0.5">
+                  {message.storyContext?.originalText || (message.storyContext?.storyType === 'image' ? 'Photo story' : 'Story')}
+                </p>
+                {message.storyContext?.reaction && (
+                  <span className="inline-block mt-0.5 text-base leading-none">
+                    {message.storyContext.reaction}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Comment text if present */}
+            {message.text && (
+              <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-white">
+                {message.text}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 5. Call Record Event */}
         {message.type === 'call' && (
           <div className="flex items-center gap-3 py-1 pr-12">
@@ -372,7 +413,8 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.message.status === next.message.status &&
     prev.message.text === next.message.text &&
     prev.message.senderNickname === next.message.senderNickname &&
-    prev.message.reactions === next.message.reactions &&
+    prev.message.type === next.message.type &&
+    prev.message.storyContext === next.message.storyContext &&
     prev.message.attachment?.url === next.message.attachment?.url &&
     prev.message.attachment?.size === next.message.attachment?.size &&
     prev.message.callDetails?.status === next.message.callDetails?.status &&

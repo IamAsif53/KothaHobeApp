@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { fetchConversations, deleteConversationApi } from '../api/conversationApi';
 import { leaveGroupApi, deleteGroupApi } from '../api/groupApi';
 import { blockUserApi } from '../api/userApi';
-import { IConversation } from '../types';
+import { IConversation, IStoryFeedItem } from '../types';
+import { fetchStoryFeedApi } from '../api/storyApi';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
@@ -12,6 +13,10 @@ import { formatChatListDate } from '../utils/dateUtils';
 import { useTheme } from '../context/ThemeContext';
 import { CreateGroupModal } from '../components/chat/CreateGroupModal';
 import { GroupInviteCard } from '../components/chat/GroupInviteCard';
+import { StoryAvatarBar } from '../components/story/StoryAvatarBar';
+import { StoryComposerModal } from '../components/story/StoryComposerModal';
+import { StoryViewerModal } from '../components/story/StoryViewerModal';
+import { StoryArchiveModal } from '../components/story/StoryArchiveModal';
 import {
   Search,
   UserPlus,
@@ -51,6 +56,20 @@ export const ChatListPage: React.FC = () => {
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
 
+  // Stories State
+  const [storyFeed, setStoryFeed] = useState<IStoryFeedItem[]>([]);
+  const [showStoryComposer, setShowStoryComposer] = useState(false);
+  const [showStoryArchive, setShowStoryArchive] = useState(false);
+  const [viewerState, setViewerState] = useState<{
+    isOpen: boolean;
+    feedIndex: number;
+    slideIndex?: number;
+  }>({
+    isOpen: false,
+    feedIndex: 0,
+    slideIndex: 0,
+  });
+
   const showActionToast = (msg: string) => {
     setActionToast(msg);
     setTimeout(() => setActionToast(null), 3000);
@@ -58,6 +77,17 @@ export const ChatListPage: React.FC = () => {
 
   const { socket, isConnected, isReconnecting, reconnectNow } = useSocket();
   const navigate = useNavigate();
+
+  const loadStoryFeed = async () => {
+    try {
+      const res = await fetchStoryFeedApi();
+      if (res.success && res.feed) {
+        setStoryFeed(res.feed);
+      }
+    } catch (err) {
+      console.warn('[ChatList] Failed to fetch story feed:', err);
+    }
+  };
 
   const loadConversations = async (silent = false) => {
     if (!silent && !localStorage.getItem('kotha_hobe_cached_conversations')) {
@@ -78,6 +108,7 @@ export const ChatListPage: React.FC = () => {
 
   useEffect(() => {
     loadConversations();
+    loadStoryFeed();
   }, []);
 
   // Listen for real-time conversation updates
@@ -166,12 +197,20 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
+    const handleStoryUpdate = () => {
+      loadStoryFeed();
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('conversation:update', () => loadConversations(true));
     socket.on('group:deleted', handleGroupDeleted);
     socket.on('conversation:deleted', handleGroupDeleted);
+    socket.on('story:new', handleStoryUpdate);
+    socket.on('story:viewed', handleStoryUpdate);
+    socket.on('story:reaction', handleStoryUpdate);
+    socket.on('story:deleted', handleStoryUpdate);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -180,6 +219,10 @@ export const ChatListPage: React.FC = () => {
       socket.off('conversation:update');
       socket.off('group:deleted', handleGroupDeleted);
       socket.off('conversation:deleted', handleGroupDeleted);
+      socket.off('story:new', handleStoryUpdate);
+      socket.off('story:viewed', handleStoryUpdate);
+      socket.off('story:reaction', handleStoryUpdate);
+      socket.off('story:deleted', handleStoryUpdate);
     };
   }, [socket]);
 
@@ -345,6 +388,20 @@ export const ChatListPage: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* Stories Avatar Bar */}
+      <StoryAvatarBar
+        feed={storyFeed}
+        currentUser={currentUser}
+        onOpenComposer={() => setShowStoryComposer(true)}
+        onOpenStory={(feedIdx, slideIdx) =>
+          setViewerState({
+            isOpen: true,
+            feedIndex: feedIdx,
+            slideIndex: slideIdx ?? 0,
+          })
+        }
+      />
 
       {/* Search Input Bar */}
       <div className="p-3 bg-chat-panel/50 border-b border-white/5 flex-shrink-0">
@@ -514,6 +571,38 @@ export const ChatListPage: React.FC = () => {
         onGroupCreated={() => {
           loadConversations(true);
         }}
+      />
+
+      {/* Story Composer Modal */}
+      <StoryComposerModal
+        isOpen={showStoryComposer}
+        onClose={() => setShowStoryComposer(false)}
+        onStoryCreated={() => {
+          loadStoryFeed();
+        }}
+      />
+
+      {/* Story Viewer Modal */}
+      <StoryViewerModal
+        isOpen={viewerState.isOpen}
+        feed={storyFeed}
+        initialFeedIndex={viewerState.feedIndex}
+        initialSlideIndex={viewerState.slideIndex}
+        currentUser={currentUser}
+        onClose={() => setViewerState((prev) => ({ ...prev, isOpen: false }))}
+        onStoryDeleted={() => {
+          loadStoryFeed();
+        }}
+        onOpenArchive={() => {
+          setViewerState((prev) => ({ ...prev, isOpen: false }));
+          setShowStoryArchive(true);
+        }}
+      />
+
+      {/* Story Archive Modal */}
+      <StoryArchiveModal
+        isOpen={showStoryArchive}
+        onClose={() => setShowStoryArchive(false)}
       />
 
       {/* Action Bottom Sheet Modal */}

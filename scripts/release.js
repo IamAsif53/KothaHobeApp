@@ -77,12 +77,13 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "👑 Group Admin Removal: Group admins can permanently delete groups with instant real-time sync across all participants",
-      "🖼️ Gallery & Custom Avatars: Pick group avatars directly from device gallery/camera or choose from vibrant colorful presets",
-      "⚡ 0ms Group Info Caching: Instant group info page rendering with background stale-while-revalidate caching",
-      "🎨 Admin Avatar Editing: Group admins can tap and update the group profile picture at any time",
-      "📞 Group Voice & Video Calling: Multi-party WebRTC audio and video calling for up to 10 members",
-      "🔒 Secure Membership Management: Dedicated group roles, nicknames, and member invites"
+      "✨ 24h Ephemeral Stories: Share text thoughts with beautiful gradient presets or photos with captions that vanish after 24 hours",
+      "🎨 Immersive Story Composer: Create text stories with custom fonts, colors, and alignments, or pick photos from gallery with smart compression",
+      "👁️ Multi-Segment Story Viewer: Smooth segmented progress bars, touch-and-hold pause, swipe down to dismiss, and instant tap navigation",
+      "❤️ Quick Emoji Reactions: Tap floating reactions (❤️, 🔥, 😂, 😍, 😮, 😢, 👏, 🎉) that animate instantly on screen",
+      "💬 Story-to-Chat Replies: Replying to any story automatically dispatches a message with story context into your 1-on-1 chat",
+      "📊 Story Viewers & Analytics: See who viewed your stories in real time, view counts, and custom viewer lists",
+      "🗄️ Private Story Archive: Revisit and manage your expired stories safely in your personal archive"
     ],
     mandatory: false
   };

@@ -770,3 +770,68 @@ export const setGroupNickname = async (req: AuthenticatedRequest, res: Response)
     res.status(500).json({ success: false, message: 'Failed to set nickname' });
   }
 };
+
+// 12. Delete / Remove Group (Admin Only)
+export const deleteGroup = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const id = req.params.id as string;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: 'Invalid group ID' });
+      return;
+    }
+
+    const group = await Conversation.findOne({
+      _id: id,
+      isGroup: true,
+    });
+
+    if (!group || !group.groupMeta) {
+      res.status(404).json({ success: false, message: 'Group not found' });
+      return;
+    }
+
+    const userIdStr = req.user._id.toString();
+    const isCreator = group.groupMeta.creator?.toString() === userIdStr;
+    const isAdmin = group.groupMeta.admins.some((a) => a?.toString() === userIdStr);
+
+    if (!isCreator && !isAdmin) {
+      res.status(403).json({ success: false, message: 'Only group admins can remove this group' });
+      return;
+    }
+
+    const participantIds = group.participants.map((p) => p.toString());
+
+    // 1. Delete all messages associated with this group
+    await Message.deleteMany({ conversationId: id });
+
+    // 2. Delete the conversation document
+    await Conversation.findByIdAndDelete(id);
+
+    console.log(`[Group] Group ${id} (${group.groupMeta.name}) deleted by admin ${req.user.displayName} (${userIdStr})`);
+
+    // 3. Broadcast real-time deletion events
+    const io = getGlobalIO();
+    if (io) {
+      io.to(`conv:${id}`).emit('group:deleted', { groupId: id, conversationId: id, deletedBy: userIdStr });
+      participantIds.forEach((pid) => {
+        io.to(`user:${pid}`).emit('group:deleted', { groupId: id, conversationId: id, deletedBy: userIdStr });
+        io.to(`user:${pid}`).emit('conversation:deleted', { conversationId: id });
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Group removed successfully',
+      groupId: id,
+    });
+  } catch (error: any) {
+    console.error('[Group] deleteGroup error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Failed to remove group' });
+  }
+};
+

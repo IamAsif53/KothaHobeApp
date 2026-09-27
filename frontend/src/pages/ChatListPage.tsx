@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchConversations, deleteConversationApi } from '../api/conversationApi';
-import { leaveGroupApi } from '../api/groupApi';
+import { leaveGroupApi, deleteGroupApi } from '../api/groupApi';
 import { blockUserApi } from '../api/userApi';
 import { IConversation } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
 import { ConversationSkeleton } from '../components/common/Skeleton';
@@ -29,6 +30,7 @@ import {
 
 export const ChatListPage: React.FC = () => {
   const { themeConfig } = useTheme();
+  const { user: currentUser } = useAuth();
   // ⚡ Instant Render: Initialize immediately from cached conversations
   const [conversations, setConversations] = useState<IConversation[]>(() => {
     try {
@@ -152,16 +154,32 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
+    const handleGroupDeleted = (data: { groupId?: string; conversationId?: string }) => {
+      const targetId = data.groupId || data.conversationId;
+      if (!targetId) return;
+      setConversations((prev) => {
+        const updated = prev.filter((c) => c._id !== targetId);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        localStorage.removeItem(`kotha_hobe_group_cache_${targetId}`);
+        localStorage.removeItem(`kotha_hobe_msgs_${targetId}`);
+        return updated;
+      });
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('conversation:update', () => loadConversations(true));
+    socket.on('group:deleted', handleGroupDeleted);
+    socket.on('conversation:deleted', handleGroupDeleted);
 
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:read', handleMessageRead);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('conversation:update');
+      socket.off('group:deleted', handleGroupDeleted);
+      socket.off('conversation:deleted', handleGroupDeleted);
     };
   }, [socket]);
 
@@ -241,10 +259,30 @@ export const ChatListPage: React.FC = () => {
         setConversations(updated);
         localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
         localStorage.removeItem(`kotha_hobe_msgs_${conv._id}`);
+        localStorage.removeItem(`kotha_hobe_group_cache_${conv._id}`);
         setSelectedConvForAction(null);
         showActionToast(`You left "${groupName}"`);
       } catch (err: any) {
         showActionToast(err?.message || 'Failed to leave group');
+      }
+    }
+  };
+
+  // 4. Handle Delete Group (Admin Only)
+  const handleDeleteGroup = async (conv: IConversation) => {
+    const groupName = conv.groupMeta?.name || 'this group';
+    if (confirm(`Permanently remove group "${groupName}"? This will delete all messages and remove the group for all participants.`)) {
+      try {
+        await deleteGroupApi(conv._id);
+        const updated = conversations.filter((c) => c._id !== conv._id);
+        setConversations(updated);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        localStorage.removeItem(`kotha_hobe_msgs_${conv._id}`);
+        localStorage.removeItem(`kotha_hobe_group_cache_${conv._id}`);
+        setSelectedConvForAction(null);
+        showActionToast(`Group "${groupName}" removed`);
+      } catch (err: any) {
+        showActionToast(err?.message || 'Failed to remove group');
       }
     }
   };
@@ -569,23 +607,56 @@ export const ChatListPage: React.FC = () => {
                 </div>
               </button>
 
-              {/* Leave Group (if group) OR Block User (if 1-on-1) */}
+              {/* Leave Group & Delete Group (if group) OR Block User (if 1-on-1) */}
               {selectedConvForAction.isGroup ? (
-                <button
-                  type="button"
-                  onClick={() => handleLeaveGroup(selectedConvForAction)}
-                  className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/15 active:scale-[0.98] text-red-500 text-sm font-bold transition-all text-left border border-red-500/20"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
-                    <LogOut className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-red-500 font-bold">Leave Group</div>
-                    <div className="text-[11px] text-red-400/80 font-normal">
-                      Exit this group conversation
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleLeaveGroup(selectedConvForAction)}
+                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-white text-sm font-semibold transition-all text-left"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                      <LogOut className="w-4 h-4" />
                     </div>
-                  </div>
-                </button>
+                    <div>
+                      <div className="font-semibold text-slate-200">Leave Group</div>
+                      <div className="text-[11px] text-chat-textMuted font-normal">
+                        Exit this group conversation
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Delete Group (Admin Only) */}
+                  {(() => {
+                    const currentUserId = currentUser?._id || '';
+                    const meta = selectedConvForAction.groupMeta;
+                    const isGroupAdmin =
+                      meta &&
+                      (meta.creator === currentUserId ||
+                        (typeof meta.creator === 'object' && (meta.creator as any)._id === currentUserId) ||
+                        meta.admins?.some((a: any) => (typeof a === 'string' ? a === currentUserId : a?._id === currentUserId)));
+
+                    if (!isGroupAdmin) return null;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGroup(selectedConvForAction)}
+                        className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/15 active:scale-[0.98] text-red-500 text-sm font-bold transition-all text-left border border-red-500/20"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-red-500 font-bold">Delete Group (Admin)</div>
+                          <div className="text-[11px] text-red-400/80 font-normal">
+                            Permanently remove group for everyone
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })()}
+                </>
               ) : (
                 <button
                   type="button"

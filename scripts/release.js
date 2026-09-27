@@ -77,12 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🧹 UI Streamlining: Removed unnecessary top-right search icon and bottom-right floating action buttons from chat list",
-      "📞 Instant Call Balance & Notification Sync: Accepting a call immediately connects audio/video and dismisses notifications from all panels",
-      "🛑 Symmetric Call Termination: Ending or rejecting a call from either user instantly closes the call screen and dismisses notifications on both devices",
-      "🖼️ In-App Media Viewer: High-performance in-app photo & document viewer for 1-on-1 and group chats",
-      "🔙 Modal Backstack: Android hardware back button and backspace cleanly close topmost active modals without exiting chats",
-      "👥 Group Chat & Calling: Up to 10 members with rich messaging, nicknames, and WebRTC audio/video calls"
+      "👑 Group Admin Removal: Group admins can permanently delete groups with instant real-time sync across all participants",
+      "🖼️ Gallery & Custom Avatars: Pick group avatars directly from device gallery/camera or choose from vibrant colorful presets",
+      "⚡ 0ms Group Info Caching: Instant group info page rendering with background stale-while-revalidate caching",
+      "🎨 Admin Avatar Editing: Group admins can tap and update the group profile picture at any time",
+      "📞 Group Voice & Video Calling: Multi-party WebRTC audio and video calling for up to 10 members",
+      "🔒 Secure Membership Management: Dedicated group roles, nicknames, and member invites"
     ],
     mandatory: false
   };

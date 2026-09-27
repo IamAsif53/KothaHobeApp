@@ -8,7 +8,6 @@ import {
   UserPlus,
   Crown,
   Shield,
-  MoreVertical,
   Tag,
   LogOut,
   Trash2,
@@ -18,6 +17,7 @@ import {
   Loader2,
   Check,
   ChevronRight,
+  Camera,
 } from 'lucide-react';
 import {
   fetchGroupDetailsApi,
@@ -27,31 +27,66 @@ import {
   leaveGroupApi,
   removeGroupMemberApi,
   toggleGroupAdminApi,
+  deleteGroupApi,
 } from '../api/groupApi';
 import { fetchSharedMediaApi, getMediaUrl } from '../api/messageApi';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { useGroupCall } from '../context/GroupCallContext';
-import { IConversation, IGroupMember, IUser } from '../types';
+import { IConversation, IUser } from '../types';
 import { Avatar } from '../components/common/Avatar';
 import { SetNicknameModal } from '../components/chat/SetNicknameModal';
 import { MediaViewerModal } from '../components/chat/MediaViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
+import { GroupAvatarPickerModal } from '../components/chat/GroupAvatarPickerModal';
 import { searchUserApi } from '../api/userApi';
 
 export const GroupInfoPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { socket } = useSocket();
   const { startGroupCall } = useGroupCall();
 
-  const [group, setGroup] = useState<IConversation | null>(null);
-  const [loading, setLoading] = useState(true);
+  // ⚡ Instant Cache Hydration: Initialize group immediately from cache (0ms lag)
+  const [group, setGroup] = useState<IConversation | null>(() => {
+    if (!conversationId) return null;
+    try {
+      const specific = localStorage.getItem(`kotha_hobe_group_cache_${conversationId}`);
+      if (specific) return JSON.parse(specific);
+      const convList = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (convList) {
+        const parsed = JSON.parse(convList);
+        const match = parsed.find((c: any) => c._id === conversationId && c.isGroup);
+        if (match) return match;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!conversationId) return true;
+    try {
+      const specific = localStorage.getItem(`kotha_hobe_group_cache_${conversationId}`);
+      if (specific) return false;
+      const convList = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (convList) {
+        const parsed = JSON.parse(convList);
+        return !parsed.some((c: any) => c._id === conversationId && c.isGroup);
+      }
+    } catch {}
+    return true;
+  });
+
   const [activeTab, setActiveTab] = useState<'members' | 'media'>('members');
   const [sharedMedia, setSharedMedia] = useState<any[]>([]);
 
   // Modals / Actions
   const [isEditingName, setIsEditingName] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [nicknameModalUser, setNicknameModalUser] = useState<IUser | null>(null);
   const [activeMediaModal, setActiveMediaModal] = useState<any | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<any | null>(null);
@@ -63,26 +98,94 @@ export const GroupInfoPage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
 
-  // Load Group Data
-  const loadGroupDetails = async () => {
+  // Load Group Data in Background
+  const loadGroupDetails = async (silent = false) => {
     if (!conversationId) return;
+    if (!silent && !group) setLoading(true);
     try {
-      setLoading(true);
       const res = await fetchGroupDetailsApi(conversationId);
       if (res.success && res.group) {
         setGroup(res.group);
         setNewGroupName(res.group.groupMeta?.name || '');
+        // Cache group details
+        localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(res.group));
       }
     } catch (err) {
       console.error('Failed to load group details:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadGroupDetails();
+    loadGroupDetails(!!group);
   }, [conversationId]);
+
+  // Socket real-time listeners for group updates & deletion
+  useEffect(() => {
+    if (!socket || !conversationId) return;
+
+    const handleGroupDeleted = (data: { groupId?: string; conversationId?: string }) => {
+      const targetId = data.groupId || data.conversationId;
+      if (targetId === conversationId) {
+        localStorage.removeItem(`kotha_hobe_group_cache_${conversationId}`);
+        navigate('/chats', { replace: true });
+      }
+    };
+
+    const handleAvatarUpdated = (data: { conversationId: string; avatarUrl: string }) => {
+      if (data.conversationId === conversationId) {
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = {
+            ...prev,
+            groupMeta: { ...prev.groupMeta, avatarUrl: data.avatarUrl },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
+    const handleNameUpdated = (data: { conversationId: string; name: string }) => {
+      if (data.conversationId === conversationId) {
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = {
+            ...prev,
+            groupMeta: { ...prev.groupMeta, name: data.name },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
+    const handleMemberRemoved = (data: { conversationId: string; targetUserId: string }) => {
+      if (data.conversationId === conversationId) {
+        if (data.targetUserId === currentUser?._id) {
+          localStorage.removeItem(`kotha_hobe_group_cache_${conversationId}`);
+          navigate('/chats', { replace: true });
+        } else {
+          loadGroupDetails(true);
+        }
+      }
+    };
+
+    socket.on('group:deleted', handleGroupDeleted);
+    socket.on('conversation:deleted', handleGroupDeleted);
+    socket.on('group:avatar_updated', handleAvatarUpdated);
+    socket.on('group:name_updated', handleNameUpdated);
+    socket.on('group:member_removed', handleMemberRemoved);
+
+    return () => {
+      socket.off('group:deleted', handleGroupDeleted);
+      socket.off('conversation:deleted', handleGroupDeleted);
+      socket.off('group:avatar_updated', handleAvatarUpdated);
+      socket.off('group:name_updated', handleNameUpdated);
+      socket.off('group:member_removed', handleMemberRemoved);
+    };
+  }, [socket, conversationId, currentUser, navigate]);
 
   // Load Shared Media
   useEffect(() => {
@@ -97,7 +200,7 @@ export const GroupInfoPage: React.FC = () => {
     }
   }, [activeTab, conversationId]);
 
-  if (loading) {
+  if (loading && !group) {
     return (
       <div className="flex-1 flex items-center justify-center bg-slate-950 text-emerald-400">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -134,11 +237,39 @@ export const GroupInfoPage: React.FC = () => {
     try {
       const res = await updateGroupNameApi(conversationId, newGroupName.trim());
       if (res.success) {
-        setGroup((prev) => (prev ? { ...prev, groupMeta: { ...prev.groupMeta!, name: res.name } } : prev));
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = { ...prev, groupMeta: { ...prev.groupMeta, name: res.name } };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
         setIsEditingName(false);
       }
     } catch (err) {
       console.error('Failed to update group name:', err);
+    }
+  };
+
+  const handleSelectGroupAvatar = async (newAvatarUrl: string) => {
+    if (!conversationId) return;
+    setIsUpdatingAvatar(true);
+    try {
+      const res = await updateGroupAvatarApi(conversationId, newAvatarUrl);
+      if (res.success) {
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = {
+            ...prev,
+            groupMeta: { ...prev.groupMeta, avatarUrl: newAvatarUrl },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update group avatar:', err);
+    } finally {
+      setIsUpdatingAvatar(false);
     }
   };
 
@@ -148,10 +279,33 @@ export const GroupInfoPage: React.FC = () => {
     try {
       const res = await leaveGroupApi(conversationId);
       if (res.success) {
-        navigate('/chats');
+        localStorage.removeItem(`kotha_hobe_group_cache_${conversationId}`);
+        navigate('/chats', { replace: true });
       }
     } catch (err) {
       console.error('Failed to leave group:', err);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm('Are you sure you want to permanently remove this group? This will delete all messages and remove the group for everyone.')) return;
+    if (!conversationId) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteGroupApi(conversationId);
+      if (res.success) {
+        localStorage.removeItem(`kotha_hobe_group_cache_${conversationId}`);
+        const convList = localStorage.getItem('kotha_hobe_cached_conversations');
+        if (convList) {
+          const filtered = JSON.parse(convList).filter((c: any) => c._id !== conversationId);
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(filtered));
+        }
+        navigate('/chats', { replace: true });
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to remove group');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -236,13 +390,43 @@ export const GroupInfoPage: React.FC = () => {
         {/* Hero Section */}
         <div className="p-6 flex flex-col items-center justify-center border-b border-slate-800/60 bg-gradient-to-b from-slate-900/60 to-slate-950">
           <div className="relative mb-4">
-            <div className="w-24 h-24 rounded-3xl bg-slate-800 border-2 border-emerald-500/40 flex items-center justify-center overflow-hidden shadow-2xl">
+            <div
+              onClick={() => {
+                if (isCurrentUserAdmin) setIsAvatarPickerOpen(true);
+              }}
+              className={`w-24 h-24 rounded-3xl bg-slate-800 border-2 border-emerald-500/40 flex items-center justify-center overflow-hidden shadow-2xl relative ${
+                isCurrentUserAdmin ? 'cursor-pointer group' : ''
+              }`}
+            >
               {meta.avatarUrl ? (
                 <img src={meta.avatarUrl} alt={meta.name} className="w-full h-full object-cover" />
               ) : (
                 <Users className="w-12 h-12 text-emerald-400" />
               )}
+
+              {/* Admin Avatar Edit Overlay */}
+              {isCurrentUserAdmin && (
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-3xl">
+                  <Camera className="w-6 h-6 text-white" />
+                </div>
+              )}
             </div>
+
+            {/* Quick Edit Badge for Admin */}
+            {isCurrentUserAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsAvatarPickerOpen(true)}
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-lg transition-transform active:scale-95"
+                title="Change Group Icon"
+              >
+                {isUpdatingAvatar ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
+                )}
+              </button>
+            )}
           </div>
 
           {/* Group Name & Edit */}
@@ -266,13 +450,15 @@ export const GroupInfoPage: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-xl font-bold text-white text-center">{meta.name}</h1>
-              <button
-                onClick={() => setIsEditingName(true)}
-                className="p-1 text-slate-400 hover:text-emerald-400 transition-colors"
-                title="Edit Group Name"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
+              {isCurrentUserAdmin && (
+                <button
+                  onClick={() => setIsEditingName(true)}
+                  className="p-1 text-slate-400 hover:text-emerald-400 transition-colors"
+                  title="Edit Group Name"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
 
@@ -444,15 +630,37 @@ export const GroupInfoPage: React.FC = () => {
               );
             })}
 
-            {/* Leave Group Button */}
-            <div className="pt-6">
+            {/* Bottom Actions: Leave Group & Delete Group */}
+            <div className="pt-6 space-y-3">
+              {/* Leave Group Button */}
               <button
                 onClick={handleLeaveGroup}
-                className="w-full p-3.5 rounded-2xl bg-red-600/10 hover:bg-red-600/20 border border-red-500/30 text-red-400 flex items-center justify-center gap-2 font-bold text-sm transition-all duration-200 active:scale-98"
+                className="w-full p-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center gap-2 font-bold text-sm transition-all duration-200 active:scale-98"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4 text-slate-400" />
                 <span>Leave Group</span>
               </button>
+
+              {/* Delete Group (Admin Only) */}
+              {isCurrentUserAdmin && (
+                <button
+                  onClick={handleDeleteGroup}
+                  disabled={isDeleting}
+                  className="w-full p-3.5 rounded-2xl bg-red-600/10 hover:bg-red-600/20 border border-red-500/30 text-red-400 flex items-center justify-center gap-2 font-bold text-sm transition-all duration-200 active:scale-98"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Removing Group...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Group (Admin Only)</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -530,10 +738,19 @@ export const GroupInfoPage: React.FC = () => {
           targetUser={nicknameModalUser}
           currentNickname={meta.nicknames ? (meta.nicknames as any)[nicknameModalUser._id] : ''}
           onNicknameUpdated={() => {
-            loadGroupDetails();
+            loadGroupDetails(true);
           }}
         />
       )}
+
+      {/* Group Avatar Picker Modal */}
+      <GroupAvatarPickerModal
+        isOpen={isAvatarPickerOpen}
+        onClose={() => setIsAvatarPickerOpen(false)}
+        currentAvatarUrl={meta.avatarUrl}
+        onSelectAvatar={handleSelectGroupAvatar}
+        title="Change Group Icon"
+      />
 
       {/* Add / Invite Members Modal */}
       {isInviteModalOpen && (

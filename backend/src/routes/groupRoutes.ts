@@ -11,6 +11,7 @@ import {
   removeMember,
   toggleAdmin,
   setGroupNickname,
+  deleteGroup,
 } from '../controllers/groupController';
 import { authenticateToken } from '../middleware/authMiddleware';
 
@@ -21,6 +22,7 @@ router.use(authenticateToken);
 // Group management endpoints
 router.post('/', createGroup);
 router.get('/:id', getGroupDetails);
+router.delete('/:id', deleteGroup);
 router.put('/:id/name', updateGroupName);
 router.put('/:id/avatar', updateGroupAvatar);
 router.post('/:id/members', inviteMembers);

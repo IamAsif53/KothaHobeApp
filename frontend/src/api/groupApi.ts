@@ -93,3 +93,11 @@ export async function setGroupNicknameApi(groupId: string, targetUserId: string,
     body: JSON.stringify({ targetUserId, nickname }),
   });
 }
+
+// 12. Delete / Remove Group (Admin Only)
+export async function deleteGroupApi(groupId: string): Promise<{ success: boolean; message: string; groupId?: string }> {
+  return apiFetch<{ success: boolean; message: string; groupId?: string }>(`/groups/${groupId}`, {
+    method: 'DELETE',
+  });
+}
+

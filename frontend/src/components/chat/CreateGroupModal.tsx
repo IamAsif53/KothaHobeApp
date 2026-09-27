@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Search, Users, Check, Loader2, Camera } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { X, Search, Users, Check, Loader2, Camera, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { createGroupApi } from '../../api/groupApi';
 import { searchUserApi } from '../../api/userApi';
 import { fetchConversations } from '../../api/conversationApi';
@@ -8,6 +8,8 @@ import { IUser } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useNavigate } from 'react-router-dom';
 import { modalStack } from '../../utils/modalStack';
+import { GroupAvatarPickerModal } from './GroupAvatarPickerModal';
+import { GROUP_AVATAR_PRESETS } from '../../utils/groupAvatarPresets';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
@@ -24,6 +26,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const { user: currentUser } = useAuth();
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<IUser[]>([]);
@@ -151,179 +154,226 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const displayList = searchQuery.trim() ? searchResults : recentContacts;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Users className="w-5 h-5" />
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          {/* Modal Header */}
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Users className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Create New Group</h3>
             </div>
-            <h3 className="text-lg font-bold text-white">Create New Group</h3>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleCreateGroup} className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-          {errorMessage && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium">
-              {errorMessage}
-            </div>
-          )}
+          {/* Modal Body */}
+          <form onSubmit={handleCreateGroup} className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium">
+                {errorMessage}
+              </div>
+            )}
 
-          {/* Group Name & Avatar */}
-          <div className="flex items-center gap-3">
-            <div className="relative group">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 overflow-hidden">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="Group Icon" className="w-full h-full object-cover" />
-                ) : (
-                  <Camera className="w-6 h-6 text-slate-500" />
-                )}
+            {/* Group Name & Avatar Picker Trigger */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAvatarPickerOpen(true)}
+                className="relative group focus:outline-none flex-shrink-0"
+                title="Choose Avatar"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 border-2 border-dashed border-emerald-500/50 flex items-center justify-center text-slate-400 overflow-hidden group-hover:border-emerald-400 transition-all shadow-md">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Group Icon" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-400 group-hover:text-emerald-400">
+                      <Camera className="w-6 h-6" />
+                      <span className="text-[9px] font-semibold mt-0.5">Icon</span>
+                    </div>
+                  )}
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+              </button>
+
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Group Name (e.g. Squad Goals)"
+                  maxLength={60}
+                  required
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
               </div>
             </div>
-            <div className="flex-1">
+
+            {/* Quick Avatar Presets Row */}
+            <div className="p-2.5 rounded-2xl bg-slate-800/40 border border-slate-700/40">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-2 px-1">
+                <span>Select Group Avatar:</span>
+                <button
+                  type="button"
+                  onClick={() => setIsAvatarPickerOpen(true)}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" /> Gallery / More
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {GROUP_AVATAR_PRESETS.slice(0, 6).map((preset) => {
+                  const isSelected = avatarUrl === preset.url;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setAvatarUrl(isSelected ? '' : preset.url)}
+                      className={`w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 transition-transform active:scale-95 border-2 ${
+                        isSelected
+                          ? 'border-emerald-400 scale-105 shadow-md shadow-emerald-500/30'
+                          : 'border-slate-700/80 hover:border-slate-500 opacity-80 hover:opacity-100'
+                      }`}
+                      title={preset.name}
+                    >
+                      <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selected Member Chips */}
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                <span className="font-semibold text-slate-300">Invite Members</span>
+                <span className="text-emerald-400 font-medium">
+                  {selectedUsers.length + 1} / 10 members (You + {selectedUsers.length} invited)
+                </span>
+              </div>
+
+              {selectedUsers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/40 mb-2 max-h-24 overflow-y-auto">
+                  {selectedUsers.map((u) => (
+                    <span
+                      key={u._id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium"
+                    >
+                      <span>{u.displayName || u.username}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleUserSelection(u)}
+                        className="hover:text-white"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Search Box */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Group Name (e.g. Squad Goals)"
-                maxLength={60}
-                required
-                className="w-full px-4 py-3 rounded-2xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search user by username or name..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
               />
-            </div>
-          </div>
-
-          {/* Optional Avatar URL input */}
-          <div>
-            <input
-              type="url"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="Group Icon URL (optional)"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          {/* Selected Member Chips */}
-          <div>
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold text-slate-300">Invite Members</span>
-              <span className="text-emerald-400 font-medium">
-                {selectedUsers.length + 1} / 10 members (You + {selectedUsers.length} invited)
-              </span>
+              {isSearching && (
+                <Loader2 className="w-4 h-4 text-emerald-400 animate-spin absolute right-3.5 top-1/2 -translate-y-1/2" />
+              )}
             </div>
 
-            {selectedUsers.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/40 mb-2 max-h-24 overflow-y-auto">
-                {selectedUsers.map((u) => (
-                  <span
-                    key={u._id}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium"
-                  >
-                    <span>{u.displayName || u.username}</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleUserSelection(u)}
-                      className="hover:text-white"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search user by username or name..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
-            />
-            {isSearching && (
-              <Loader2 className="w-4 h-4 text-emerald-400 animate-spin absolute right-3.5 top-1/2 -translate-y-1/2" />
-            )}
-          </div>
-
-          {/* User List */}
-          <div className="flex-1 min-h-[140px] max-h-[220px] overflow-y-auto space-y-1 pr-1">
-            {displayList.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-500">
-                {searchQuery ? 'No user found' : 'Search for friends to add'}
-              </div>
-            ) : (
-              displayList.map((contact) => {
-                const isSelected = selectedUsers.some((u) => u._id === contact._id);
-                return (
-                  <div
-                    key={contact._id}
-                    onClick={() => toggleUserSelection(contact)}
-                    className={`flex items-center justify-between p-2.5 rounded-2xl cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-emerald-950/40 border border-emerald-500/30'
-                        : 'hover:bg-slate-800/60 border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        src={contact.avatarUrl}
-                        name={contact.displayName || contact.username || 'User'}
-                        size="sm"
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-white leading-tight">
-                          {contact.displayName}
-                        </p>
-                        <p className="text-xs text-slate-400">@{contact.username}</p>
-                      </div>
-                    </div>
-
+            {/* User List */}
+            <div className="flex-1 min-h-[140px] max-h-[200px] overflow-y-auto space-y-1 pr-1">
+              {displayList.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  {searchQuery ? 'No user found' : 'Search for friends to add'}
+                </div>
+              ) : (
+                displayList.map((contact) => {
+                  const isSelected = selectedUsers.some((u) => u._id === contact._id);
+                  return (
                     <div
-                      className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+                      key={contact._id}
+                      onClick={() => toggleUserSelection(contact)}
+                      className={`flex items-center justify-between p-2.5 rounded-2xl cursor-pointer transition-colors ${
                         isSelected
-                          ? 'bg-emerald-600 border-emerald-500 text-white'
-                          : 'border-slate-600 bg-slate-800'
+                          ? 'bg-emerald-950/40 border border-emerald-500/30'
+                          : 'hover:bg-slate-800/60 border border-transparent'
                       }`}
                     >
-                      {isSelected && <Check className="w-3.5 h-3.5" />}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                      <div className="flex items-center gap-3">
+                        <Avatar
+                          src={contact.avatarUrl}
+                          name={contact.displayName || contact.username || 'User'}
+                          size="sm"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-white leading-tight">
+                            {contact.displayName}
+                          </p>
+                          <p className="text-xs text-slate-400">@{contact.username}</p>
+                        </div>
+                      </div>
 
-          {/* Create Button */}
-          <button
-            type="submit"
-            disabled={isSubmitting || !name.trim() || selectedUsers.length < 2}
-            className="w-full mt-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Creating Group...</span>
-              </>
-            ) : selectedUsers.length < 2 ? (
-              <span>Select at least 2 members ({selectedUsers.length}/2)</span>
-            ) : (
-              <span>Create Group ({selectedUsers.length + 1} members)</span>
-            )}
-          </button>
-        </form>
+                      <div
+                        className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-600 border-emerald-500 text-white'
+                            : 'border-slate-600 bg-slate-800'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Create Button */}
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim() || selectedUsers.length < 2}
+              className="w-full mt-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Creating Group...</span>
+                </>
+              ) : selectedUsers.length < 2 ? (
+                <span>Select at least 2 members ({selectedUsers.length}/2)</span>
+              ) : (
+                <span>Create Group ({selectedUsers.length + 1} members)</span>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* Reusable Group Avatar Picker Modal */}
+      <GroupAvatarPickerModal
+        isOpen={isAvatarPickerOpen}
+        onClose={() => setIsAvatarPickerOpen(false)}
+        currentAvatarUrl={avatarUrl}
+        onSelectAvatar={(url) => setAvatarUrl(url)}
+        title="Select Group Avatar"
+      />
+    </>
   );
 };

@@ -36,6 +36,8 @@ interface StoryViewerModalProps {
   onOpenArchive?: () => void;
 }
 
+const STORY_DURATION = 3000; // Configurable constant: exactly 3000ms (3.0s) per slide
+const HOLD_THRESHOLD_MS = 200; // Short tap vs long press threshold
 const QUICK_REACTION_EMOJIS = ['❤️', '🔥', '😂', '😍', '😮', '😢', '👏', '🎉'];
 
 const formatRelativeTime = (isoString?: string): string => {
@@ -61,7 +63,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 }) => {
   const [feedIndex, setFeedIndex] = useState(initialFeedIndex);
   const [slideIndex, setSlideIndex] = useState(initialSlideIndex);
-  const [progress, setProgress] = useState(0); // 0 to 100
+  const [progress, setProgress] = useState(0); // 0 to 100%
   const [isPaused, setIsPaused] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -73,15 +75,16 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [floatingReaction, setFloatingReaction] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Time & gesture tracking refs
+  // Single Playback Controller Refs (Source of Truth)
   const isPausedRef = useRef(false);
-  const startTimeRef = useRef<number>(0);
-  const elapsedBeforePauseRef = useRef<number>(0);
+  const startedAtRef = useRef<number>(0);
+  const pausedElapsedRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
 
-  // Pointer hold tracking
+  // Pointer & Gesture State Machine Refs
   const pointerDownTimeRef = useRef<number>(0);
   const pointerDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isHoldingRef = useRef(false);
 
   const showToast = (msg: string) => {
@@ -94,22 +97,33 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return modalStack.register('story_viewer_modal', onClose);
   }, [isOpen, onClose]);
 
+  // Sync state on modal open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      setFeedIndex(Math.max(0, Math.min(initialFeedIndex, feed.length - 1)));
-      setSlideIndex(Math.max(0, initialSlideIndex));
+      const safeFeedIdx = Math.max(0, Math.min(initialFeedIndex, feed.length - 1));
+      setFeedIndex(safeFeedIdx);
+      const safeSlideIdx = Math.max(0, initialSlideIndex);
+      setSlideIndex(safeSlideIdx);
       setProgress(0);
-      setIsPaused(false);
       isPausedRef.current = false;
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
+      setIsPaused(false);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
       setShowViewersSheet(false);
       setIsReplying(false);
       setReplyText('');
     }
     return () => {
       document.body.style.overflow = '';
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
     };
   }, [isOpen, initialFeedIndex, initialSlideIndex, feed.length]);
 
@@ -118,45 +132,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const currentSlide: IStorySlide | undefined = slides[slideIndex];
   const isAuthor = currentFeedItem?.isMe || false;
 
-  // Auto-advance
-  const advanceToNext = useCallback(() => {
-    if (slideIndex < slides.length - 1) {
-      setSlideIndex((prev) => prev + 1);
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
-    } else if (feedIndex < feed.length - 1) {
-      setFeedIndex((prev) => prev + 1);
-      setSlideIndex(0);
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
-    } else {
-      onClose();
-    }
-  }, [slideIndex, slides.length, feedIndex, feed.length, onClose]);
-
-  const goToPrevious = useCallback(() => {
-    if (slideIndex > 0) {
-      setSlideIndex((prev) => prev - 1);
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
-    } else if (feedIndex > 0) {
-      const prevFeedItem = feed[feedIndex - 1];
-      setFeedIndex((prev) => prev - 1);
-      setSlideIndex(Math.max(0, (prevFeedItem?.slides.length || 1) - 1));
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
-    } else {
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
-      startTimeRef.current = Date.now();
-    }
-  }, [slideIndex, feedIndex, feed]);
-
-  // View tracking
+  // View tracking: Record view once slide is displayed
   useEffect(() => {
     if (!isOpen || !currentSlide) return;
     if (!isAuthor && !currentSlide.hasViewed) {
@@ -165,37 +141,92 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   }, [isOpen, currentSlide, isAuthor]);
 
-  // Pause / Resume helper
-  const pauseTimer = useCallback(() => {
+  // Pause playback
+  const pausePlayback = useCallback(() => {
     if (isPausedRef.current) return;
     isPausedRef.current = true;
     setIsPaused(true);
-    elapsedBeforePauseRef.current += Date.now() - startTimeRef.current;
+    pausedElapsedRef.current = performance.now() - startedAtRef.current;
   }, []);
 
-  const resumeTimer = useCallback(() => {
+  // Resume playback
+  const resumePlayback = useCallback(() => {
     if (!isPausedRef.current) return;
     if (showViewersSheet || isReplying) return;
     isPausedRef.current = false;
     setIsPaused(false);
-    startTimeRef.current = Date.now();
+    startedAtRef.current = performance.now() - pausedElapsedRef.current;
   }, [showViewersSheet, isReplying]);
 
-  // Progress Bar Animation Loop
+  // Navigate to Next Slide / Next User / Exit
+  const advanceToNext = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    if (slideIndex < slides.length - 1) {
+      // Next slide within current user
+      setSlideIndex((prev) => prev + 1);
+      setProgress(0);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
+    } else if (feedIndex < feed.length - 1) {
+      // Next user in feed
+      setFeedIndex((prev) => prev + 1);
+      setSlideIndex(0);
+      setProgress(0);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
+    } else {
+      // All stories completed - close cleanly
+      onClose();
+    }
+  }, [slideIndex, slides.length, feedIndex, feed.length, onClose]);
+
+  // Navigate to Previous Slide / Previous User
+  const goToPrevious = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    if (slideIndex > 0) {
+      // Previous slide within current user
+      setSlideIndex((prev) => prev - 1);
+      setProgress(0);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
+    } else if (feedIndex > 0) {
+      // Previous user's last slide
+      const prevFeedItem = feed[feedIndex - 1];
+      const prevLastSlideIdx = Math.max(0, (prevFeedItem?.slides.length || 1) - 1);
+      setFeedIndex((prev) => prev - 1);
+      setSlideIndex(prevLastSlideIdx);
+      setProgress(0);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
+    } else {
+      // Already on first slide of first user: restart slide
+      setProgress(0);
+      pausedElapsedRef.current = 0;
+      startedAtRef.current = performance.now();
+    }
+  }, [slideIndex, feedIndex, feed]);
+
+  // Single Animation Frame Loop (Source of Truth)
   useEffect(() => {
     if (!isOpen || !currentSlide) return;
 
-    // Reset timer on slide change
-    startTimeRef.current = Date.now();
-    elapsedBeforePauseRef.current = 0;
+    // Reset slide timer
+    startedAtRef.current = performance.now();
+    pausedElapsedRef.current = 0;
     setProgress(0);
-
-    const slideDurationMs = (currentSlide.duration || 5) * 1000;
 
     const tick = () => {
       if (!isPausedRef.current && !showViewersSheet && !isReplying) {
-        const currentElapsed = elapsedBeforePauseRef.current + (Date.now() - startTimeRef.current);
-        const currentProgress = Math.min(100, (currentElapsed / slideDurationMs) * 100);
+        const elapsed = performance.now() - startedAtRef.current;
+        const currentProgress = Math.min(100, (elapsed / STORY_DURATION) * 100);
         setProgress(currentProgress);
 
         if (currentProgress >= 100) {
@@ -212,132 +243,55 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
       }
     };
-  }, [isOpen, currentSlide, feedIndex, slideIndex, showViewersSheet, isReplying, advanceToNext]);
+  }, [isOpen, feedIndex, slideIndex, showViewersSheet, isReplying, advanceToNext]);
 
-  // Viewers Sheet Fetcher
-  const handleOpenViewers = async () => {
-    if (!currentSlide || !isAuthor) return;
-    pauseTimer();
-    setShowViewersSheet(true);
-    setLoadingViewers(true);
-    try {
-      const res = await fetchStoryViewersApi(currentSlide._id);
-      if (res.success) {
-        setViewers(res.viewers || []);
-      }
-    } catch {
-      showToast('Failed to load viewers');
-    } finally {
-      setLoadingViewers(false);
-    }
-  };
-
-  // Delete Story Slide
-  const handleDeleteSlide = async () => {
-    if (!currentSlide || !isAuthor) return;
-    pauseTimer();
-    if (confirm('Delete this story slide?')) {
-      setIsDeleting(true);
-      try {
-        await deleteStoryApi(currentSlide._id);
-        showToast('Story slide deleted');
-        if (onStoryDeleted) onStoryDeleted(currentSlide._id);
-
-        if (slides.length <= 1) {
-          if (feed.length <= 1) {
-            onClose();
-          } else {
-            advanceToNext();
-          }
-        } else {
-          setSlideIndex((prev) => Math.max(0, prev - 1));
-          setProgress(0);
-          resumeTimer();
-        }
-      } catch (err: any) {
-        showToast(err?.message || 'Failed to delete story');
-        resumeTimer();
-      } finally {
-        setIsDeleting(false);
-      }
-    } else {
-      resumeTimer();
-    }
-  };
-
-  // React to story
-  const handleQuickReaction = async (emoji: string) => {
-    if (!currentSlide || isAuthor) return;
-    setFloatingReaction(emoji);
-    setTimeout(() => setFloatingReaction(null), 1200);
-
-    try {
-      await reactStoryApi(currentSlide._id, emoji);
-      currentSlide.myReaction = emoji;
-      showToast(`Reacted with ${emoji}`);
-    } catch {
-      showToast('Failed to send reaction');
-    }
-  };
-
-  // Reply to story
-  const handleSendReply = async () => {
-    if (!currentSlide || !replyText.trim() || isAuthor) return;
-    setIsSendingReply(true);
-    try {
-      const res = await replyStoryApi(currentSlide._id, replyText.trim());
-      if (res.success) {
-        setReplyText('');
-        setIsReplying(false);
-        resumeTimer();
-        showToast('Reply sent as message!');
-      } else {
-        showToast(res.message || 'Failed to send reply');
-      }
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to send reply');
-    } finally {
-      setIsSendingReply(false);
-    }
-  };
-
-  // Canvas Pointer Events (Touch & Hold to pause, Tap Left / Right to navigate, Swipe down to close)
-  const handleCanvasPointerDown = (e: React.PointerEvent) => {
-    pointerDownTimeRef.current = Date.now();
+  // Canvas Unified Pointer State Machine (Tap vs Hold vs Swipe)
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDownTimeRef.current = performance.now();
     pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
     isHoldingRef.current = false;
 
-    // Start hold pause after 180ms
-    setTimeout(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+    }
+
+    // Set hold timer for 200ms
+    holdTimerRef.current = setTimeout(() => {
       if (pointerDownTimeRef.current > 0) {
         isHoldingRef.current = true;
-        pauseTimer();
+        pausePlayback();
       }
-    }, 180);
+    }, HOLD_THRESHOLD_MS);
   };
 
-  const handleCanvasPointerUp = (e: React.PointerEvent) => {
-    const pressDuration = Date.now() - pointerDownTimeRef.current;
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+
+    const pressDuration = performance.now() - pointerDownTimeRef.current;
     const deltaX = e.clientX - pointerDownPosRef.current.x;
     const deltaY = e.clientY - pointerDownPosRef.current.y;
     pointerDownTimeRef.current = 0;
 
-    // If user was holding, unpause
+    // If user was in HOLD state: simply resume and do NOT navigate!
     if (isHoldingRef.current) {
       isHoldingRef.current = false;
-      resumeTimer();
+      resumePlayback();
       return;
     }
 
-    // Swipe down to close
+    // Swipe down gesture to dismiss (>60px)
     if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
       onClose();
       return;
     }
 
-    // Swipe horizontal to change user
+    // Swipe horizontal to switch users
     if (Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
       if (deltaX < 0) {
         if (feedIndex < feed.length - 1) {
@@ -355,8 +309,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       return;
     }
 
-    // Quick Tap Navigation (<200ms)
-    if (pressDuration < 250 && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) {
+    // Tap Interaction (<200ms with small movement): Navigate Left/Right
+    if (pressDuration < HOLD_THRESHOLD_MS && Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) {
       const rect = e.currentTarget.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const width = rect.width;
@@ -369,11 +323,102 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
-  const handleCanvasPointerCancel = () => {
+  const handlePointerCancel = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
     pointerDownTimeRef.current = 0;
     if (isHoldingRef.current) {
       isHoldingRef.current = false;
-      resumeTimer();
+      resumePlayback();
+    }
+  };
+
+  // Viewers Sheet Fetcher
+  const handleOpenViewers = async () => {
+    if (!currentSlide || !isAuthor) return;
+    pausePlayback();
+    setShowViewersSheet(true);
+    setLoadingViewers(true);
+    try {
+      const res = await fetchStoryViewersApi(currentSlide._id);
+      if (res.success) {
+        setViewers(res.viewers || []);
+      }
+    } catch {
+      showToast('Failed to load viewers');
+    } finally {
+      setLoadingViewers(false);
+    }
+  };
+
+  // Delete Story Slide
+  const handleDeleteSlide = async () => {
+    if (!currentSlide || !isAuthor) return;
+    pausePlayback();
+    if (confirm('Delete this story slide?')) {
+      setIsDeleting(true);
+      try {
+        await deleteStoryApi(currentSlide._id);
+        showToast('Story slide deleted');
+        if (onStoryDeleted) onStoryDeleted(currentSlide._id);
+
+        if (slides.length <= 1) {
+          if (feed.length <= 1) {
+            onClose();
+          } else {
+            advanceToNext();
+          }
+        } else {
+          setSlideIndex((prev) => Math.max(0, prev - 1));
+          setProgress(0);
+          resumePlayback();
+        }
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to delete story');
+        resumePlayback();
+      } finally {
+        setIsDeleting(false);
+      }
+    } else {
+      resumePlayback();
+    }
+  };
+
+  // Quick Reaction
+  const handleQuickReaction = async (emoji: string) => {
+    if (!currentSlide || isAuthor) return;
+    setFloatingReaction(emoji);
+    setTimeout(() => setFloatingReaction(null), 1200);
+
+    try {
+      await reactStoryApi(currentSlide._id, emoji);
+      currentSlide.myReaction = emoji;
+      showToast(`Reacted with ${emoji}`);
+    } catch {
+      showToast('Failed to send reaction');
+    }
+  };
+
+  // Send Reply
+  const handleSendReply = async () => {
+    if (!currentSlide || !replyText.trim() || isAuthor) return;
+    setIsSendingReply(true);
+    try {
+      const res = await replyStoryApi(currentSlide._id, replyText.trim());
+      if (res.success) {
+        setReplyText('');
+        setIsReplying(false);
+        resumePlayback();
+        showToast('Reply sent as message!');
+      } else {
+        showToast(res.message || 'Failed to send reply');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to send reply');
+    } finally {
+      setIsSendingReply(false);
     }
   };
 
@@ -399,7 +444,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         </div>
       )}
 
-      {/* Segmented Progress Bars (Safe status bar margin) */}
+      {/* Segmented Top Progress Bars with Safe Status Bar Margin */}
       <div className="absolute top-0 left-0 right-0 z-40 px-3 pt-10 sm:pt-4 pb-2 flex gap-1.5 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex-shrink-0">
         {slides.map((slide, idx) => {
           let barWidth = '0%';
@@ -455,6 +500,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           {isAuthor && (
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 handleOpenViewers();
@@ -472,6 +518,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             <button
               type="button"
               disabled={isDeleting}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 handleDeleteSlide();
@@ -490,6 +537,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           {/* Close Button */}
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               onClose();
@@ -502,12 +550,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         </div>
       </div>
 
-      {/* Middle Interactive Canvas Area (Handles Left/Right Tap and Touch-Hold to Pause) */}
+      {/* Middle Interactive Canvas Area (Handles Left 35% / Right 65% Tap and Touch-Hold to Pause) */}
       <div
         className="flex-1 w-full h-full relative flex items-center justify-center overflow-hidden cursor-pointer touch-none"
-        onPointerDown={handleCanvasPointerDown}
-        onPointerUp={handleCanvasPointerUp}
-        onPointerCancel={handleCanvasPointerCancel}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={handlePointerCancel}
       >
         {currentSlide.type === 'text' ? (
           /* TEXT STORY SLIDE */
@@ -556,6 +605,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         {/* Desktop Navigation Chevrons */}
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             goToPrevious();
@@ -567,6 +617,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             advanceToNext();
@@ -611,12 +662,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               value={replyText}
               onFocus={() => {
                 setIsReplying(true);
-                pauseTimer();
+                pausePlayback();
               }}
               onBlur={() => {
                 if (!replyText.trim()) {
                   setIsReplying(false);
-                  resumeTimer();
+                  resumePlayback();
                 }
               }}
               onChange={(e) => setReplyText(e.target.value)}
@@ -650,7 +701,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         <div
           onClick={() => {
             setShowViewersSheet(false);
-            resumeTimer();
+            resumePlayback();
           }}
           className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-end justify-center animate-fadeIn"
         >
@@ -672,7 +723,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   type="button"
                   onClick={() => {
                     setShowViewersSheet(false);
-                    resumeTimer();
+                    resumePlayback();
                   }}
                   className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white"
                 >

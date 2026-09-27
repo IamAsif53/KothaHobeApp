@@ -1,10 +1,10 @@
 {
-  "versionCode": 75,
-  "versionName": "1.1.30",
+  "versionCode": 76,
+  "versionName": "1.1.31",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "381047946d493a0aa8fb813131d5bf5348f155639cd7f5949f57a66ed7832fe9",
+  "sha256": "54646a36227995b72b14a76a0c638575a7a45367c3ead332d60b0860b1b557c3",
   "releaseNotes": [
-    "Release v1.1.30 (Build 75)",
+    "Release v1.1.31 (Build 76)",
     "✨ 24h Ephemeral Stories: Share text thoughts with beautiful gradient presets or photos with captions that vanish after 24 hours",
     "🎨 Immersive Story Composer: Create text stories with custom fonts, colors, and alignments, or pick photos from gallery with smart compression",
     "👁️ Multi-Segment Story Viewer: Smooth segmented progress bars, touch-and-hold pause, swipe down to dismiss, and instant tap navigation",

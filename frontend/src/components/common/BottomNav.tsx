@@ -1,18 +1,19 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { MessageSquare, UserPlus, Settings } from 'lucide-react';
+import { MessageSquare, CircleDot, UserPlus, Settings } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
 
   // Only show bottom navigation on primary root tabs
-  const isMainTab = ['/chats', '/search', '/settings'].includes(location.pathname);
+  const isMainTab = ['/chats', '/stories', '/search', '/settings'].includes(location.pathname);
   if (!isMainTab) {
     return null;
   }
 
   const items = [
     { path: '/chats', label: 'Chats', icon: MessageSquare },
+    { path: '/stories', label: 'Stories', icon: CircleDot },
     { path: '/search', label: 'Find User', icon: UserPlus },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];

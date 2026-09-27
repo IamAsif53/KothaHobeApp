@@ -29,6 +29,7 @@ import { LoginPage } from './pages/LoginPage';
 import { OtpPage } from './pages/OtpPage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
 import { ChatListPage } from './pages/ChatListPage';
+import { StoriesPage } from './pages/StoriesPage';
 import { SearchUserPage } from './pages/SearchUserPage';
 import { ChatRoomPage } from './pages/ChatRoomPage';
 import { ChatInfoPage } from './pages/ChatInfoPage';
@@ -183,6 +184,8 @@ export const AppContent: React.FC = () => {
           navigate('/chats', { replace: true });
         } else if (path === '/search') {
           navigate('/chats', { replace: true });
+        } else if (path === '/stories') {
+          navigate('/chats', { replace: true });
         } else if (path === '/settings') {
           navigate('/chats', { replace: true });
         } else if (path === '/blocked') {
@@ -271,6 +274,14 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ChatListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stories"
+            element={
+              <ProtectedRoute>
+                <StoriesPage />
               </ProtectedRoute>
             }
           />

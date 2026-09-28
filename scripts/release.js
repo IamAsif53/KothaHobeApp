@@ -77,9 +77,9 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🎉 Multiple Message Reactions: Full support for both Unicode and Animated Custom Emoji reactions on messages with real-time sync, subtle personal reaction highlights, top-5 badges + overflow counter, and detailed Reaction User List modal",
-      "💥 Emoji Burst Effect: Lightweight Framer Motion SVG particle bursts (heart, laugh, party, fire, surprise, cry) on emoji-only messages that play on arrival and settle gracefully",
-      "✨ Contextual Animated Emoji Suggestions: 100% client-side, instant debounced keyword matching above the message composer with personalization ranking based on your favorites and recents"
+      "✨ Redesigned Chat Message Experience: Soft semantic bubble surfaces, organic message grouping with adaptive corner radii, upgraded typography, and inline tucked timestamps",
+      "🎙️ Reimagined Floating Message Composer: Modern elevated composer with backdrop blur, smooth animated Send ↔ Microphone transitions, compact circular attachment tray, and polished dismissible reply previews",
+      "💬 Dynamic Typing Bubble & Micro-interactions: Subtle animated in-chat 3-dot typing indicator and responsive touch interactions"
     ],
     mandatory: false
   };

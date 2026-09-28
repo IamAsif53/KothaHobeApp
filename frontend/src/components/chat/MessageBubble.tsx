@@ -11,9 +11,6 @@ import {
   FileText,
   Download,
   CornerUpLeft,
-  Trash2,
-  Copy,
-  ExternalLink,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
@@ -25,12 +22,16 @@ import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
 import { EmojiBurstEffect } from '../emoji/EmojiBurstEffect';
 import { getCustomEmojiById, isCustomEmojiId } from '../../data/customEmojiCatalog';
 
+export type MessagePositionInGroup = 'single' | 'first' | 'middle' | 'last';
+
 interface MessageBubbleProps {
   message: IMessage;
   isMe: boolean;
   isGroup?: boolean;
   senderDisplayName?: string;
   currentUserId?: string;
+  positionInGroup?: MessagePositionInGroup;
+  isSelected?: boolean;
   onRetry?: (message: IMessage) => void;
   onOpenMedia?: (message: IMessage) => void;
   onOpenDocument?: (message: IMessage) => void;
@@ -44,20 +45,20 @@ interface MessageBubbleProps {
 }
 
 const SENDER_COLORS = [
-  'text-emerald-400',
-  'text-sky-400',
-  'text-amber-400',
-  'text-purple-400',
-  'text-rose-400',
-  'text-indigo-400',
-  'text-teal-400',
-  'text-pink-400',
-  'text-cyan-400',
-  'text-orange-400',
+  'text-emerald-500 dark:text-emerald-400',
+  'text-sky-500 dark:text-sky-400',
+  'text-amber-500 dark:text-amber-400',
+  'text-purple-500 dark:text-purple-400',
+  'text-rose-500 dark:text-rose-400',
+  'text-indigo-500 dark:text-indigo-400',
+  'text-teal-500 dark:text-teal-400',
+  'text-pink-500 dark:text-pink-400',
+  'text-cyan-500 dark:text-cyan-400',
+  'text-orange-500 dark:text-orange-400',
 ];
 
 export const getSenderColor = (senderId?: string): string => {
-  if (!senderId) return 'text-emerald-400';
+  if (!senderId) return 'text-emerald-500 dark:text-emerald-400';
   let hash = 0;
   for (let i = 0; i < senderId.length; i++) {
     hash = senderId.charCodeAt(i) + ((hash << 5) - hash);
@@ -72,6 +73,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   isGroup = false,
   senderDisplayName,
   currentUserId,
+  positionInGroup = 'single',
+  isSelected = false,
   onRetry,
   onOpenMedia,
   onOpenDocument,
@@ -88,8 +91,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
   if (message.type === 'system') {
     return (
-      <div className="flex justify-center my-2 px-4 animate-fade-in select-none">
-        <div className="bg-chat-surfaceSecondary/90 border border-chat-border text-brand-600 dark:text-emerald-300 text-xs px-3.5 py-1.5 rounded-full text-center max-w-[90%] shadow-xs font-medium">
+      <div className="flex justify-center my-2.5 px-4 animate-fade-in select-none">
+        <div className="bg-chat-surfaceSecondary/80 border border-chat-border/50 text-chat-textSecondary text-xs px-3.5 py-1.5 rounded-full text-center max-w-[85%] shadow-2xs font-medium">
           {message.text}
         </div>
       </div>
@@ -101,13 +104,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
     switch (message.status) {
       case 'sending':
-        return <Clock className="w-3.5 h-3.5 text-chat-bubbleOutText/50 animate-spin" />;
+        return <Clock className="w-3 h-3 text-chat-bubbleOutText/50 animate-spin" />;
       case 'sent':
         return <Check className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
       case 'delivered':
         return <CheckCheck className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5 text-sky-500 stroke-[2.5]" />;
+        return <CheckCheck className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />;
       case 'failed':
         return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
       default:
@@ -127,7 +130,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     }
     touchTimerRef.current = setTimeout(() => {
       onActionMenu && onActionMenu(message);
-    }, 450);
+    }, 400);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -203,6 +206,49 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   const customEmojiData = customEmojiId ? getCustomEmojiById(customEmojiId) : null;
   const burstConfig = customEmojiData?.burst;
 
+  // Compute refined corner radius based on consecutive position and sender side
+  const getCornerRadiusClass = () => {
+    if (isMe) {
+      switch (positionInGroup) {
+        case 'first':
+          return 'rounded-[20px] rounded-tr-[5px] rounded-br-[6px]';
+        case 'middle':
+          return 'rounded-[20px] rounded-tr-[6px] rounded-br-[6px]';
+        case 'last':
+          return 'rounded-[20px] rounded-tr-[6px] rounded-br-[5px]';
+        case 'single':
+        default:
+          return 'rounded-[20px] rounded-tr-[5px]';
+      }
+    } else {
+      switch (positionInGroup) {
+        case 'first':
+          return 'rounded-[20px] rounded-tl-[5px] rounded-bl-[6px]';
+        case 'middle':
+          return 'rounded-[20px] rounded-tl-[6px] rounded-bl-[6px]';
+        case 'last':
+          return 'rounded-[20px] rounded-tl-[6px] rounded-bl-[5px]';
+        case 'single':
+        default:
+          return 'rounded-[20px] rounded-tl-[5px]';
+      }
+    }
+  };
+
+  // Compute rhythm vertical spacing
+  const getVerticalSpacingClass = () => {
+    if (positionInGroup === 'first' || positionInGroup === 'single') {
+      return 'mt-2 mb-0.5';
+    }
+    if (positionInGroup === 'middle') {
+      return 'my-0.5';
+    }
+    if (positionInGroup === 'last') {
+      return 'mt-0.5 mb-2';
+    }
+    return 'my-0.5';
+  };
+
   // Render Reaction Badges Row
   const renderReactionBadges = () => {
     if (reactionsList.length === 0) return null;
@@ -210,7 +256,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     return (
       <div
         className={`flex items-center flex-wrap gap-1 mt-1 z-10 select-none ${
-          isMe ? 'self-end mr-1' : 'self-start ml-1'
+          isMe ? 'self-end mr-1.5' : 'self-start ml-1.5'
         }`}
       >
         {visibleReactions.map(({ emoji, count, isMine }) => {
@@ -226,10 +272,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                 e.stopPropagation();
                 onOpenReactions && onOpenReactions(message, emoji);
               }}
-              className={`px-2 py-0.5 rounded-full border text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer select-none active:scale-95 ${
+              className={`px-2 py-0.5 rounded-full border text-xs shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer select-none active:scale-95 ${
                 isMine
-                  ? 'bg-brand-500/15 border-brand-500/50 text-brand-600 dark:text-brand-400 font-bold'
-                  : 'bg-chat-card/95 border-chat-border text-chat-textPrimary hover:bg-chat-surfaceSecondary'
+                  ? 'bg-brand-500/15 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold'
+                  : 'bg-chat-card/95 border-chat-border/60 text-chat-textPrimary hover:bg-chat-surfaceSecondary'
               }`}
               title={isMine ? 'You reacted. Tap to remove' : 'Tap to react or hold for details'}
             >
@@ -237,7 +283,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                 <div className="pointer-events-none">
                   <AnimatedCustomEmoji
                     emojiId={emoji}
-                    size={18}
+                    size={17}
                     autoPlay={false}
                     loop={false}
                     interactive={false}
@@ -246,7 +292,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
               ) : (
                 <span className="text-xs leading-none">{emoji}</span>
               )}
-              <span className="text-[10px] font-mono font-bold leading-none">{count}</span>
+              <span className="text-[10.5px] font-mono font-bold leading-none">{count}</span>
             </button>
           );
         })}
@@ -255,7 +301,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           <button
             type="button"
             onClick={() => onOpenReactions && onOpenReactions(message, 'all')}
-            className="px-2 py-0.5 rounded-full bg-chat-card/95 border border-chat-border text-chat-textMuted hover:text-chat-textPrimary text-[11px] font-bold shadow-xs flex items-center transition-all active:scale-95 cursor-pointer"
+            className="px-2 py-0.5 rounded-full bg-chat-card/95 border border-chat-border/60 text-chat-textMuted hover:text-chat-textPrimary text-[11px] font-bold shadow-2xs flex items-center transition-all active:scale-95 cursor-pointer"
             title="View all reactions"
           >
             +{hiddenReactionsCount}
@@ -265,11 +311,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     );
   };
 
-  // Standalone Custom Emoji Message (Large, transparent background, no bulky bubble + Emoji Burst)
+  // Standalone Custom Emoji Message (Large, transparent background, no bulky bubble + Burst)
   if (isCustomEmojiMessage && customEmojiId) {
     return (
       <div
-        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-2 px-3 group select-none animate-message-enter`}
+        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none animate-message-enter transition-all ${
+          isSelected ? 'scale-[1.02]' : ''
+        }`}
         onContextMenu={(e) => {
           e.preventDefault();
           onActionMenu && onActionMenu(message);
@@ -279,8 +327,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        {/* Sender Name / Nickname in Group Chat */}
-        {isGroup && !isMe && (
+        {/* Sender Name / Nickname in Group Chat (only on first or single message) */}
+        {isGroup && !isMe && (positionInGroup === 'first' || positionInGroup === 'single') && (
           <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 ml-1 leading-none select-none tracking-wide`}>
             {senderDisplayName || message.senderNickname || 'Member'}
           </p>
@@ -318,13 +366,13 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
           <AnimatedCustomEmoji
             emojiId={customEmojiId}
-            size={136}
+            size={132}
             autoPlay={true}
             interactive={true}
           />
 
           {/* Time and Status Badge */}
-          <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 backdrop-blur-xs text-white text-[10px] font-medium tracking-tight shadow-xs ${isMe ? 'self-end' : 'self-start'}`}>
+          <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/35 backdrop-blur-xs text-white text-[10px] font-medium tracking-tight shadow-xs ${isMe ? 'self-end' : 'self-start'}`}>
             <span>{formatMessageTime(message.createdAt)}</span>
             {renderStatusIcon()}
           </div>
@@ -356,7 +404,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         if (getCustomEmojiById(emojiId)) {
           return (
             <span key={index} className="inline-flex items-center align-middle mx-0.5">
-              <AnimatedCustomEmoji emojiId={emojiId} size={28} autoPlay={false} interactive={true} />
+              <AnimatedCustomEmoji emojiId={emojiId} size={26} autoPlay={false} interactive={true} />
             </span>
           );
         }
@@ -367,7 +415,9 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1 px-3 group select-none animate-message-enter`}
+      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none animate-message-enter transition-all ${
+        isSelected ? 'scale-[1.01]' : ''
+      }`}
       onContextMenu={(e) => {
         e.preventDefault();
         onActionMenu && onActionMenu(message);
@@ -377,31 +427,33 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchCancel}
     >
-      {/* Sender Name / Nickname in Group Chat */}
-      {isGroup && !isMe && (
-        <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 ml-2 leading-none select-none tracking-wide`}>
+      {/* Sender Name in Group Chat (only on first or single message in group) */}
+      {isGroup && !isMe && (positionInGroup === 'first' || positionInGroup === 'single') && (
+        <p className={`text-[11.5px] font-bold ${getSenderColor(message.senderId)} mb-1 ml-2 leading-none select-none tracking-wide`}>
           {senderDisplayName || message.senderNickname || 'Member'}
         </p>
       )}
 
-      {/* Main Bubble Container */}
+      {/* Main Bubble Container (Soft Surfaces & Adaptive Corners) */}
       <div
-        className={`relative max-w-[82%] sm:max-w-[70%] rounded-2xl p-2.5 pb-5 transition-all shadow-xs select-none ${
+        className={`relative max-w-[80%] sm:max-w-[70%] px-3.5 pt-2.5 pb-2 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.06)] select-none ${getCornerRadiusClass()} ${
           isMe
-            ? 'bg-chat-bubbleOutBg text-chat-bubbleOutText rounded-tr-xs ml-auto border border-brand-500/10'
-            : 'bg-chat-bubbleInBg text-chat-bubbleInText rounded-tl-xs mr-auto border border-chat-border'
+            ? 'bg-chat-bubbleOut text-chat-bubbleOutText ml-auto'
+            : 'bg-chat-bubbleIn text-chat-bubbleInText mr-auto border border-chat-bubbleInBorder'
         }`}
       >
         {/* Reply Quote Banner */}
         {message.replyTo && (
           <div
             onClick={() => onJumpToMessage && onJumpToMessage(String(message.replyTo?.messageId))}
-            className="mb-1.5 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-brand-500 text-xs cursor-pointer select-none hover:bg-black/10 transition-colors"
+            className={`mb-2 p-2 rounded-xl text-xs cursor-pointer select-none transition-colors border-l-3 border-brand-500 ${
+              isMe ? 'bg-black/10 dark:bg-black/20' : 'bg-black/5 dark:bg-white/5'
+            }`}
           >
-            <div className="font-semibold text-brand-600 dark:text-brand-400 truncate">
+            <div className="font-semibold text-brand-500 dark:text-brand-400 truncate">
               {message.replyTo.senderName || 'Replied Message'}
             </div>
-            <div className="text-chat-textSecondary truncate text-[11px]">
+            <div className={`truncate text-[11px] opacity-80`}>
               {message.replyTo.type === 'image'
                 ? '📷 Photo'
                 : message.replyTo.type === 'audio'
@@ -415,7 +467,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
         {/* Story Context Quote Banner */}
         {message.storyContext && (
-          <div className="mb-2 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-purple-500 text-xs">
+          <div className="mb-2 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-3 border-purple-500 text-xs">
             <div className="flex items-center justify-between gap-2 mb-1">
               <span className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
@@ -456,7 +508,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Image / Video Attachment */}
+        {/* Image Attachment */}
         {message.type === 'image' && message.attachment && (
           <div className="mb-1 rounded-xl overflow-hidden cursor-pointer" onClick={() => onOpenMedia && onOpenMedia(message)}>
             <img
@@ -470,7 +522,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
         {/* Audio / Voice Message */}
         {message.type === 'audio' && message.attachment && (
-          <div className="py-1">
+          <div className="py-1 min-w-[200px]">
             <VoiceMessagePlayer
               audioUrl={getMediaUrl(message.attachment.url)}
               duration={message.attachment.duration || 0}
@@ -483,7 +535,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {message.type === 'document' && message.attachment && (
           <div
             onClick={() => onOpenDocument ? onOpenDocument(message) : onDownloadDocument && onDownloadDocument(message)}
-            className="flex items-center gap-3 p-2.5 rounded-xl bg-black/5 dark:bg-black/20 hover:bg-black/10 dark:hover:bg-black/30 transition-colors cursor-pointer mb-1 border border-chat-border/50"
+            className="flex items-center gap-3 p-2.5 rounded-xl bg-black/5 dark:bg-black/20 hover:bg-black/10 dark:hover:bg-black/30 transition-colors cursor-pointer mb-1 border border-chat-border/40"
           >
             <div className="p-2 rounded-lg bg-brand-500/20 text-brand-500 flex-shrink-0">
               <FileText className="w-5 h-5" />
@@ -509,16 +561,24 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Text Message with Inline Custom Emoji support */}
+        {/* Text Message Content + Inline/Tucked Timestamp */}
         {message.text && message.type !== 'custom_emoji' && (
-          <div className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap select-text pr-10">
+          <div className="text-[15.5px] leading-[1.45] tracking-[-0.01em] break-words whitespace-pre-wrap select-text">
             {renderTextWithInlineEmojis(message.text)}
+            
+            {/* Inline Timestamp & Status Flow */}
+            <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 select-none align-baseline">
+              <span className={`text-[11px] font-normal tracking-tight ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
+                {formatMessageTime(message.createdAt)}
+              </span>
+              {renderStatusIcon()}
+            </span>
           </div>
         )}
 
         {/* Voice/Video Call Event Card */}
         {message.type === 'call' && (
-          <div className="flex items-center gap-2.5 py-1 pr-10">
+          <div className="flex items-center gap-2.5 py-1">
             <div className={`p-2 rounded-full ${
               message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
                 ? 'bg-red-500/15 text-red-500'
@@ -534,7 +594,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                 <PhoneIncoming className="w-4 h-4" />
               )}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold">
                 {message.text || 'Voice Call'}
               </div>
@@ -548,16 +608,24 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                   : 'Voice call'}
               </div>
             </div>
+            <div className="flex items-center gap-1 ml-2 select-none self-end">
+              <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
+                {formatMessageTime(message.createdAt)}
+              </span>
+              {renderStatusIcon()}
+            </div>
           </div>
         )}
 
-        {/* Bottom Time & Status Checkmarks */}
-        <div className="absolute right-2.5 bottom-1 flex items-center gap-1 select-none">
-          <span className={`text-[10px] font-medium tracking-tight ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/70'}`}>
-            {formatMessageTime(message.createdAt)}
-          </span>
-          {renderStatusIcon()}
-        </div>
+        {/* Media/Doc Bottom Timestamp fallback if no text */}
+        {!message.text && message.type !== 'call' && message.type !== 'custom_emoji' && (
+          <div className="mt-1 flex items-center justify-end gap-1 select-none">
+            <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
+              {formatMessageTime(message.createdAt)}
+            </span>
+            {renderStatusIcon()}
+          </div>
+        )}
       </div>
 
       {/* Multiple Reaction Badges */}
@@ -581,6 +649,8 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
   return (
     prev.isMe === next.isMe &&
     prev.isGroup === next.isGroup &&
+    prev.positionInGroup === next.positionInGroup &&
+    prev.isSelected === next.isSelected &&
     prev.senderDisplayName === next.senderDisplayName &&
     prev.currentUserId === next.currentUserId &&
     prev.message._id === next.message._id &&

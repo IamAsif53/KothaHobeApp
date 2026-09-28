@@ -1248,10 +1248,40 @@ export const ChatRoomPage: React.FC = () => {
           filteredMessages.map((msg, index) => {
             const isMine = msg.senderId === user?._id;
             const prevMsg = filteredMessages[index - 1];
+            const nextMsg = filteredMessages[index + 1];
 
             const showDateHeader =
               !prevMsg ||
               new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+
+            const nextDateHeader =
+              nextMsg &&
+              new Date(nextMsg.createdAt).toDateString() !== new Date(msg.createdAt).toDateString();
+
+            const isSameSenderAsPrev =
+              prevMsg &&
+              prevMsg.senderId === msg.senderId &&
+              prevMsg.type !== 'system' &&
+              msg.type !== 'system' &&
+              Math.abs(new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 60000 &&
+              !showDateHeader;
+
+            const isSameSenderAsNext =
+              nextMsg &&
+              nextMsg.senderId === msg.senderId &&
+              nextMsg.type !== 'system' &&
+              msg.type !== 'system' &&
+              Math.abs(new Date(nextMsg.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 60000 &&
+              !nextDateHeader;
+
+            let positionInGroup: 'single' | 'first' | 'middle' | 'last' = 'single';
+            if (isSameSenderAsPrev && isSameSenderAsNext) {
+              positionInGroup = 'middle';
+            } else if (!isSameSenderAsPrev && isSameSenderAsNext) {
+              positionInGroup = 'first';
+            } else if (isSameSenderAsPrev && !isSameSenderAsNext) {
+              positionInGroup = 'last';
+            }
 
             return (
               <React.Fragment key={msg.clientMessageId || msg._id}>
@@ -1267,6 +1297,7 @@ export const ChatRoomPage: React.FC = () => {
                   message={msg}
                   isMe={isMine}
                   isGroup={isGroup}
+                  positionInGroup={positionInGroup}
                   senderDisplayName={getSenderName(msg)}
                   currentUserId={user?._id}
                   onOpenMedia={handleOpenMedia}
@@ -1285,6 +1316,15 @@ export const ChatRoomPage: React.FC = () => {
               </React.Fragment>
             );
           })
+        )}
+
+        {/* Dynamic In-Chat Typing Bubble */}
+        {isTyping && (
+          <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-chat-bubbleIn border border-chat-bubbleInBorder w-fit mb-1 animate-fade-in shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
         )}
 
         <div ref={bottomAnchorRef} className="h-0 w-0" />

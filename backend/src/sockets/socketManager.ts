@@ -199,6 +199,27 @@ export function setupSocketIO(io: SocketIOServer): void {
             }
 
             if (conversation.isGroup) {
+              // Check sendMessages permission
+              if (conversation.groupMeta?.permissions?.sendMessages === 'admins') {
+                const uIdStr = userId.toString();
+                const isCreator = conversation.groupMeta.creator?.toString() === uIdStr;
+                const isAdmin = conversation.groupMeta.admins?.some((a: any) => a?.toString() === uIdStr);
+                const isMod = conversation.groupMeta.moderators?.some((m: any) => m?.toString() === uIdStr);
+                if (!isCreator && !isAdmin && !isMod) {
+                  socket.emit('message:error', {
+                    clientMessageId,
+                    message: 'Only admins and moderators can send messages in this group.',
+                  });
+                  return;
+                }
+              }
+
+              // Disappearing message expiration
+              let expiresAt: Date | undefined = undefined;
+              if (conversation.groupMeta?.disappearingMode && conversation.groupMeta.disappearingMode > 0) {
+                expiresAt = new Date(Date.now() + conversation.groupMeta.disappearingMode * 1000);
+              }
+
               // --- GROUP CHAT MESSAGE ---
               message = await Message.create({
                 conversationId,
@@ -212,6 +233,7 @@ export function setupSocketIO(io: SocketIOServer): void {
                 attachment: attachment || undefined,
                 replyTo: replyTo || undefined,
                 serverSequence,
+                expiresAt,
                 deliveredAt: new Date(),
               });
 

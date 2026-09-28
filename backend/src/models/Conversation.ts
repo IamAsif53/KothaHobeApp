@@ -9,19 +9,91 @@ export interface ILastMessage {
 
 export interface IGroupMember {
   user: Types.ObjectId;
-  role: 'admin' | 'member';
+  role: 'admin' | 'moderator' | 'member';
   status: 'pending' | 'accepted' | 'declined';
   joinedAt?: Date;
   invitedBy?: Types.ObjectId;
 }
 
+export interface IGroupDescription {
+  text: string;
+  updatedAt: Date;
+  updatedBy?: Types.ObjectId;
+}
+
+export interface IGroupJoinRequest {
+  user: Types.ObjectId;
+  requestedAt: Date;
+}
+
+export interface IGroupActivityLog {
+  action: string;
+  actor: Types.ObjectId;
+  details?: string;
+  createdAt: Date;
+}
+
+export interface IGroupEventAttendee {
+  user: Types.ObjectId;
+  status: 'going' | 'maybe' | 'not_going';
+}
+
+export interface IGroupEvent {
+  _id: Types.ObjectId;
+  title: string;
+  description?: string;
+  date: string;
+  time: string;
+  location?: string;
+  creator: Types.ObjectId;
+  attendees: IGroupEventAttendee[];
+  createdAt: Date;
+}
+
+export interface IGroupPollOption {
+  _id?: Types.ObjectId;
+  text: string;
+  voters: Types.ObjectId[];
+}
+
+export interface IGroupPoll {
+  _id: Types.ObjectId;
+  question: string;
+  options: IGroupPollOption[];
+  creator: Types.ObjectId;
+  isClosed: boolean;
+  createdAt: Date;
+}
+
+export interface IGroupPermissions {
+  sendMessages: 'all' | 'admins';
+  addMembers: 'all' | 'admins';
+  editGroupInfo: 'all' | 'admins';
+  pinMessages: 'all' | 'admins';
+  createPolls: 'all' | 'admins';
+  createEvents: 'all' | 'admins';
+}
+
 export interface IGroupMeta {
   name: string;
   avatarUrl?: string;
+  description?: IGroupDescription;
+  rules?: string[];
   creator: Types.ObjectId;
   admins: Types.ObjectId[];
+  moderators?: Types.ObjectId[];
   members: IGroupMember[];
   nicknames?: Record<string, string>;
+  inviteCode?: string;
+  requiresApproval?: boolean;
+  joinRequests?: IGroupJoinRequest[];
+  pinnedMessages?: Types.ObjectId[];
+  disappearingMode?: number; // 0 (off), 86400 (24h), 604800 (7d), 2592000 (30d)
+  notificationSettings?: Record<string, 'all' | 'mentions' | 'muted'>;
+  permissions?: IGroupPermissions;
+  events?: IGroupEvent[];
+  polls?: IGroupPoll[];
+  activityLogs?: IGroupActivityLog[];
 }
 
 export interface IConversation extends Document {
@@ -39,10 +111,82 @@ export interface IConversation extends Document {
 const GroupMemberSchema = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    role: { type: String, enum: ['admin', 'moderator', 'member'], default: 'member' },
     status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending' },
     joinedAt: { type: Date },
     invitedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { _id: false }
+);
+
+const GroupDescriptionSchema = new Schema(
+  {
+    text: { type: String, default: '', maxlength: 1000 },
+    updatedAt: { type: Date, default: Date.now },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { _id: false }
+);
+
+const GroupJoinRequestSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    requestedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const GroupActivityLogSchema = new Schema(
+  {
+    action: { type: String, required: true },
+    actor: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    details: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const GroupEventSchema = new Schema(
+  {
+    title: { type: String, required: true, maxlength: 100 },
+    description: { type: String, default: '', maxlength: 500 },
+    date: { type: String, required: true },
+    time: { type: String, required: true },
+    location: { type: String, default: '', maxlength: 150 },
+    creator: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    attendees: [
+      {
+        user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        status: { type: String, enum: ['going', 'maybe', 'not_going'], default: 'going' },
+      },
+    ],
+    createdAt: { type: Date, default: Date.now },
+  }
+);
+
+const GroupPollSchema = new Schema(
+  {
+    question: { type: String, required: true, maxlength: 300 },
+    options: [
+      {
+        text: { type: String, required: true, maxlength: 100 },
+        voters: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      },
+    ],
+    creator: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    isClosed: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now },
+  }
+);
+
+const GroupPermissionsSchema = new Schema(
+  {
+    sendMessages: { type: String, enum: ['all', 'admins'], default: 'all' },
+    addMembers: { type: String, enum: ['all', 'admins'], default: 'all' },
+    editGroupInfo: { type: String, enum: ['all', 'admins'], default: 'all' },
+    pinMessages: { type: String, enum: ['all', 'admins'], default: 'all' },
+    createPolls: { type: String, enum: ['all', 'admins'], default: 'all' },
+    createEvents: { type: String, enum: ['all', 'admins'], default: 'all' },
   },
   { _id: false }
 );
@@ -51,10 +195,33 @@ const GroupMetaSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 60 },
     avatarUrl: { type: String, default: '' },
+    description: { type: GroupDescriptionSchema, default: null },
+    rules: { type: [String], default: [] },
     creator: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     admins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    moderators: [{ type: Schema.Types.ObjectId, ref: 'User', default: [] }],
     members: [GroupMemberSchema],
     nicknames: { type: Map, of: String, default: {} },
+    inviteCode: { type: String, sparse: true, index: true },
+    requiresApproval: { type: Boolean, default: false },
+    joinRequests: [GroupJoinRequestSchema],
+    pinnedMessages: [{ type: Schema.Types.ObjectId, ref: 'Message', default: [] }],
+    disappearingMode: { type: Number, default: 0 },
+    notificationSettings: { type: Map, of: String, default: {} },
+    permissions: {
+      type: GroupPermissionsSchema,
+      default: () => ({
+        sendMessages: 'all',
+        addMembers: 'all',
+        editGroupInfo: 'all',
+        pinMessages: 'all',
+        createPolls: 'all',
+        createEvents: 'all',
+      }),
+    },
+    events: [GroupEventSchema],
+    polls: [GroupPollSchema],
+    activityLogs: [GroupActivityLogSchema],
   },
   { _id: false }
 );

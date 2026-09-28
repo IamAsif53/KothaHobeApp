@@ -75,6 +75,10 @@ export interface IMessage extends Document {
   deletedFor: Types.ObjectId[];
   isDeletedForEveryone: boolean;
   serverSequence: number;
+  isPinned?: boolean;
+  pinnedBy?: Types.ObjectId;
+  pinnedAt?: Date;
+  expiresAt?: Date;
   createdAt: Date;
   deliveredAt?: Date;
   readAt?: Date;
@@ -248,6 +252,25 @@ const MessageSchema: Schema = new Schema(
       default: 0,
       index: true,
     },
+    isPinned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    pinnedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+      index: { expireAfterSeconds: 0 },
+    },
     deliveredAt: {
       type: Date,
     },
@@ -263,6 +286,7 @@ const MessageSchema: Schema = new Schema(
 // High performance compound indexes
 MessageSchema.index({ conversationId: 1, createdAt: -1 });
 MessageSchema.index({ conversationId: 1, type: 1, createdAt: -1 });
+MessageSchema.index({ conversationId: 1, isPinned: 1 });
 MessageSchema.index({ conversationId: 1, serverSequence: 1 });
 
 export const Message = mongoose.model<IMessage>('Message', MessageSchema);

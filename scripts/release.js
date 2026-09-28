@@ -77,12 +77,16 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "☀️ Complete Light Theme Redesign: A high-contrast, premium, cohesive light aesthetic with warm crisp surfaces, sharp typography, and zero washed-out elements",
-      "🎨 Semantic Theme Token System: Dynamically adapt backgrounds, cards, inputs, bubbles, borders, and modals across Light and Dark themes",
-      "👤 Redesigned Contact Info & Group Info: Social-first profile view with media previews, quick action pills, mutual groups, and sleek action drawers",
-      "💬 High-Contrast Chat Bubbles: Crisp outgoing mint emerald bubbles and clean incoming cards with readable timestamps and delivery checkmarks",
-      "🧭 Dynamic Bottom Navigation: Translucent glass bar adapting seamlessly to light and dark themes with active glow indicators",
-      "✨ Stories & Statuses: 24h ephemeral stories, segmented progress bars, touch-to-pause, and direct chat replies"
+      "👥 Complete Social Group Management Experience: Enterprise-grade group architecture with rich social features",
+      "👑 3-Tier Role Hierarchy & Member Action Sheet: Creator, Admin, and Member roles with creator protection and ownership transfer",
+      "🔗 Shareable Invite Links & Dynamic QR Codes: Instant join codes, revocation, reset, and direct clipboard sharing",
+      "🛡️ Private Group Join Requests Queue: Require admin approval to join, manage pending approvals with one-tap batch acceptance",
+      "📊 Interactive Group Polls: Real-time voting, single/multi-choice polls, live vote percentage breakdown",
+      "📅 Group Events & RSVP: Schedule meetups and group events with Going / Maybe / Can't Go status tracking",
+      "⚙️ Granular Group Permissions: Admin-controlled toggles for messaging, adding members, editing info, pinning, and polls",
+      "⏳ Disappearing Messages: Ephemeral mode with configurable timer options (24h, 7d, 90d, off) and TTL auto-cleanup",
+      "📌 Pinned Messages Manager: View all pinned items in one place with quick unpinning and message jump",
+      "📜 Admin Activity Audit Logs: Real-time event log recording admin actions, role changes, and setting updates"
     ],
     mandatory: false
   };

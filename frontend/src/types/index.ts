@@ -129,26 +129,104 @@ export interface IMessage {
   isDeletedForEveryone?: boolean;
   deletedFor?: string[];
   serverSequence?: number;
+  isPinned?: boolean;
+  pinnedBy?: IUser | string;
+  pinnedAt?: string;
+  expiresAt?: string;
   createdAt: string;
   deliveredAt?: string;
   readAt?: string;
 }
 
+export type GroupRole = 'creator' | 'admin' | 'moderator' | 'member';
+
 export interface IGroupMember {
   user: IUser;
-  role: 'admin' | 'member';
+  role: 'admin' | 'moderator' | 'member';
   status: 'pending' | 'accepted' | 'declined';
   joinedAt?: string;
   invitedBy?: IUser | string;
 }
 
+export interface IGroupDescription {
+  text: string;
+  updatedAt: string;
+  updatedBy?: IUser | string;
+}
+
+export interface IGroupJoinRequest {
+  user: IUser;
+  requestedAt: string;
+}
+
+export interface IGroupActivityLog {
+  action: string;
+  actor: IUser;
+  details?: string;
+  createdAt: string;
+}
+
+export interface IGroupEventAttendee {
+  user: IUser;
+  status: 'going' | 'maybe' | 'not_going';
+}
+
+export interface IGroupEvent {
+  _id: string;
+  title: string;
+  description?: string;
+  date: string;
+  time: string;
+  location?: string;
+  creator: IUser;
+  attendees: IGroupEventAttendee[];
+  createdAt: string;
+}
+
+export interface IGroupPollOption {
+  _id?: string;
+  text: string;
+  voters: (IUser | string)[];
+}
+
+export interface IGroupPoll {
+  _id: string;
+  question: string;
+  options: IGroupPollOption[];
+  creator: IUser;
+  isClosed: boolean;
+  createdAt: string;
+}
+
+export interface IGroupPermissions {
+  sendMessages: 'all' | 'admins';
+  addMembers: 'all' | 'admins';
+  editGroupInfo: 'all' | 'admins';
+  pinMessages: 'all' | 'admins';
+  createPolls: 'all' | 'admins';
+  createEvents: 'all' | 'admins';
+}
+
 export interface IGroupMeta {
   name: string;
   avatarUrl?: string;
+  description?: IGroupDescription | null;
+  rules?: string[];
   creator: IUser | string;
   admins: (IUser | string)[];
+  moderators?: (IUser | string)[];
   members: IGroupMember[];
   nicknames?: Record<string, string>;
+  inviteCode?: string;
+  requiresApproval?: boolean;
+  joinRequests?: IGroupJoinRequest[];
+  pinnedMessages?: (IMessage | string)[];
+  disappearingMode?: number;
+  notificationSettings?: Record<string, 'all' | 'mentions' | 'muted'>;
+  permissions?: IGroupPermissions;
+  events?: IGroupEvent[];
+  polls?: IGroupPoll[];
+  activityLogs?: IGroupActivityLog[];
 }
 
 export interface IConversation {

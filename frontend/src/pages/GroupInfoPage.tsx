@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   UserPlus,
   Crown,
   Shield,
+  ShieldCheck,
   Tag,
   LogOut,
   Trash2,
@@ -18,6 +19,17 @@ import {
   Check,
   ChevronRight,
   Camera,
+  Link,
+  Pin,
+  Calendar,
+  BarChart2,
+  Activity,
+  Bell,
+  Clock,
+  Search,
+  BookOpen,
+  UserCheck,
+  Share2,
 } from 'lucide-react';
 import {
   fetchGroupDetailsApi,
@@ -25,8 +37,6 @@ import {
   updateGroupAvatarApi,
   inviteGroupMembersApi,
   leaveGroupApi,
-  removeGroupMemberApi,
-  toggleGroupAdminApi,
   deleteGroupApi,
 } from '../api/groupApi';
 import { fetchSharedMediaApi, getMediaUrl } from '../api/messageApi';
@@ -34,12 +44,23 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useGroupCall } from '../context/GroupCallContext';
 import { useTheme } from '../context/ThemeContext';
-import { IConversation, IUser } from '../types';
+import { IConversation, IUser, GroupRole, IGroupPermissions, IGroupDescription } from '../types';
 import { Avatar } from '../components/common/Avatar';
 import { SetNicknameModal } from '../components/chat/SetNicknameModal';
 import { MediaViewerModal } from '../components/chat/MediaViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { GroupAvatarPickerModal } from '../components/chat/GroupAvatarPickerModal';
+import { GroupDescriptionModal } from '../components/chat/GroupDescriptionModal';
+import { GroupInviteLinkModal } from '../components/chat/GroupInviteLinkModal';
+import { GroupJoinRequestsModal } from '../components/chat/GroupJoinRequestsModal';
+import { GroupMemberActionSheet } from '../components/chat/GroupMemberActionSheet';
+import { GroupPinnedMessagesModal } from '../components/chat/GroupPinnedMessagesModal';
+import { GroupPermissionsModal } from '../components/chat/GroupPermissionsModal';
+import { GroupEventsModal } from '../components/chat/GroupEventsModal';
+import { GroupPollsModal } from '../components/chat/GroupPollsModal';
+import { GroupAdminActivityModal } from '../components/chat/GroupAdminActivityModal';
+import { GroupDisappearingModal } from '../components/chat/GroupDisappearingModal';
+import { GroupNotificationsModal } from '../components/chat/GroupNotificationsModal';
 import { searchUserApi } from '../api/userApi';
 
 export const GroupInfoPage: React.FC = () => {
@@ -50,7 +71,7 @@ export const GroupInfoPage: React.FC = () => {
   const { startGroupCall } = useGroupCall();
   const { themeConfig } = useTheme();
 
-  // ⚡ Instant Cache Hydration: Initialize group immediately from cache (0ms lag)
+  // Instant Cache Hydration: Initialize group immediately from cache
   const [group, setGroup] = useState<IConversation | null>(() => {
     if (!conversationId) return null;
     try {
@@ -80,20 +101,42 @@ export const GroupInfoPage: React.FC = () => {
     return true;
   });
 
-  const [activeTab, setActiveTab] = useState<'members' | 'media'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'media' | 'settings'>('members');
   const [sharedMedia, setSharedMedia] = useState<any[]>([]);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
-  // Modals / Actions
+  // Modals state
   const [isEditingName, setIsEditingName] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Feature Modals
+  const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState(false);
+  const [isInviteLinkModalOpen, setIsInviteLinkModalOpen] = useState(false);
+  const [isJoinRequestsModalOpen, setIsJoinRequestsModalOpen] = useState(false);
+  const [isPinnedModalOpen, setIsPinnedModalOpen] = useState(false);
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
+  const [isEventsModalOpen, setIsEventsModalOpen] = useState(false);
+  const [isPollsModalOpen, setIsPollsModalOpen] = useState(false);
+  const [isAdminActivityModalOpen, setIsAdminActivityModalOpen] = useState(false);
+  const [isDisappearingModalOpen, setIsDisappearingModalOpen] = useState(false);
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
+
+  // Member Action Sheet & Nickname Modal
+  const [selectedMember, setSelectedMember] = useState<{
+    user: IUser;
+    role: GroupRole;
+    nickname?: string | null;
+  } | null>(null);
   const [nicknameModalUser, setNicknameModalUser] = useState<IUser | null>(null);
+
+  // Media Viewers
   const [activeMediaModal, setActiveMediaModal] = useState<any | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<any | null>(null);
 
-  // Invite Modal
+  // Add Member Search
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchedUser, setSearchedUser] = useState<IUser | null>(null);
@@ -109,7 +152,6 @@ export const GroupInfoPage: React.FC = () => {
       if (res.success && res.group) {
         setGroup(res.group);
         setNewGroupName(res.group.groupMeta?.name || '');
-        // Cache group details
         localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(res.group));
       }
     } catch (err) {
@@ -123,7 +165,7 @@ export const GroupInfoPage: React.FC = () => {
     loadGroupDetails(!!group);
   }, [conversationId]);
 
-  // Socket real-time listeners for group updates & deletion
+  // Socket real-time listeners for group events
   useEffect(() => {
     if (!socket || !conversationId) return;
 
@@ -174,11 +216,16 @@ export const GroupInfoPage: React.FC = () => {
       }
     };
 
+    const handleGroupUpdated = () => {
+      loadGroupDetails(true);
+    };
+
     socket.on('group:deleted', handleGroupDeleted);
     socket.on('conversation:deleted', handleGroupDeleted);
     socket.on('group:avatar_updated', handleAvatarUpdated);
     socket.on('group:name_updated', handleNameUpdated);
     socket.on('group:member_removed', handleMemberRemoved);
+    socket.on('group:updated', handleGroupUpdated);
 
     return () => {
       socket.off('group:deleted', handleGroupDeleted);
@@ -186,10 +233,11 @@ export const GroupInfoPage: React.FC = () => {
       socket.off('group:avatar_updated', handleAvatarUpdated);
       socket.off('group:name_updated', handleNameUpdated);
       socket.off('group:member_removed', handleMemberRemoved);
+      socket.off('group:updated', handleGroupUpdated);
     };
   }, [socket, conversationId, currentUser, navigate]);
 
-  // Load Shared Media
+  // Load Shared Media when tab opens
   useEffect(() => {
     if (activeTab === 'media' && conversationId) {
       fetchSharedMediaApi(conversationId, 'media')
@@ -226,12 +274,51 @@ export const GroupInfoPage: React.FC = () => {
 
   const meta = group.groupMeta;
   const currentUserId = currentUser?._id || '';
-  const isCurrentUserAdmin =
+  const isCreator =
     meta.creator === currentUserId ||
-    (typeof meta.creator === 'object' && (meta.creator as any)._id === currentUserId) ||
-    meta.admins.some((a) => (typeof a === 'string' ? a === currentUserId : (a as any)._id === currentUserId));
+    (typeof meta.creator === 'object' && (meta.creator as any)._id === currentUserId);
 
-  const membersCount = meta.members.length;
+  const isAdmin =
+    isCreator ||
+    meta.admins?.some((a) => (typeof a === 'string' ? a === currentUserId : (a as any)._id === currentUserId));
+
+  const isModerator =
+    isAdmin ||
+    meta.moderators?.some((m) => (typeof m === 'string' ? m === currentUserId : (m as any)._id === currentUserId));
+
+  const permissions: IGroupPermissions = meta.permissions || {
+    sendMessages: 'all',
+    addMembers: 'all',
+    editGroupInfo: 'admins',
+    pinMessages: 'admins',
+    createPolls: 'all',
+    createEvents: 'all',
+  };
+
+  const canEditInfo = isCreator || isAdmin || permissions.editGroupInfo === 'all';
+  const canAddMembers = isCreator || isAdmin || permissions.addMembers === 'all';
+  const canPinMessages = isCreator || isAdmin || permissions.pinMessages === 'all';
+  const canCreatePollOrEvent = isCreator || isAdmin || permissions.createPolls === 'all';
+
+  const membersCount = meta.members?.length || 0;
+  const pendingRequestsCount = (meta.joinRequests || []).length;
+  const pinnedCount = (meta.pinnedMessages || []).length;
+  const eventsCount = (meta.events || []).length;
+  const pollsCount = (meta.polls || []).filter((p) => !p.isClosed).length;
+
+  // Filtered members list
+  const filteredMembers = (meta.members || []).filter((m) => {
+    const u = typeof m.user === 'object' ? m.user : null;
+    if (!u) return false;
+    const name = u.displayName || u.username || '';
+    const customNick = meta.nicknames ? (meta.nicknames as any)[u._id] || '' : '';
+    const q = memberSearchQuery.toLowerCase().trim();
+    return (
+      name.toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q) ||
+      customNick.toLowerCase().includes(q)
+    );
+  });
 
   const handleUpdateName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,8 +363,14 @@ export const GroupInfoPage: React.FC = () => {
   };
 
   const handleLeaveGroup = async () => {
-    if (!window.confirm('Are you sure you want to leave this group?')) return;
     if (!conversationId) return;
+    const confirmLeave = window.confirm(
+      isCreator
+        ? 'You are the Creator of this group. Leaving will transfer ownership to another admin or member. Continue?'
+        : 'Are you sure you want to leave this group?'
+    );
+    if (!confirmLeave) return;
+
     try {
       const res = await leaveGroupApi(conversationId);
       if (res.success) {
@@ -290,8 +383,12 @@ export const GroupInfoPage: React.FC = () => {
   };
 
   const handleDeleteGroup = async () => {
-    if (!window.confirm('Are you sure you want to permanently remove this group? This will delete all messages and remove the group for everyone.')) return;
-    if (!conversationId) return;
+    if (!conversationId || !isAdmin) return;
+    const confirmDelete = window.confirm(
+      'Are you sure you want to permanently delete this group? All chat history, shared media, polls, and events will be deleted forever.'
+    );
+    if (!confirmDelete) return;
+
     setIsDeleting(true);
     try {
       const res = await deleteGroupApi(conversationId);
@@ -305,34 +402,9 @@ export const GroupInfoPage: React.FC = () => {
         navigate('/chats', { replace: true });
       }
     } catch (err: any) {
-      alert(err?.message || 'Failed to remove group');
+      alert(err?.message || 'Failed to delete group');
     } finally {
       setIsDeleting(false);
-    }
-  };
-
-  const handleRemoveMember = async (targetUserId: string, name: string) => {
-    if (!window.confirm(`Remove ${name} from this group?`)) return;
-    if (!conversationId) return;
-    try {
-      const res = await removeGroupMemberApi(conversationId, targetUserId);
-      if (res.success) {
-        loadGroupDetails();
-      }
-    } catch (err) {
-      console.error('Failed to remove member:', err);
-    }
-  };
-
-  const handleToggleAdmin = async (targetUserId: string) => {
-    if (!conversationId) return;
-    try {
-      const res = await toggleGroupAdminApi(conversationId, targetUserId);
-      if (res.success) {
-        loadGroupDetails();
-      }
-    } catch (err) {
-      console.error('Failed to toggle admin:', err);
     }
   };
 
@@ -363,7 +435,7 @@ export const GroupInfoPage: React.FC = () => {
         setIsInviteModalOpen(false);
         setSearchQuery('');
         setSearchedUser(null);
-        loadGroupDetails();
+        loadGroupDetails(true);
       }
     } catch (err) {
       console.error('Failed to invite member:', err);
@@ -372,12 +444,27 @@ export const GroupInfoPage: React.FC = () => {
     }
   };
 
+  const disappearingLabel = useMemo(() => {
+    const sec = meta.disappearingMode || 0;
+    if (sec === 86400) return '24 Hours';
+    if (sec === 604800) return '7 Days';
+    if (sec === 2592000) return '30 Days';
+    return 'Off';
+  }, [meta.disappearingMode]);
+
+  const notifLabel = useMemo(() => {
+    const pref = meta.notificationSettings?.[currentUserId] || 'all';
+    if (pref === 'mentions') return 'Mentions Only';
+    if (pref === 'muted') return 'Muted';
+    return 'All Messages';
+  }, [meta.notificationSettings, currentUserId]);
+
   return (
     <div
       style={{ backgroundColor: themeConfig.bg }}
       className="flex-1 flex flex-col h-full text-chat-textPrimary overflow-hidden safe-top safe-bottom select-none transition-colors duration-200"
     >
-      {/* Header */}
+      {/* Top Header */}
       <div
         style={{ backgroundColor: themeConfig.panel }}
         className="px-4 py-3 border-b border-chat-border flex items-center justify-between z-10"
@@ -391,22 +478,34 @@ export const GroupInfoPage: React.FC = () => {
           </button>
           <h2 className="text-base font-bold text-chat-textPrimary">Group Info</h2>
         </div>
+
+        {isAdmin && (
+          <button
+            onClick={() => setIsAdminActivityModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-chat-card hover:bg-chat-border/50 text-xs font-semibold text-chat-textMuted hover:text-chat-textPrimary border border-chat-border transition-colors"
+            title="View Admin Activity Logs"
+          >
+            <Activity className="w-4 h-4 text-brand-500" />
+            <span className="hidden sm:inline">Activity</span>
+          </button>
+        )}
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto">
-        {/* Hero Section */}
+        {/* HERO SECTION */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="p-6 flex flex-col items-center justify-center border-b border-chat-border"
+          className="p-6 flex flex-col items-center justify-center border-b border-chat-border relative"
         >
+          {/* Avatar with Edit Camera Badge */}
           <div className="relative mb-4">
             <div
               onClick={() => {
-                if (isCurrentUserAdmin) setIsAvatarPickerOpen(true);
+                if (canEditInfo) setIsAvatarPickerOpen(true);
               }}
               className={`w-24 h-24 rounded-3xl bg-chat-panel border-2 border-brand-500/40 flex items-center justify-center overflow-hidden shadow-2xl relative ${
-                isCurrentUserAdmin ? 'cursor-pointer group' : ''
+                canEditInfo ? 'cursor-pointer group' : ''
               }`}
             >
               {meta.avatarUrl ? (
@@ -415,16 +514,14 @@ export const GroupInfoPage: React.FC = () => {
                 <Users className="w-12 h-12 text-brand-400" />
               )}
 
-              {/* Admin Avatar Edit Overlay */}
-              {isCurrentUserAdmin && (
+              {canEditInfo && (
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-3xl">
                   <Camera className="w-6 h-6 text-white" />
                 </div>
               )}
             </div>
 
-            {/* Quick Edit Badge for Admin */}
-            {isCurrentUserAdmin && (
+            {canEditInfo && (
               <button
                 type="button"
                 onClick={() => setIsAvatarPickerOpen(true)}
@@ -440,7 +537,7 @@ export const GroupInfoPage: React.FC = () => {
             )}
           </div>
 
-          {/* Group Name & Edit */}
+          {/* Group Name & Inline Edit */}
           {isEditingName ? (
             <form onSubmit={handleUpdateName} className="flex items-center gap-2 w-full max-w-xs mb-1">
               <input
@@ -453,7 +550,7 @@ export const GroupInfoPage: React.FC = () => {
               />
               <button
                 type="submit"
-                className="p-2 rounded-xl bg-brand-500 text-white hover:bg-brand-600"
+                className="p-2 rounded-xl bg-brand-500 text-white hover:bg-brand-600 shadow-sm"
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -461,7 +558,7 @@ export const GroupInfoPage: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-xl font-bold text-chat-textPrimary text-center">{meta.name}</h1>
-              {isCurrentUserAdmin && (
+              {canEditInfo && (
                 <button
                   onClick={() => setIsEditingName(true)}
                   className="p-1 text-chat-textMuted hover:text-brand-400 transition-colors"
@@ -474,33 +571,137 @@ export const GroupInfoPage: React.FC = () => {
           )}
 
           <p className="text-xs text-chat-textMuted font-medium">
-            Group • {membersCount} of 10 members
+            Social Group • {membersCount} {membersCount === 1 ? 'member' : 'members'}
           </p>
 
-          {/* Group Call Actions */}
-          <div className="flex items-center gap-4 mt-5">
+          {/* Description & Rules Snippet Card */}
+          <div
+            onClick={() => setIsDescriptionModalOpen(true)}
+            className="w-full max-w-md mt-4 p-3 rounded-2xl bg-chat-panel border border-chat-border hover:border-brand-500/40 cursor-pointer transition-all flex items-start gap-3 select-none"
+          >
+            <div className="p-2 rounded-xl bg-brand-500/10 text-brand-500 shrink-0 mt-0.5">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-chat-textPrimary">About & Rules</h4>
+                <span className="text-[11px] text-brand-500 font-semibold flex items-center">
+                  {canEditInfo ? 'Edit' : 'View'} <ChevronRight className="w-3 h-3 ml-0.5" />
+                </span>
+              </div>
+              <p className="text-xs text-chat-textMuted mt-0.5 line-clamp-2 leading-relaxed">
+                {meta.description?.text || 'No description provided yet. Tap to view or add group rules and topic.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Call & Primary Action Row */}
+          <div className="flex items-center gap-3 mt-5">
             <button
               onClick={() => startGroupCall(conversationId!, meta.name, meta.avatarUrl, 'voice')}
-              className="flex flex-col items-center gap-1.5 p-3 px-5 rounded-2xl bg-chat-panel border border-chat-border hover:border-brand-500/50 hover:bg-chat-card transition-all active:scale-95 text-brand-400"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-chat-panel border border-chat-border hover:border-brand-500/50 hover:bg-chat-card transition-all active:scale-95 text-brand-500 font-semibold text-xs shadow-sm"
             >
-              <Phone className="w-5 h-5" />
-              <span className="text-xs font-semibold text-chat-textPrimary">Voice Call</span>
+              <Phone className="w-4 h-4" />
+              <span>Voice</span>
             </button>
 
             <button
               onClick={() => startGroupCall(conversationId!, meta.name, meta.avatarUrl, 'video')}
-              className="flex flex-col items-center gap-1.5 p-3 px-5 rounded-2xl bg-chat-panel border border-chat-border hover:border-brand-500/50 hover:bg-chat-card transition-all active:scale-95 text-brand-400"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-chat-panel border border-chat-border hover:border-brand-500/50 hover:bg-chat-card transition-all active:scale-95 text-brand-500 font-semibold text-xs shadow-sm"
             >
-              <Video className="w-5 h-5" />
-              <span className="text-xs font-semibold text-chat-textPrimary">Video Call</span>
+              <Video className="w-4 h-4" />
+              <span>Video</span>
+            </button>
+
+            <button
+              onClick={() => setIsInviteLinkModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs transition-all active:scale-95 shadow-md shadow-brand-500/20"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Invite</span>
             </button>
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* QUICK HUB ACTION CARDS GRID */}
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Pinned Messages Card */}
+          <div
+            onClick={() => setIsPinnedModalOpen(true)}
+            style={{ backgroundColor: themeConfig.card }}
+            className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/40 cursor-pointer transition-all active:scale-98 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+                <Pin className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-bold text-chat-textPrimary">{pinnedCount}</span>
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-chat-textPrimary">Pinned</h4>
+              <p className="text-[11px] text-chat-textMuted">Important messages</p>
+            </div>
+          </div>
+
+          {/* Group Polls Card */}
+          <div
+            onClick={() => setIsPollsModalOpen(true)}
+            style={{ backgroundColor: themeConfig.card }}
+            className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/40 cursor-pointer transition-all active:scale-98 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+                <BarChart2 className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-bold text-chat-textPrimary">{pollsCount}</span>
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-chat-textPrimary">Polls</h4>
+              <p className="text-[11px] text-chat-textMuted">Live voting</p>
+            </div>
+          </div>
+
+          {/* Group Events Card */}
+          <div
+            onClick={() => setIsEventsModalOpen(true)}
+            style={{ backgroundColor: themeConfig.card }}
+            className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/40 cursor-pointer transition-all active:scale-98 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-bold text-chat-textPrimary">{eventsCount}</span>
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-chat-textPrimary">Events</h4>
+              <p className="text-[11px] text-chat-textMuted">Meetups & syncs</p>
+            </div>
+          </div>
+
+          {/* Invite Link Card */}
+          <div
+            onClick={() => setIsInviteLinkModalOpen(true)}
+            style={{ backgroundColor: themeConfig.card }}
+            className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/40 cursor-pointer transition-all active:scale-98 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                <Link className="w-4 h-4" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-chat-textPrimary">Invite Link</h4>
+              <p className="text-[11px] text-chat-textMuted">QR & link share</p>
+            </div>
+          </div>
+        </div>
+
+        {/* NAVIGATION TABS */}
         <div
           style={{ backgroundColor: themeConfig.panel }}
-          className="flex border-b border-chat-border"
+          className="flex border-y border-chat-border"
         >
           <button
             onClick={() => setActiveTab('members')}
@@ -510,7 +711,7 @@ export const GroupInfoPage: React.FC = () => {
                 : 'border-transparent text-chat-textMuted hover:text-chat-textPrimary'
             }`}
           >
-            Members ({membersCount}/10)
+            Members ({membersCount})
           </button>
           <button
             onClick={() => setActiveTab('media')}
@@ -520,183 +721,189 @@ export const GroupInfoPage: React.FC = () => {
                 : 'border-transparent text-chat-textMuted hover:text-chat-textPrimary'
             }`}
           >
-            Shared Media
+            Media & Docs
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+              activeTab === 'settings'
+                ? 'border-brand-500 text-brand-500 dark:text-brand-400 bg-brand-500/10'
+                : 'border-transparent text-chat-textMuted hover:text-chat-textPrimary'
+            }`}
+          >
+            Settings
           </button>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'members' ? (
-          <div className="p-4 space-y-2">
-            {/* Add Members Button (if < 10) */}
-            {membersCount < 10 && (
+        {/* TAB 1: MEMBERS */}
+        {activeTab === 'members' && (
+          <div className="p-4 space-y-3">
+            {/* Join Requests Banner for Admins */}
+            {isAdmin && pendingRequestsCount > 0 && (
+              <div
+                onClick={() => setIsJoinRequestsModalOpen(true)}
+                className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between cursor-pointer hover:bg-amber-500/20 transition-all animate-pulse"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-amber-500 text-black">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-500">
+                      {pendingRequestsCount} Pending Join {pendingRequestsCount === 1 ? 'Request' : 'Requests'}
+                    </h4>
+                    <p className="text-[11px] text-amber-400/80">Tap to review and approve members</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-amber-500" />
+              </div>
+            )}
+
+            {/* Member Search Bar */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-chat-textMuted" />
+              <input
+                type="text"
+                value={memberSearchQuery}
+                onChange={(e) => setMemberSearchQuery(e.target.value)}
+                placeholder="Search group members..."
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-xs text-chat-textPrimary focus:outline-none focus:border-brand-500 transition-colors placeholder:text-chat-textMuted"
+              />
+            </div>
+
+            {/* Add Member Button (if allowed) */}
+            {canAddMembers && (
               <button
                 onClick={() => setIsInviteModalOpen(true)}
-                className="w-full p-3.5 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-brand-500 dark:text-brand-400 flex items-center justify-center gap-2 font-semibold text-sm transition-all duration-200 active:scale-98 mb-3"
+                className="w-full p-3 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-brand-500 dark:text-brand-400 flex items-center justify-center gap-2 font-semibold text-xs transition-all active:scale-98"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Add Members ({10 - membersCount} slots available)</span>
+                <span>Add Members</span>
               </button>
             )}
 
             {/* Members List */}
-            {meta.members.map((member) => {
-              const u: IUser = member.user as any;
-              if (!u) return null;
+            <div className="space-y-2">
+              {filteredMembers.map((member) => {
+                const u: IUser = member.user as any;
+                if (!u) return null;
 
-              const isCreator =
-                meta.creator === u._id ||
-                (typeof meta.creator === 'object' && (meta.creator as any)._id === u._id);
+                const isUserCreator =
+                  meta.creator === u._id ||
+                  (typeof meta.creator === 'object' && (meta.creator as any)._id === u._id);
 
-              const isAdmin =
-                isCreator ||
-                member.role === 'admin' ||
-                meta.admins.some((a) => (typeof a === 'string' ? a === u._id : (a as any)._id === u._id));
+                const isUserAdmin =
+                  isUserCreator ||
+                  member.role === 'admin' ||
+                  meta.admins?.some((a) => (typeof a === 'string' ? a === u._id : (a as any)._id === u._id));
 
-              const customNickname = meta.nicknames ? (meta.nicknames as any)[u._id] : undefined;
-              const isSelf = u._id === currentUserId;
+                const isUserModerator =
+                  member.role === 'moderator' ||
+                  meta.moderators?.some((m) => (typeof m === 'string' ? m === u._id : (m as any)._id === u._id));
 
-              return (
-                <div
-                  key={u._id}
-                  style={{ backgroundColor: themeConfig.card }}
-                  className="p-3 rounded-2xl border border-chat-border flex items-center justify-between hover:border-chat-border/80 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar
-                      src={u.avatarUrl}
-                      name={customNickname || u.displayName || u.username}
-                      size="md"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-chat-textPrimary truncate">
-                          {u.displayName}
-                        </p>
-                        {isSelf && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-chat-panel text-chat-textMuted text-[10px] font-medium border border-chat-border">
-                            You
-                          </span>
-                        )}
-                        {isCreator ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 dark:text-amber-400 text-[10px] font-bold">
-                            <Crown className="w-3 h-3" />
-                            Creator
-                          </span>
-                        ) : isAdmin ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-500 dark:text-brand-400 text-[10px] font-bold">
-                            <Shield className="w-3 h-3" />
-                            Admin
-                          </span>
-                        ) : null}
-                      </div>
+                const currentRole: GroupRole = isUserCreator
+                  ? 'creator'
+                  : isUserAdmin
+                  ? 'admin'
+                  : isUserModerator
+                  ? 'moderator'
+                  : 'member';
 
-                      <div className="flex items-center gap-2 text-xs text-chat-textMuted mt-0.5">
-                        <span>@{u.username}</span>
-                        {customNickname && (
-                          <>
-                            <span>•</span>
-                            <span className="text-brand-500 dark:text-brand-400 font-medium">
-                              "{customNickname}"
+                const customNickname = meta.nicknames ? (meta.nicknames as any)[u._id] : undefined;
+                const isSelf = u._id === currentUserId;
+
+                return (
+                  <div
+                    key={u._id}
+                    onClick={() =>
+                      setSelectedMember({
+                        user: u,
+                        role: currentRole,
+                        nickname: customNickname,
+                      })
+                    }
+                    style={{ backgroundColor: themeConfig.card }}
+                    className="p-3 rounded-2xl border border-chat-border flex items-center justify-between hover:border-brand-500/30 cursor-pointer transition-all active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar
+                        src={u.avatarUrl || ''}
+                        name={customNickname || u.displayName || u.username}
+                        size="md"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-chat-textPrimary truncate">
+                            {u.displayName || u.username}
+                          </p>
+                          {isSelf && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-chat-panel text-chat-textMuted text-[10px] font-medium border border-chat-border">
+                              You
                             </span>
-                          </>
-                        )}
-                        {member.status === 'pending' && (
-                          <>
-                            <span>•</span>
-                            <span className="text-amber-500 dark:text-amber-400 font-medium">(Invited)</span>
-                          </>
-                        )}
+                          )}
+                          {/* Role Badges */}
+                          {isUserCreator ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 dark:text-amber-400 text-[10px] font-bold">
+                              <Crown className="w-3 h-3" />
+                              Creator
+                            </span>
+                          ) : isUserAdmin ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 text-[10px] font-bold">
+                              <ShieldCheck className="w-3 h-3" />
+                              Admin
+                            </span>
+                          ) : isUserModerator ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-500 dark:text-blue-400 text-[10px] font-bold">
+                              <Shield className="w-3 h-3" />
+                              Mod
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-chat-textMuted mt-0.5">
+                          <span>@{u.username}</span>
+                          {customNickname && (
+                            <>
+                              <span>•</span>
+                              <span className="text-brand-500 font-medium">"{customNickname}"</span>
+                            </>
+                          )}
+                          {member.status === 'pending' && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-500 font-medium">(Invited)</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    <ChevronRight className="w-4 h-4 text-chat-textMuted shrink-0 ml-2" />
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1">
-                    {/* Set Nickname Button */}
-                    <button
-                      onClick={() => setNicknameModalUser(u)}
-                      className="p-2 rounded-xl text-chat-textMuted hover:text-brand-500 dark:hover:text-brand-400 hover:bg-chat-panel transition-colors"
-                      title="Set Nickname"
-                    >
-                      <Tag className="w-4 h-4" />
-                    </button>
-
-                    {/* Admin Actions (Promote / Demote / Remove) */}
-                    {isCurrentUserAdmin && !isSelf && !isCreator && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleToggleAdmin(u._id)}
-                          className="p-2 rounded-xl text-chat-textMuted hover:text-amber-500 hover:bg-chat-panel transition-colors"
-                          title={isAdmin ? 'Dismiss Admin' : 'Make Admin'}
-                        >
-                          <Shield className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveMember(u._id, u.displayName)}
-                          className="p-2 rounded-xl text-chat-textMuted hover:text-red-500 hover:bg-chat-panel transition-colors"
-                          title="Remove from group"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Bottom Actions: Leave Group & Delete Group */}
-            <div className="pt-6 space-y-3">
-              {/* Leave Group Button */}
-              <button
-                onClick={handleLeaveGroup}
-                className="w-full p-3.5 rounded-2xl bg-chat-card hover:bg-chat-panel border border-chat-border text-chat-textPrimary flex items-center justify-center gap-2 font-bold text-sm transition-all duration-200 active:scale-98"
-              >
-                <LogOut className="w-4 h-4 text-chat-textMuted" />
-                <span>Leave Group</span>
-              </button>
-
-              {/* Delete Group (Admin Only) */}
-              {isCurrentUserAdmin && (
-                <button
-                  onClick={handleDeleteGroup}
-                  disabled={isDeleting}
-                  className="w-full p-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 dark:text-red-400 flex items-center justify-center gap-2 font-bold text-sm transition-all duration-200 active:scale-98"
-                >
-                  {isDeleting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Removing Group...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      <span>Delete Group (Admin Only)</span>
-                    </>
-                  )}
-                </button>
-              )}
+                );
+              })}
             </div>
           </div>
-        ) : (
-          /* Media Gallery Tab */
+        )}
+
+        {/* TAB 2: MEDIA & DOCS */}
+        {activeTab === 'media' && (
           <div className="p-4 space-y-3">
-            {/* Link to Full Categorized Shared Media Page */}
             <div
               onClick={() => navigate(`/chat/${conversationId}/shared`)}
               style={{ backgroundColor: themeConfig.card }}
-              className="p-3 rounded-2xl border border-chat-border hover:border-brand-500/40 flex items-center justify-between cursor-pointer transition-all active:scale-98"
+              className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/40 flex items-center justify-between cursor-pointer transition-all active:scale-98"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
                   <ImageIcon className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-chat-textPrimary">All Media, Docs & Voice</h4>
-                  <p className="text-[10px] text-chat-textMuted">View organized categories & files</p>
+                  <p className="text-[11px] text-chat-textMuted">Browse complete categorized gallery</p>
                 </div>
               </div>
-              <span className="text-xs text-brand-500 dark:text-brand-400 font-semibold flex items-center gap-1">
+              <span className="text-xs text-brand-500 font-semibold flex items-center gap-1">
                 Open <ChevronRight className="w-4 h-4" />
               </span>
             </div>
@@ -733,7 +940,9 @@ export const GroupInfoPage: React.FC = () => {
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center p-2 text-chat-textMuted">
                           <FileText className="w-6 h-6 mb-1 text-brand-400" />
-                          <span className="text-[10px] truncate max-w-full text-center text-chat-textPrimary font-medium">{att.fileName}</span>
+                          <span className="text-[10px] truncate max-w-full text-center text-chat-textPrimary font-medium">
+                            {att.fileName}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -743,9 +952,346 @@ export const GroupInfoPage: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* TAB 3: SETTINGS & PERMISSIONS */}
+        {activeTab === 'settings' && (
+          <div className="p-4 space-y-4">
+            {/* Preferences Group */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-chat-textMuted uppercase tracking-wider px-1">
+                Chat Settings
+              </p>
+
+              {/* Notifications */}
+              <div
+                onClick={() => setIsNotificationsModalOpen(true)}
+                style={{ backgroundColor: themeConfig.card }}
+                className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-brand-500/10 text-brand-500">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-chat-textPrimary">Notifications</h4>
+                    <p className="text-[11px] text-chat-textMuted">Current: {notifLabel}</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+              </div>
+
+              {/* Disappearing Messages */}
+              <div
+                onClick={() => setIsDisappearingModalOpen(true)}
+                style={{ backgroundColor: themeConfig.card }}
+                className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-chat-textPrimary">Disappearing Messages</h4>
+                    <p className="text-[11px] text-chat-textMuted">Timer: {disappearingLabel}</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+              </div>
+            </div>
+
+            {/* Admin Controls Section */}
+            {isAdmin && (
+              <div className="space-y-2 pt-2">
+                <p className="text-[11px] font-semibold text-chat-textMuted uppercase tracking-wider px-1">
+                  Admin Administration
+                </p>
+
+                {/* Group Permissions */}
+                <div
+                  onClick={() => setIsPermissionsModalOpen(true)}
+                  style={{ backgroundColor: themeConfig.card }}
+                  className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-chat-textPrimary">Group Permissions</h4>
+                      <p className="text-[11px] text-chat-textMuted">Posting, invite & editing rules</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+                </div>
+
+                {/* Admin Activity Log */}
+                <div
+                  onClick={() => setIsAdminActivityModalOpen(true)}
+                  style={{ backgroundColor: themeConfig.card }}
+                  className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-chat-textPrimary">Admin Activity Log</h4>
+                      <p className="text-[11px] text-chat-textMuted">Audit trail of group changes</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-chat-textMuted" />
+                </div>
+              </div>
+            )}
+
+            {/* Danger Zone */}
+            <div className="space-y-2 pt-4 border-t border-chat-border">
+              <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wider px-1">
+                Danger Zone
+              </p>
+
+              {/* Leave Group Button */}
+              <button
+                onClick={handleLeaveGroup}
+                className="w-full p-3.5 rounded-2xl bg-chat-card hover:bg-chat-panel border border-chat-border text-chat-textPrimary flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-98"
+              >
+                <LogOut className="w-4 h-4 text-chat-textMuted" />
+                <span>Leave Group</span>
+              </button>
+
+              {/* Delete Group (Admin Only) */}
+              {isAdmin && (
+                <button
+                  onClick={handleDeleteGroup}
+                  disabled={isDeleting}
+                  className="w-full p-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 dark:text-red-400 flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-98"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Deleting Group...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Group (Admin Only)</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Set Nickname Modal */}
+      {/* MODAL 1: Description & Rules Modal */}
+      <GroupDescriptionModal
+        isOpen={isDescriptionModalOpen}
+        onClose={() => setIsDescriptionModalOpen(false)}
+        groupId={conversationId!}
+        currentDescription={meta.description}
+        currentRules={meta.rules || []}
+        canEdit={canEditInfo}
+        onUpdated={(desc: IGroupDescription | null, rules: string[]) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: {
+                ...prev.groupMeta,
+                description: desc || prev.groupMeta.description,
+                rules: rules || prev.groupMeta.rules,
+              },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+      />
+
+      {/* MODAL 2: Invite Link Modal */}
+      <GroupInviteLinkModal
+        isOpen={isInviteLinkModalOpen}
+        onClose={() => setIsInviteLinkModalOpen(false)}
+        groupId={conversationId!}
+        groupName={meta.name}
+        inviteCode={meta.inviteCode}
+        requiresApproval={meta.requiresApproval}
+        isAdmin={isAdmin}
+        onInviteCodeChanged={(newCode) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, inviteCode: newCode },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+        onPrivacyChanged={(reqApproval) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, requiresApproval: reqApproval },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+      />
+
+      {/* MODAL 3: Join Requests Modal */}
+      <GroupJoinRequestsModal
+        isOpen={isJoinRequestsModalOpen}
+        onClose={() => setIsJoinRequestsModalOpen(false)}
+        groupId={conversationId!}
+        joinRequests={meta.joinRequests || []}
+        onRequestHandled={(userId, accepted) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updatedRequests = (prev.groupMeta.joinRequests || []).filter(
+              (r) => r.user._id !== userId
+            );
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, joinRequests: updatedRequests },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+          if (accepted) {
+            loadGroupDetails(true);
+          }
+        }}
+      />
+
+      {/* MODAL 4: Member Action Sheet */}
+      {selectedMember && (
+        <GroupMemberActionSheet
+          isOpen={!!selectedMember}
+          onClose={() => setSelectedMember(null)}
+          groupId={conversationId!}
+          targetUser={selectedMember.user}
+          targetRole={selectedMember.role}
+          targetNickname={selectedMember.nickname}
+          callerUserId={currentUserId}
+          isCallerCreator={isCreator}
+          isCallerAdmin={!!isAdmin}
+          isCallerModerator={!!isModerator}
+          onOpenDirectChat={(u) => {
+            navigate(`/chat/direct/${u._id}`);
+          }}
+          onOpenNicknameModal={(u) => {
+            setNicknameModalUser(u);
+          }}
+          onMemberUpdated={() => {
+            loadGroupDetails(true);
+          }}
+        />
+      )}
+
+      {/* MODAL 5: Pinned Messages Modal */}
+      <GroupPinnedMessagesModal
+        isOpen={isPinnedModalOpen}
+        onClose={() => setIsPinnedModalOpen(false)}
+        groupId={conversationId!}
+        canManagePins={canPinMessages}
+        onJumpToMessage={(messageId) => {
+          navigate(`/chat/${conversationId}?highlight=${messageId}`);
+        }}
+      />
+
+      {/* MODAL 6: Group Permissions Modal */}
+      <GroupPermissionsModal
+        isOpen={isPermissionsModalOpen}
+        onClose={() => setIsPermissionsModalOpen(false)}
+        groupId={conversationId!}
+        initialPermissions={meta.permissions}
+        onPermissionsUpdated={(newPermissions) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, permissions: newPermissions },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+      />
+
+      {/* MODAL 7: Group Events Modal */}
+      <GroupEventsModal
+        isOpen={isEventsModalOpen}
+        onClose={() => setIsEventsModalOpen(false)}
+        groupId={conversationId!}
+        currentUserId={currentUserId}
+        canCreateEvent={canCreatePollOrEvent}
+        canDeleteEvent={isAdmin}
+      />
+
+      {/* MODAL 8: Group Polls Modal */}
+      <GroupPollsModal
+        isOpen={isPollsModalOpen}
+        onClose={() => setIsPollsModalOpen(false)}
+        groupId={conversationId!}
+        currentUserId={currentUserId}
+        canCreatePoll={canCreatePollOrEvent}
+        canManagePolls={isAdmin}
+      />
+
+      {/* MODAL 9: Admin Activity Modal */}
+      <GroupAdminActivityModal
+        isOpen={isAdminActivityModalOpen}
+        onClose={() => setIsAdminActivityModalOpen(false)}
+        groupId={conversationId!}
+      />
+
+      {/* MODAL 10: Disappearing Messages Modal */}
+      <GroupDisappearingModal
+        isOpen={isDisappearingModalOpen}
+        onClose={() => setIsDisappearingModalOpen(false)}
+        groupId={conversationId!}
+        currentDuration={meta.disappearingMode}
+        onDurationUpdated={(duration) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, disappearingMode: duration },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+      />
+
+      {/* MODAL 11: Group Notifications Modal */}
+      <GroupNotificationsModal
+        isOpen={isNotificationsModalOpen}
+        onClose={() => setIsNotificationsModalOpen(false)}
+        groupId={conversationId!}
+        currentPreference={meta.notificationSettings?.[currentUserId] || 'all'}
+        onPreferenceUpdated={(pref) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updatedSettings = {
+              ...(prev.groupMeta.notificationSettings || {}),
+              [currentUserId]: pref,
+            };
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, notificationSettings: updatedSettings },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+      />
+
+      {/* MODAL 12: Set Nickname Modal */}
       {nicknameModalUser && (
         <SetNicknameModal
           isOpen={!!nicknameModalUser}
@@ -759,7 +1305,7 @@ export const GroupInfoPage: React.FC = () => {
         />
       )}
 
-      {/* Group Avatar Picker Modal */}
+      {/* MODAL 13: Group Avatar Picker Modal */}
       <GroupAvatarPickerModal
         isOpen={isAvatarPickerOpen}
         onClose={() => setIsAvatarPickerOpen(false)}
@@ -768,7 +1314,7 @@ export const GroupInfoPage: React.FC = () => {
         title="Change Group Icon"
       />
 
-      {/* Add / Invite Members Modal */}
+      {/* MODAL 14: Add / Search Members Modal */}
       {isInviteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
           <div
@@ -812,7 +1358,7 @@ export const GroupInfoPage: React.FC = () => {
               >
                 <div className="flex items-center gap-3">
                   <Avatar
-                    src={searchedUser.avatarUrl}
+                    src={searchedUser.avatarUrl || ''}
                     name={searchedUser.displayName || searchedUser.username || 'User'}
                     size="md"
                   />
@@ -836,7 +1382,7 @@ export const GroupInfoPage: React.FC = () => {
         </div>
       )}
 
-      {/* Fullscreen Media Viewer */}
+      {/* MODAL 15: Fullscreen Media Viewer */}
       {activeMediaModal && (
         <MediaViewerModal
           message={activeMediaModal}
@@ -844,7 +1390,7 @@ export const GroupInfoPage: React.FC = () => {
         />
       )}
 
-      {/* Fullscreen Document Viewer */}
+      {/* MODAL 16: Fullscreen Document Viewer */}
       {activeDocModal && (
         <DocumentViewerModal
           message={activeDocModal}
@@ -854,3 +1400,4 @@ export const GroupInfoPage: React.FC = () => {
     </div>
   );
 };
+

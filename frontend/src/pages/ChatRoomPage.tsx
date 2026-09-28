@@ -25,7 +25,6 @@ import {
 } from '../services/nativeMediaService';
 import {
   ArrowLeft,
-  WifiOff,
   Search,
   MoreVertical,
   Phone,
@@ -49,9 +48,6 @@ export const ChatRoomPage: React.FC = () => {
   const { user } = useAuth();
   const {
     socket,
-    isConnected,
-    isReconnecting,
-    reconnectNow,
     sendMessage,
     markAsRead,
     startTyping,
@@ -1170,18 +1166,6 @@ export const ChatRoomPage: React.FC = () => {
           >
             <MoreVertical className="w-4 h-4" />
           </button>
-
-          {!isConnected && (
-            <button
-              type="button"
-              onClick={() => reconnectNow()}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-500 text-[10px] font-medium flex-shrink-0 ml-0.5 transition-all"
-              title="Tap to reconnect immediately"
-            >
-              <WifiOff className={`w-3 h-3 ${isReconnecting ? 'animate-pulse' : ''}`} />
-              <span>{isReconnecting ? 'Connecting...' : 'Offline'}</span>
-            </button>
-          )}
         </div>
       </header>
 

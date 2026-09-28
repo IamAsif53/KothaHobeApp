@@ -1,10 +1,10 @@
 {
-  "versionCode": 87,
-  "versionName": "1.1.42",
+  "versionCode": 88,
+  "versionName": "1.1.43",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "80854df3c7fffb37b9b225c269678cfb82d7ebf1c36fb6675f32a0c55116fdfd",
+  "sha256": "00d9271172d04ab8885e8194f0429f40a87e00b98175a3dd970e6849b6db9123",
   "releaseNotes": [
-    "Release v1.1.42 (Build 87)",
+    "Release v1.1.43 (Build 88)",
     "⚡ Instant Notification Quick Reply: Reply directly from Android system notification shade or floating in-app banner with zero screen interruption for 1-on-1 and Group chats",
     "📏 Word-Count Constraint & Live Counter: Enforced 50-word maximum limit with live counter badge to keep quick replies lightweight and fast",
     "💬 Effortless Quick Chips & Cancel Draft: 1-tap quick response chips (👍, ❤️, 😂, Sure!, On my way) and cancel option that preserves notification while resetting typed draft"

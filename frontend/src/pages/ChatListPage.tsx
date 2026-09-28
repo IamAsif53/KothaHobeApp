@@ -19,7 +19,6 @@ import {
   MessageSquare,
   Check,
   CheckCheck,
-  WifiOff,
   MoreVertical,
   Trash2,
   Ban,
@@ -56,7 +55,7 @@ export const ChatListPage: React.FC = () => {
     setTimeout(() => setActionToast(null), 3000);
   };
 
-  const { socket, isConnected, isReconnecting, reconnectNow } = useSocket();
+  const { socket } = useSocket();
   const navigate = useNavigate();
 
   const loadConversations = async (silent = false) => {
@@ -318,22 +317,6 @@ export const ChatListPage: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          {!isConnected && (
-            <button
-              type="button"
-              onClick={() => {
-                showActionToast('Reconnecting to server...');
-                reconnectNow();
-                loadConversations(true);
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-500 text-xs font-medium transition-all"
-              title="Tap to reconnect immediately"
-            >
-              <WifiOff className={`w-3.5 h-3.5 ${isReconnecting ? 'animate-pulse' : ''}`} />
-              <span>{isReconnecting ? 'Connecting...' : 'Offline'}</span>
-            </button>
-          )}
-
           {/* New Group Button */}
           <button
             onClick={() => setShowCreateGroupModal(true)}

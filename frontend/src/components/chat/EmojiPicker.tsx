@@ -219,13 +219,13 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           </div>
         ) : (
           // Animated Character Filter Chips
-          <div className="flex items-center gap-1.5 w-full">
+          <div className="flex items-center gap-1.5 w-full overflow-x-auto no-scrollbar py-0.5">
             {CHARACTER_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveCharacterFilter(tab.id)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all touch-manipulation cursor-pointer ${
                   activeCharacterFilter === tab.id
                     ? 'bg-brand-500 text-white shadow-xs scale-105'
                     : 'bg-chat-panel border border-chat-border text-chat-textMuted hover:text-chat-textPrimary'
@@ -257,18 +257,18 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
                       key={`recent_anim_${emojiId}`}
                       type="button"
                       onClick={() => handleSelectCustomEmoji(emojiId)}
-                      onMouseEnter={() => setHoveredEmojiId(emojiId)}
-                      onMouseLeave={() => setHoveredEmojiId(null)}
-                      className="p-2 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary border border-chat-border hover:border-brand-500/40 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group"
+                      className="p-2 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary active:bg-brand-500/10 border border-chat-border hover:border-brand-500/40 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 group cursor-pointer touch-manipulation"
                     >
-                      <AnimatedCustomEmoji
-                        emojiId={emojiId}
-                        size={52}
-                        autoPlay={hoveredEmojiId === emojiId}
-                        loop={hoveredEmojiId === emojiId}
-                        interactive={false}
-                      />
-                      <span className="text-[10px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary capitalize truncate max-w-full">
+                      <div className="pointer-events-none">
+                        <AnimatedCustomEmoji
+                          emojiId={emojiId}
+                          size={52}
+                          autoPlay={false}
+                          loop={false}
+                          interactive={false}
+                        />
+                      </div>
+                      <span className="pointer-events-none text-[10px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary capitalize truncate max-w-full">
                         {emojiId.replace('_', ' ')}
                       </span>
                     </button>
@@ -295,36 +295,33 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5">
-                  {filteredCustomEmojis.map((emoji) => {
-                    const isHovered = hoveredEmojiId === emoji.id;
-                    return (
-                      <button
-                        key={emoji.id}
-                        type="button"
-                        onClick={() => handleSelectCustomEmoji(emoji.id)}
-                        onMouseEnter={() => setHoveredEmojiId(emoji.id)}
-                        onMouseLeave={() => setHoveredEmojiId(null)}
-                        className="p-2 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary border border-chat-border hover:border-brand-500/50 flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs group"
-                        title={`${emoji.name}: ${emoji.description}`}
-                      >
+                  {filteredCustomEmojis.map((emoji) => (
+                    <button
+                      key={emoji.id}
+                      type="button"
+                      onClick={() => handleSelectCustomEmoji(emoji.id)}
+                      className="p-2 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary active:bg-brand-500/10 border border-chat-border hover:border-brand-500/50 flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs group cursor-pointer touch-manipulation"
+                      title={`${emoji.name}: ${emoji.description}`}
+                    >
+                      <div className="pointer-events-none">
                         <AnimatedCustomEmoji
                           emojiId={emoji.id}
                           size={54}
-                          autoPlay={isHovered}
-                          loop={isHovered}
+                          autoPlay={false}
+                          loop={false}
                           interactive={false}
                         />
-                        <div className="text-center w-full">
-                          <p className="text-[11px] font-bold text-chat-textPrimary group-hover:text-brand-500 capitalize leading-tight truncate">
-                            {emoji.emotion}
-                          </p>
-                          <p className="text-[9px] text-chat-textMuted capitalize truncate">
-                            {emoji.character}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                      </div>
+                      <div className="pointer-events-none text-center w-full">
+                        <p className="text-[11px] font-bold text-chat-textPrimary group-hover:text-brand-500 capitalize leading-tight truncate">
+                          {emoji.emotion}
+                        </p>
+                        <p className="text-[9px] text-chat-textMuted capitalize truncate">
+                          {emoji.character}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -347,7 +344,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
                       key={`recent_${idx}`}
                       type="button"
                       onClick={() => handleSelectEmoji(emoji)}
-                      className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer"
+                      className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer touch-manipulation select-none"
                     >
                       {emoji}
                     </button>
@@ -370,7 +367,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
                         key={`${cat.id}_${idx}`}
                         type="button"
                         onClick={() => handleSelectEmoji(emoji)}
-                        className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer"
+                        className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer touch-manipulation select-none"
                       >
                         {emoji}
                       </button>

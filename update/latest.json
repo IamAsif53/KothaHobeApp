@@ -1,10 +1,10 @@
 {
-  "versionCode": 81,
-  "versionName": "1.1.36",
+  "versionCode": 82,
+  "versionName": "1.1.37",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "436ddfd64bdaabb63fface6c77afb56afd566aafdc256436e969ff6ff4943b40",
+  "sha256": "5883596b021966817c879f280d5db2fcad1a9e7fd447fb09563e230b3343e145",
   "releaseNotes": [
-    "Release v1.1.36 (Build 81)",
+    "Release v1.1.37 (Build 82)",
     "✨ Animated Custom Emoji Pack 1: 'Cute Friends' pack with 30 animated character emojis across 6 characters (Cat, Dog, Panda, Bunny, Bear, Fox) and 5 emotions (Laugh, Cry, Love, Angry, Surprised)",
     "😀 Dual Emoji Picker: Seamless switching between Standard Unicode emojis and Animated Custom emojis with character filters and animated recents",
     "🎭 Interactive Playback: Standalone animated emojis render large with transparent backgrounds, play on appearance, and bounce to replay on tap",

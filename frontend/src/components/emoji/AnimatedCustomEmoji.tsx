@@ -124,8 +124,9 @@ export const AnimatedCustomEmoji: React.FC<CustomEmojiRenderProps> = ({
   }, [emojiId, autoPlay]);
 
   const handleTap = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    if (!interactive && !onClick) return;
     if (interactive) {
+      e.stopPropagation();
       triggerAnimation();
     }
     if (onClick) onClick();
@@ -136,7 +137,7 @@ export const AnimatedCustomEmoji: React.FC<CustomEmojiRenderProps> = ({
     return (
       <div
         style={{ width: pixelSize, height: pixelSize }}
-        className={`inline-flex items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/30 text-brand-500 select-none ${className}`}
+        className={`inline-flex items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/30 text-brand-500 select-none pointer-events-none ${className}`}
         title={`Custom Emoji: ${emojiId}`}
       >
         <span className="text-xs font-mono font-bold">✨</span>
@@ -144,17 +145,20 @@ export const AnimatedCustomEmoji: React.FC<CustomEmojiRenderProps> = ({
     );
   }
 
+  const isClickable = Boolean(interactive || onClick);
+
   return (
     <motion.div
-      onClick={handleTap}
+      onClick={isClickable ? handleTap : undefined}
       whileHover={interactive ? { scale: 1.08 } : undefined}
       whileTap={interactive ? { scale: 0.92 } : undefined}
-      className={`relative inline-flex items-center justify-center select-none ${interactive ? 'cursor-pointer' : ''} ${className}`}
+      className={`relative inline-flex items-center justify-center select-none ${isClickable ? 'cursor-pointer' : 'pointer-events-none'} ${className}`}
       style={{
         width: pixelSize,
         height: pixelSize,
         minWidth: pixelSize,
         minHeight: pixelSize,
+        pointerEvents: isClickable ? 'auto' : 'none',
       }}
       role="img"
       aria-label={emoji.name || emoji.description}

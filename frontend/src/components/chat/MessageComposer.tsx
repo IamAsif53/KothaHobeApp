@@ -8,7 +8,7 @@ import { compressImageForUpload } from '../../utils/imageCompressor';
 interface MessageComposerProps {
   onSend: (
     text: string,
-    type?: 'text' | 'image' | 'audio' | 'document',
+    type?: 'text' | 'image' | 'audio' | 'document' | 'custom_emoji',
     attachment?: IAttachment,
     replyTo?: IReplyTo,
     localFile?: File | Blob
@@ -582,6 +582,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       {showEmoji && (
         <EmojiPicker
           onSelect={(emoji) => setText((prev) => prev + emoji)}
+          onSelectCustomEmoji={(emojiId) => {
+            onSend(emojiId, 'custom_emoji', undefined, replyingTo || undefined);
+            setShowEmoji(false);
+            if (onCancelReply) onCancelReply();
+          }}
           onClose={() => setShowEmoji(false)}
         />
       )}

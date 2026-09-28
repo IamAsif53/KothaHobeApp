@@ -10,7 +10,7 @@ export interface IUser {
   phoneNumber?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply' | 'custom_emoji';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface IStoryContext {
@@ -117,6 +117,7 @@ export interface IMessage {
   senderNickname?: string;
   text: string;
   type: MessageType;
+  customEmojiId?: string;
   status: MessageStatus;
   clientMessageId: string;
   attachment?: IAttachment;

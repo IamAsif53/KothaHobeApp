@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'call' | 'system' | 'story_reply' | 'custom_emoji';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 export interface IStoryContext {
@@ -63,6 +63,7 @@ export interface IMessage extends Document {
   senderNickname?: string;
   text: string;
   type: MessageType;
+  customEmojiId?: string;
   status: MessageStatus;
   clientMessageId: string;
   attachment?: IAttachment;
@@ -136,7 +137,7 @@ const ReplyToSchema = new Schema(
     messageId: { type: Schema.Types.ObjectId, ref: 'Message', required: true },
     text: { type: String, default: '' },
     senderName: { type: String, default: '' },
-    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply'], default: 'text' },
+    type: { type: String, enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply', 'custom_emoji'], default: 'text' },
     fileName: { type: String },
   },
   { _id: false }
@@ -192,8 +193,14 @@ const MessageSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply'],
+      enum: ['text', 'image', 'video', 'audio', 'document', 'call', 'system', 'story_reply', 'custom_emoji'],
       default: 'text',
+      index: true,
+    },
+    customEmojiId: {
+      type: String,
+      trim: true,
+      sparse: true,
       index: true,
     },
     status: {

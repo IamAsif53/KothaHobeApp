@@ -77,10 +77,10 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "⚙️ Settings Back Navigation Fix: Tapping back from any setting modal (Notifications, Privacy, Themes, Storage) or subpage (Blocked Accounts, Edit Profile) smoothly returns to Settings without kicking to chat or exiting",
-      "🏷️ Complete Nickname System: Nicknames appear prominently in group member lists and live in chat message bubbles; clearing a nickname immediately restores the original display name",
-      "👥 Social Group Management: Roles, invites, approval queues, events, live polls, permissions, and audit logs",
-      "☀️ Light & Dark Theme Excellence: High-contrast, premium, cohesive aesthetics across all dialogs and screens"
+      "✨ Animated Custom Emoji Pack 1: 'Cute Friends' pack with 30 animated character emojis across 6 characters (Cat, Dog, Panda, Bunny, Bear, Fox) and 5 emotions (Laugh, Cry, Love, Angry, Surprised)",
+      "😀 Dual Emoji Picker: Seamless switching between Standard Unicode emojis and Animated Custom emojis with character filters and animated recents",
+      "🎭 Interactive Playback: Standalone animated emojis render large with transparent backgrounds, play on appearance, and bounce to replay on tap",
+      "⚡ High Performance & Offline Ready: Vector SVGs with smooth hardware-accelerated Framer Motion physics, 0 network lag, and full real-time socket delivery"
     ],
     mandatory: false
   };

@@ -2,10 +2,11 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
 import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
-import { Message, MessageStatus, IAttachment, IReplyTo } from '../models/Message';
+import { Message, MessageStatus, MessageType, IAttachment, IReplyTo } from '../models/Message';
 import { sendPushNotification } from '../services/notificationService';
 import { registerCallHandlers } from './callHandler';
 import { registerGroupCallHandlers } from './groupCallHandler';
+import { isValidCustomEmojiId } from '../utils/customEmojiCatalog';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -139,9 +140,10 @@ export function setupSocketIO(io: SocketIOServer): void {
         receiverId?: string;
         text?: string;
         clientMessageId: string;
-        type?: 'text' | 'image' | 'video' | 'audio' | 'document';
+        type?: MessageType;
         attachment?: IAttachment;
         replyTo?: IReplyTo;
+        customEmojiId?: string;
       }) => {
         try {
           const {
@@ -152,6 +154,7 @@ export function setupSocketIO(io: SocketIOServer): void {
             type = 'text',
             attachment,
             replyTo,
+            customEmojiId,
           } = data;
 
           if (!conversationId || !clientMessageId) {
@@ -198,6 +201,11 @@ export function setupSocketIO(io: SocketIOServer): void {
               if (customNick) senderNickname = customNick;
             }
 
+            const validatedCustomEmojiId =
+              type === 'custom_emoji'
+                ? (isValidCustomEmojiId(customEmojiId) ? customEmojiId : (isValidCustomEmojiId(text) ? text.trim() : undefined))
+                : undefined;
+
             if (conversation.isGroup) {
               // Check sendMessages permission
               if (conversation.groupMeta?.permissions?.sendMessages === 'admins') {
@@ -227,6 +235,7 @@ export function setupSocketIO(io: SocketIOServer): void {
                 senderNickname,
                 text: text.trim(),
                 type,
+                customEmojiId: validatedCustomEmojiId,
                 status: 'delivered',
                 readBy: [{ user: userId as any, readAt: new Date() }],
                 clientMessageId,
@@ -241,6 +250,7 @@ export function setupSocketIO(io: SocketIOServer): void {
               if (type === 'image') previewText = '📷 Photo';
               else if (type === 'audio') previewText = '🎤 Voice message';
               else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
+              else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
 
               await Conversation.findByIdAndUpdate(conversationId, {
                 lastMessage: {
@@ -296,6 +306,7 @@ export function setupSocketIO(io: SocketIOServer): void {
                 receiverId: targetReceiverId,
                 text: text.trim(),
                 type,
+                customEmojiId: validatedCustomEmojiId,
                 status: initialStatus,
                 clientMessageId,
                 attachment: attachment || undefined,
@@ -308,6 +319,7 @@ export function setupSocketIO(io: SocketIOServer): void {
               if (type === 'image') previewText = '📷 Photo';
               else if (type === 'audio') previewText = '🎤 Voice message';
               else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
+              else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
 
               await Conversation.findByIdAndUpdate(conversationId, {
                 lastMessage: {
@@ -330,6 +342,7 @@ export function setupSocketIO(io: SocketIOServer): void {
               if (type === 'image') notifBody = '📷 Photo';
               else if (type === 'audio') notifBody = '🎤 Voice message';
               else if (type === 'document') notifBody = `📄 ${attachment?.fileName || 'Document'}`;
+              else if (type === 'custom_emoji') notifBody = '✨ Animated Emoji';
 
               sendPushNotification({
                 recipientId: targetReceiverId,

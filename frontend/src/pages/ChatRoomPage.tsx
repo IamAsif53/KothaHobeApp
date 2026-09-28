@@ -604,7 +604,7 @@ export const ChatRoomPage: React.FC = () => {
   // Send Message (Instant 0ms UI Rendering + Background Upload)
   const handleSendMessage = (
     text: string,
-    type: 'text' | 'image' | 'audio' | 'document' = 'text',
+    type: 'text' | 'image' | 'audio' | 'document' | 'custom_emoji' = 'text',
     attachment?: IAttachment,
     replyTo?: IReplyTo,
     localFile?: File | Blob
@@ -622,6 +622,7 @@ export const ChatRoomPage: React.FC = () => {
       if (customNick) mySenderNickname = customNick;
     }
 
+    const customEmojiId = type === 'custom_emoji' ? text.trim() : undefined;
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage: IMessage = {
       _id: tempId,
@@ -631,6 +632,7 @@ export const ChatRoomPage: React.FC = () => {
       senderNickname: isGroup ? mySenderNickname : undefined,
       text: text.trim(),
       type,
+      customEmojiId,
       attachment,
       replyTo,
       reactions: [],
@@ -676,7 +678,8 @@ export const ChatRoomPage: React.FC = () => {
               tempId,
               type,
               serverAttachment,
-              replyTo
+              replyTo,
+              customEmojiId
             );
           } else {
             // Mark failed on server error
@@ -704,7 +707,7 @@ export const ChatRoomPage: React.FC = () => {
       return;
     }
 
-    // 3. Regular text message dispatch via centralized sendMessage engine
+    // 3. Regular text/emoji message dispatch via centralized sendMessage engine
     sendMessage(
       conversationId,
       isGroup ? undefined : recipient?._id,
@@ -712,7 +715,8 @@ export const ChatRoomPage: React.FC = () => {
       tempId,
       type,
       attachment,
-      replyTo
+      replyTo,
+      customEmojiId
     );
   };
 

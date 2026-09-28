@@ -21,6 +21,8 @@ import {
   PhoneOff,
   Sparkles,
 } from 'lucide-react';
+import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
+import { getCustomEmojiById } from '../../data/customEmojiCatalog';
 
 interface MessageBubbleProps {
   message: IMessage;
@@ -163,6 +165,126 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     return acc;
   }, {});
 
+  const isCustomEmojiMessage =
+    message.type === 'custom_emoji' ||
+    (message.type === 'text' && /^:[a-z0-9_]+:$/.test(message.text.trim()) && Boolean(getCustomEmojiById(message.text.trim().slice(1, -1))));
+
+  const customEmojiId =
+    message.customEmojiId ||
+    (message.type === 'custom_emoji'
+      ? message.text?.trim()
+      : message.text?.trim().replace(/^:|:$/g, ''));
+
+  // Standalone Custom Emoji Message (Large, transparent background, no bulky bubble)
+  if (isCustomEmojiMessage && customEmojiId) {
+    return (
+      <div
+        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-2 px-3 group select-none animate-message-enter`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onActionMenu && onActionMenu(message);
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+      >
+        {/* Sender Name / Nickname in Group Chat */}
+        {isGroup && !isMe && (
+          <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 ml-1 leading-none select-none tracking-wide`}>
+            {senderDisplayName || message.senderNickname || 'Member'}
+          </p>
+        )}
+
+        {/* Reply Quote Banner */}
+        {message.replyTo && (
+          <div
+            onClick={() => onJumpToMessage && onJumpToMessage(String(message.replyTo?.messageId))}
+            className="mb-1.5 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-brand-500 text-xs cursor-pointer select-none hover:bg-black/10 transition-colors max-w-[240px]"
+          >
+            <div className="font-semibold text-brand-600 dark:text-brand-400 truncate">
+              {message.replyTo.senderName || 'Replied Message'}
+            </div>
+            <div className="text-chat-textSecondary truncate text-[11px]">
+              {message.replyTo.type === 'image'
+                ? '📷 Photo'
+                : message.replyTo.type === 'audio'
+                ? '🎤 Voice Message'
+                : message.replyTo.fileName
+                ? `📄 ${message.replyTo.fileName}`
+                : message.replyTo.text}
+            </div>
+          </div>
+        )}
+
+        {/* Large Animated Emoji Display */}
+        <div className="relative p-1 select-none flex flex-col items-center">
+          <AnimatedCustomEmoji
+            emojiId={customEmojiId}
+            size={136}
+            autoPlay={true}
+            interactive={true}
+          />
+
+          {/* Time and Status Badge */}
+          <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 backdrop-blur-xs text-white text-[10px] font-medium tracking-tight shadow-xs ${isMe ? 'self-end' : 'self-start'}`}>
+            <span>{formatMessageTime(message.createdAt)}</span>
+            {renderStatusIcon()}
+          </div>
+        </div>
+
+        {/* Aggregated Reaction Badges */}
+        {Object.keys(aggregatedReactions).length > 0 && (
+          <div
+            className={`flex items-center gap-1 -mt-1 z-10 select-none ${
+              isMe ? 'mr-2' : 'ml-2'
+            }`}
+          >
+            {Object.entries(aggregatedReactions).map(([emoji, count]) => (
+              <button
+                key={emoji}
+                onClick={() => onReact && onReact(message._id, emoji)}
+                className="px-1.5 py-0.5 rounded-full bg-chat-card border border-chat-border text-xs shadow-md flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform"
+              >
+                <span>{emoji}</span>
+                {count > 1 && <span className="text-[10px] text-chat-textSecondary font-bold">{count}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Failed Retry CTA */}
+        {isMe && message.status === 'failed' && (
+          <button
+            onClick={() => onRetry && onRetry(message)}
+            className="mt-1 flex items-center gap-1 text-xs text-red-500 hover:text-red-400 transition-colors pressable"
+          >
+            <AlertCircle className="w-3 h-3" />
+            <span>Failed. Tap to retry</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const renderTextWithInlineEmojis = (text: string) => {
+    const parts = text.split(/(:[a-z0-9_]+:)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith(':') && part.endsWith(':')) {
+        const emojiId = part.slice(1, -1);
+        const emojiData = getCustomEmojiById(emojiId);
+        if (emojiData) {
+          return (
+            <span key={index} className="inline-flex items-center justify-center align-middle mx-0.5">
+              <AnimatedCustomEmoji emojiId={emojiId} size={28} autoPlay={false} interactive={true} />
+            </span>
+          );
+        }
+      }
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+  };
+
   return (
     <div
       className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} my-1 px-3 group select-none animate-message-enter`}
@@ -225,7 +347,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
               className="w-full max-h-72 object-cover rounded-xl transition-transform group-hover/img:scale-[1.02]"
             />
             {message.text && (
-              <p className="px-2 py-1.5 text-sm whitespace-pre-wrap">{message.text}</p>
+              <p className="px-2 py-1.5 text-sm whitespace-pre-wrap">{renderTextWithInlineEmojis(message.text)}</p>
             )}
           </div>
         )}
@@ -279,7 +401,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {/* 4. Text Message */}
         {message.type === 'text' && (
           <p className="whitespace-pre-wrap pr-12 text-[14.5px] leading-relaxed">
-            {message.text}
+            {renderTextWithInlineEmojis(message.text)}
           </p>
         )}
 
@@ -414,6 +536,7 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.message.text === next.message.text &&
     prev.message.senderNickname === next.message.senderNickname &&
     prev.message.type === next.message.type &&
+    prev.message.customEmojiId === next.message.customEmojiId &&
     prev.message.storyContext === next.message.storyContext &&
     prev.message.attachment?.url === next.message.attachment?.url &&
     prev.message.attachment?.size === next.message.attachment?.size &&

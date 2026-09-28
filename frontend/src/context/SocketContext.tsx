@@ -16,6 +16,7 @@ interface OutboxItem {
   type?: string;
   attachment?: any;
   replyTo?: any;
+  customEmojiId?: string;
   timestamp: number;
 }
 
@@ -31,7 +32,8 @@ interface SocketContextType {
     clientMessageId: string,
     type?: string,
     attachment?: any,
-    replyTo?: any
+    replyTo?: any,
+    customEmojiId?: string
   ) => void;
   flushPendingOutbox: () => void;
   markAsRead: (conversationId: string) => void;
@@ -258,6 +260,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         type: item.type || 'text',
         attachment: item.attachment,
         replyTo: item.replyTo,
+        customEmojiId: item.customEmojiId,
       });
     });
   };
@@ -547,7 +550,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     clientMessageId: string,
     type: string = 'text',
     attachment?: any,
-    replyTo?: any
+    replyTo?: any,
+    customEmojiId?: string
   ) => {
     const outbox = getStoredOutbox();
     if (!outbox.some((item) => item.clientMessageId === clientMessageId)) {
@@ -559,6 +563,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         type,
         attachment,
         replyTo,
+        customEmojiId,
         timestamp: Date.now(),
       });
       saveOutbox(outbox);
@@ -573,6 +578,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         type,
         attachment,
         replyTo,
+        customEmojiId,
       });
     }
   };

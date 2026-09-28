@@ -77,11 +77,9 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ 7 Animated Custom Emoji Packs: 116 animated reactions across Cute Friends (30), Love (14), Funny (14), Mood (14), Celebration (14), Food & Drinks (14), and Animal Kingdom (16)",
-      "⭐ Favorites System: Star up to 50 of your favorite animated emojis with instant access under the Favorites tab",
-      "🕒 Recently Used: Smart recent reaction tracking (max 20, latest-first, deduplicated, persistent across sessions)",
-      "🔍 Fast Emoji Search & Categories: Instant live search across emoji names, emotions, characters, and keywords with horizontal category tabs",
-      "📱 Long-Press Preview Modal: Hold any emoji for an interactive high-res preview dialog with tap-to-replay, description, keyword tags, favorite toggle, and quick send"
+      "🎉 Multiple Message Reactions: Full support for both Unicode and Animated Custom Emoji reactions on messages with real-time sync, subtle personal reaction highlights, top-5 badges + overflow counter, and detailed Reaction User List modal",
+      "💥 Emoji Burst Effect: Lightweight Framer Motion SVG particle bursts (heart, laugh, party, fire, surprise, cry) on emoji-only messages that play on arrival and settle gracefully",
+      "✨ Contextual Animated Emoji Suggestions: 100% client-side, instant debounced keyword matching above the message composer with personalization ranking based on your favorites and recents"
     ],
     mandatory: false
   };

@@ -104,6 +104,14 @@ export type CustomEmojiEmotion =
   | 'sleep'
   | string;
 
+export type BurstType = 'heart' | 'laugh' | 'party' | 'fire' | 'surprise' | 'cry' | 'sparkle';
+
+export interface IEmojiBurstConfig {
+  enabled: boolean;
+  type: BurstType;
+  duration?: number; // in milliseconds, e.g. 750
+}
+
 export interface ICustomEmoji {
   id: string;
   packId: CustomEmojiPackId | string;
@@ -114,6 +122,7 @@ export interface ICustomEmoji {
   keywords: string[];
   duration: number; // in milliseconds (e.g. 2000)
   version: number;
+  burst?: IEmojiBurstConfig;
 }
 
 export interface IEmojiPack {

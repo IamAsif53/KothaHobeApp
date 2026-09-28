@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, Image as ImageIcon, Camera, FileText, Mic, X, Trash2, StopCircle, Settings as SettingsIcon } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
+import { EmojiSuggestionBar } from './EmojiSuggestionBar';
 import { IReplyTo, IAttachment } from '../../types';
+import { ICustomEmoji } from '../../types/customEmoji';
+import { getContextualEmojiSuggestions } from '../../data/customEmojiCatalog';
 import { ensureAudioPermission, openSystemAppSettings } from '../../services/nativeMediaService';
 import { compressImageForUpload } from '../../utils/imageCompressor';
 
@@ -29,6 +32,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  // Contextual Suggestions State
+  const [suggestions, setSuggestions] = useState<ICustomEmoji[]>([]);
+  const [isSuggestionDismissed, setIsSuggestionDismissed] = useState<boolean>(false);
+  const suggestionDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Pending attachment preview state
   const [pendingFile, setPendingFile] = useState<{ file: File; type: 'image' | 'document'; previewUrl?: string } | null>(null);
@@ -58,7 +66,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [text]);
 
-  // Clean up recording tracks on unmount
+  // Clean up recording tracks & timers on unmount
   useEffect(() => {
     return () => {
       if (activeStreamRef.current) {
@@ -66,6 +74,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       }
       if (recordTimerRef.current) {
         clearInterval(recordTimerRef.current);
+      }
+      if (suggestionDebounceTimerRef.current) {
+        clearTimeout(suggestionDebounceTimerRef.current);
       }
     };
   }, []);
@@ -78,6 +89,43 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     if (val.trim().length > 0 && now - lastTypingCallRef.current > 1800) {
       lastTypingCallRef.current = now;
       onTyping();
+    }
+
+    // Debounce contextual animated emoji matching (250ms)
+    if (suggestionDebounceTimerRef.current) {
+      clearTimeout(suggestionDebounceTimerRef.current);
+    }
+    suggestionDebounceTimerRef.current = setTimeout(() => {
+      if (!val || val.trim().length < 2) {
+        setSuggestions([]);
+        return;
+      }
+      try {
+        const recents = JSON.parse(localStorage.getItem('kotha_hobe_recent_animated_emojis') || '[]');
+        const favorites = JSON.parse(localStorage.getItem('kotha_hobe_favorite_animated_emojis') || '[]');
+        const results = getContextualEmojiSuggestions(val, recents, favorites, 4);
+        setSuggestions(results);
+        setIsSuggestionDismissed(false);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 250);
+  };
+
+  const handleSelectSuggestion = (emoji: ICustomEmoji) => {
+    const trimmed = text.trim();
+    const isPureTrigger = ['haha', 'hahaha', 'hahahaha', 'lol', 'lmao', 'rofl', 'love', 'love you', 'i love you', 'sad', 'cry', 'angry', 'mad', 'wow', 'omg', 'congrats', 'party', 'fire', 'pizza', 'burger', 'coffee'].includes(trimmed.toLowerCase());
+
+    if (isPureTrigger) {
+      onSend(emoji.id, 'custom_emoji', undefined, replyingTo || undefined);
+      setText('');
+      if (onCancelReply) onCancelReply();
+    } else {
+      setText((prev) => (prev ? `${prev} :${emoji.id}: ` : `:${emoji.id}: `));
+    }
+    setSuggestions([]);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
     }
   };
 
@@ -142,6 +190,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
     onSend(trimmed, 'text', undefined, replyingTo || undefined);
     setText('');
+    setSuggestions([]);
+    setIsSuggestionDismissed(false);
     setShowEmoji(false);
     if (onCancelReply) onCancelReply();
     if (textareaRef.current) {
@@ -476,6 +526,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <span>Documents</span>
           </button>
         </div>
+      )}
+
+      {/* Contextual Animated Emoji Suggestions Bar */}
+      {!isRecording && (
+        <EmojiSuggestionBar
+          suggestions={isSuggestionDismissed ? [] : suggestions}
+          onSelect={handleSelectSuggestion}
+          onDismiss={() => setIsSuggestionDismissed(true)}
+        />
       )}
 
       {/* Main Composer Bar */}

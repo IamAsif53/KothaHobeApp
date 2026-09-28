@@ -1388,6 +1388,27 @@ export const ALL_EMOJI_PACKS: IEmojiPack[] = [
   ANIMAL_MOODS_PACK,
 ];
 
+// Attach Burst Configuration to catalog emojis
+ALL_EMOJI_PACKS.forEach((pack) => {
+  pack.emojis.forEach((emoji) => {
+    if (emoji.emotion === 'love' || pack.id === 'love') {
+      emoji.burst = { enabled: true, type: 'heart', duration: 750 };
+    } else if (emoji.emotion === 'laugh' || emoji.emotion === 'rofl' || emoji.emotion === 'lol') {
+      emoji.burst = { enabled: true, type: 'laugh', duration: 650 };
+    } else if (pack.id === 'celebration' || emoji.character === 'party' || emoji.emotion === 'celebrate') {
+      emoji.burst = { enabled: true, type: 'party', duration: 800 };
+    } else if (emoji.character === 'fire' || emoji.emotion === 'fire') {
+      emoji.burst = { enabled: true, type: 'fire', duration: 700 };
+    } else if (emoji.emotion === 'surprised' || emoji.emotion === 'shocked' || emoji.emotion === 'mindblown') {
+      emoji.burst = { enabled: true, type: 'surprise', duration: 700 };
+    } else if (emoji.emotion === 'cry' || emoji.emotion === 'sad') {
+      emoji.burst = { enabled: true, type: 'cry', duration: 700 };
+    } else {
+      emoji.burst = { enabled: false, type: 'sparkle', duration: 500 };
+    }
+  });
+});
+
 export const ALL_CUSTOM_EMOJIS: ICustomEmoji[] = ALL_EMOJI_PACKS.flatMap((p) => p.emojis);
 
 const EMOJI_MAP: Record<string, ICustomEmoji> = ALL_CUSTOM_EMOJIS.reduce((acc, emoji) => {
@@ -1450,3 +1471,163 @@ export const CHARACTER_TABS: { id: 'all' | CustomEmojiCharacter; label: string; 
   { id: 'bear', label: 'Bear', icon: '🐻' },
   { id: 'fox', label: 'Fox', icon: '🦊' },
 ];
+
+// =========================================================================
+// CONTEXTUAL ANIMATED EMOJI SUGGESTIONS ENGINE (100% Client-Side, 0 Network)
+// =========================================================================
+
+const CONTEXT_KEYWORD_MAP: Record<string, string[]> = {
+  // Laugh
+  haha: ['cat_laugh', 'dog_laugh', 'funny_lol', 'funny_rofl'],
+  hahaha: ['cat_laugh', 'funny_rofl', 'dog_laugh', 'funny_lol'],
+  hahahaha: ['funny_rofl', 'cat_laugh', 'funny_lol'],
+  lol: ['funny_lol', 'cat_laugh', 'funny_rofl', 'dog_laugh'],
+  lmao: ['funny_rofl', 'funny_lol', 'cat_laugh'],
+  rofl: ['funny_rofl', 'cat_laugh', 'funny_lol'],
+  funny: ['funny_lol', 'cat_laugh', 'funny_giggle', 'dog_laugh'],
+  giggle: ['funny_giggle', 'cat_laugh', 'bunny_laugh'],
+  hehe: ['cat_laugh', 'bunny_laugh', 'funny_smirk'],
+  xd: ['funny_rofl', 'cat_laugh', 'funny_lol'],
+
+  // Love
+  love: ['love_heart', 'cat_love', 'dog_love', 'love_kiss'],
+  lovely: ['love_heart', 'cat_love', 'love_sparkle'],
+  'love you': ['love_heart', 'cat_love', 'love_kiss', 'dog_love'],
+  'i love you': ['love_heart', 'love_kiss', 'cat_love', 'love_couple'],
+  'miss you': ['love_miss_you', 'cat_love', 'panda_cry', 'love_heart'],
+  kiss: ['love_kiss', 'cat_love', 'love_heart'],
+  hug: ['love_hug', 'dog_love', 'animal_koala_hug'],
+  crush: ['love_heart_eyes', 'cat_love', 'love_blush'],
+  heart: ['love_heart', 'love_glow', 'cat_love'],
+  sweet: ['cat_love', 'bunny_love', 'food_cake'],
+
+  // Cry / Sad
+  sad: ['cat_cry', 'panda_cry', 'dog_cry', 'mood_sad'],
+  cry: ['cat_cry', 'panda_cry', 'dog_cry', 'bunny_cry'],
+  crying: ['cat_cry', 'panda_cry', 'dog_cry'],
+  tears: ['cat_cry', 'panda_cry', 'dog_cry'],
+  sob: ['panda_cry', 'cat_cry', 'dog_cry'],
+  hurt: ['panda_cry', 'love_broken_heart', 'cat_cry'],
+  heartbroken: ['love_broken_heart', 'panda_cry', 'cat_cry'],
+  pain: ['panda_cry', 'love_broken_heart', 'cat_cry'],
+
+  // Angry
+  angry: ['cat_angry', 'mood_angry', 'dog_angry'],
+  mad: ['cat_angry', 'dog_angry', 'mood_angry'],
+  furious: ['mood_angry', 'cat_angry', 'animal_lion_roar'],
+  rage: ['mood_angry', 'cat_angry', 'party_fire'],
+  annoyed: ['cat_angry', 'funny_facepalm', 'funny_awkward'],
+  hate: ['mood_angry', 'cat_angry', 'funny_facepalm'],
+
+  // Surprised / Shocked
+  wow: ['cat_surprised', 'funny_mindblown', 'dog_surprised'],
+  omg: ['cat_surprised', 'funny_mindblown', 'mood_shocked'],
+  really: ['cat_surprised', 'mood_confused', 'dog_surprised'],
+  'no way': ['funny_mindblown', 'cat_surprised', 'mood_shocked'],
+  what: ['cat_surprised', 'mood_confused', 'funny_mindblown'],
+  shocked: ['mood_shocked', 'cat_surprised', 'funny_mindblown'],
+  mindblown: ['funny_mindblown', 'cat_surprised', 'mood_shocked'],
+
+  // Celebration
+  congrats: ['party_congrats', 'party_popper', 'party_trophy', 'party_star'],
+  congratulations: ['party_congrats', 'party_popper', 'party_trophy'],
+  yay: ['party_popper', 'party_dance', 'cat_love'],
+  party: ['party_popper', 'party_birthday', 'party_confetti'],
+  birthday: ['party_birthday', 'party_popper', 'food_cake'],
+  'happy birthday': ['party_birthday', 'party_popper', 'food_cake'],
+  hbd: ['party_birthday', 'party_popper', 'food_cake'],
+  cheers: ['party_champagne', 'party_cheers', 'party_popper'],
+  tada: ['party_popper', 'party_confetti', 'party_star'],
+
+  // Fire / Cool / Awesome
+  fire: ['party_fire', 'mood_cool', 'animal_penguin_cool'],
+  lit: ['party_fire', 'mood_cool', 'party_dance'],
+  awesome: ['party_fire', 'mood_cool', 'party_popper'],
+  amazing: ['party_star', 'party_fire', 'cat_surprised'],
+  cool: ['mood_cool', 'animal_penguin_cool', 'party_fire'],
+  goat: ['party_trophy', 'party_fire', 'party_star'],
+
+  // Food & Drinks
+  pizza: ['food_pizza', 'food_yummy', 'food_hungry'],
+  burger: ['food_burger', 'food_yummy', 'food_hungry'],
+  coffee: ['food_coffee', 'food_tea', 'food_donut'],
+  tea: ['food_tea', 'food_coffee', 'food_boba'],
+  cake: ['food_cake', 'party_birthday', 'food_yummy'],
+  hungry: ['food_hungry', 'food_pizza', 'food_burger'],
+  yummy: ['food_yummy', 'food_icecream', 'food_cake'],
+  boba: ['food_boba', 'food_tea', 'food_donut'],
+  donut: ['food_donut', 'food_coffee', 'food_cake'],
+
+  // Animals
+  cat: ['cat_laugh', 'cat_love', 'cat_cry', 'cat_surprised'],
+  dog: ['dog_love', 'dog_laugh', 'dog_cry', 'dog_surprised'],
+  panda: ['panda_love', 'panda_cry', 'panda_laugh', 'panda_surprised'],
+  bunny: ['bunny_laugh', 'bunny_love', 'bunny_cry', 'bunny_surprised'],
+  fox: ['fox_love', 'fox_laugh', 'fox_surprised', 'fox_cry'],
+  penguin: ['animal_penguin_cool', 'animal_penguin_waddle'],
+  koala: ['animal_koala_sleepy', 'animal_koala_hug'],
+  frog: ['animal_frog_sip', 'animal_frog_derp'],
+  duck: ['animal_duck_dance', 'animal_duck_quack'],
+  lion: ['animal_lion_roar', 'party_fire'],
+  owl: ['animal_owl_smart', 'animal_owl_wink'],
+};
+
+/**
+ * Generates ranked contextual animated emoji suggestions for a given text input.
+ * Evaluates phrase matches, word triggers, and personalizes based on user's recents and favorites.
+ */
+export const getContextualEmojiSuggestions = (
+  text: string,
+  userRecents: string[] = [],
+  userFavorites: string[] = [],
+  maxCount: number = 4
+): ICustomEmoji[] => {
+  if (!text || !text.trim()) return [];
+
+  const clean = text.toLowerCase().trim().replace(/[!?,.:;~]/g, '');
+  if (clean.length < 2) return [];
+
+  const matchedIds = new Set<string>();
+
+  // 1. Check for multi-word phrase matches first
+  for (const [phrase, ids] of Object.entries(CONTEXT_KEYWORD_MAP)) {
+    if (phrase.includes(' ') && clean.includes(phrase)) {
+      ids.forEach((id) => matchedIds.add(id));
+    }
+  }
+
+  // 2. Check for individual word matches
+  const words = clean.split(/\s+/);
+  for (const word of words) {
+    if (CONTEXT_KEYWORD_MAP[word]) {
+      CONTEXT_KEYWORD_MAP[word].forEach((id) => matchedIds.add(id));
+    }
+  }
+
+  if (matchedIds.size === 0) {
+    return [];
+  }
+
+  // 3. Resolve emojis and score based on personalization
+  const scoredEmojis = Array.from(matchedIds)
+    .map((id) => getCustomEmojiById(id))
+    .filter((e): e is ICustomEmoji => e !== null)
+    .map((emoji) => {
+      let score = 10;
+      // Boost if in user's favorites
+      if (userFavorites.includes(emoji.id)) {
+        score += 8;
+      }
+      // Boost if in user's recent emojis
+      const recentIdx = userRecents.indexOf(emoji.id);
+      if (recentIdx > -1) {
+        score += Math.max(1, 6 - recentIdx);
+      }
+      return { emoji, score };
+    });
+
+  // 4. Sort descending by score and slice to max count
+  scoredEmojis.sort((a, b) => b.score - a.score);
+  return scoredEmojis.slice(0, maxCount).map((item) => item.emoji);
+};
+

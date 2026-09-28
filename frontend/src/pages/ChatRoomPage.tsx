@@ -16,6 +16,8 @@ import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { GroupCallBanner } from '../components/call/GroupCallBanner';
 import { MessageSkeleton } from '../components/common/Skeleton';
 import { formatLastSeen, formatChatListDate } from '../utils/dateUtils';
+import { ReactionListModal } from '../components/chat/ReactionListModal';
+import { AnimatedCustomEmoji } from '../components/emoji/AnimatedCustomEmoji';
 import {
   openDocumentInNativeApp,
   downloadDocumentToDevice,
@@ -36,9 +38,11 @@ import {
   ExternalLink,
   Download,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
+const QUICK_REACTIONS = ['❤️', '😂', '🔥', '👍', '😮', '😢', '👏'];
+const QUICK_ANIMATED_REACTIONS = ['cat_laugh', 'dog_love', 'love_heart', 'party_popper', 'funny_lol', 'panda_cry'];
 
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -126,6 +130,9 @@ export const ChatRoomPage: React.FC = () => {
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
   const [actionMenuMessage, setActionMenuMessage] = useState<IMessage | null>(null);
+  const [reactionListMessage, setReactionListMessage] = useState<IMessage | null>(null);
+  const [reactionListInitialEmoji, setReactionListInitialEmoji] = useState<string>('all');
+  const [showAnimatedReactionTray, setShowAnimatedReactionTray] = useState<boolean>(false);
 
   // Toast / Status Message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -884,23 +891,67 @@ export const ChatRoomPage: React.FC = () => {
             </div>
 
             {/* Quick Reactions Bar */}
-            <div className="flex items-center justify-between bg-chat-surfaceSecondary p-2 rounded-xl text-2xl">
-              {QUICK_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    handleReact(actionMenuMessage._id, emoji);
-                    setActionMenuMessage(null);
-                  }}
-                  className="hover:scale-125 active:scale-95 transition-transform p-1 cursor-pointer"
-                >
-                  {emoji}
-                </button>
-              ))}
+            <div className="space-y-2 bg-chat-surfaceSecondary p-2.5 rounded-2xl border border-chat-border">
+              {/* Unicode Reactions */}
+              <div className="flex items-center justify-between text-2xl">
+                {QUICK_REACTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      handleReact(actionMenuMessage._id, emoji);
+                      setActionMenuMessage(null);
+                    }}
+                    className="hover:scale-125 active:scale-95 transition-transform p-1 cursor-pointer touch-manipulation"
+                    title={`React ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+
+              {/* Animated Custom Emoji Reactions */}
+              <div className="pt-2 border-t border-chat-border/60 flex items-center justify-between gap-1">
+                {QUICK_ANIMATED_REACTIONS.map((emojiId) => (
+                  <button
+                    key={emojiId}
+                    type="button"
+                    onClick={() => {
+                      handleReact(actionMenuMessage._id, emojiId);
+                      setActionMenuMessage(null);
+                    }}
+                    className="p-1 rounded-xl bg-chat-panel/80 hover:bg-chat-panel active:scale-95 transition-transform cursor-pointer border border-chat-border/50 hover:border-brand-500/50 shadow-2xs"
+                    title={`React with animated ${emojiId}`}
+                  >
+                    <AnimatedCustomEmoji
+                      emojiId={emojiId}
+                      size={28}
+                      autoPlay={false}
+                      loop={false}
+                      interactive={false}
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Action Items */}
             <div className="space-y-1 divide-y divide-chat-divider text-sm">
+              {actionMenuMessage.reactions && actionMenuMessage.reactions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const msg = actionMenuMessage;
+                    setActionMenuMessage(null);
+                    setReactionListMessage(msg);
+                    setReactionListInitialEmoji('all');
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-brand-600 dark:text-brand-400 font-semibold rounded-lg transition-colors text-left"
+                >
+                  <Sparkles className="w-4 h-4 text-brand-500" />
+                  <span>View All Reactions ({actionMenuMessage.reactions.length})</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   handleReply(actionMenuMessage);
@@ -1217,11 +1268,16 @@ export const ChatRoomPage: React.FC = () => {
                   isMe={isMine}
                   isGroup={isGroup}
                   senderDisplayName={getSenderName(msg)}
+                  currentUserId={user?._id}
                   onOpenMedia={handleOpenMedia}
                   onOpenDocument={handleOpenDocument}
                   onDownloadDocument={handleDownloadDocument}
                   onReply={handleReply}
                   onReact={handleReact}
+                  onOpenReactions={(targetMsg, emoji) => {
+                    setReactionListMessage(targetMsg);
+                    setReactionListInitialEmoji(emoji || 'all');
+                  }}
                   onDelete={handleDelete}
                   onRetry={handleRetryMessage}
                   onActionMenu={setActionMenuMessage}
@@ -1253,6 +1309,19 @@ export const ChatRoomPage: React.FC = () => {
         onCancelReply={() => setReplyingTo(null)}
         disabled={!isGroup && !recipient}
       />
+
+      {/* Reaction User List Modal / Bottom Sheet */}
+      {reactionListMessage && (
+        <ReactionListModal
+          message={reactionListMessage}
+          currentUserId={user?._id}
+          participants={conversation?.participants}
+          groupMeta={conversation?.groupMeta}
+          initialEmoji={reactionListInitialEmoji}
+          onRemoveReaction={handleReact}
+          onClose={() => setReactionListMessage(null)}
+        />
+      )}
     </div>
   );
 };

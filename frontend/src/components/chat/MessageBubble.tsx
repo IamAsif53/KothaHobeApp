@@ -22,19 +22,22 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
-import { getCustomEmojiById } from '../../data/customEmojiCatalog';
+import { EmojiBurstEffect } from '../emoji/EmojiBurstEffect';
+import { getCustomEmojiById, isCustomEmojiId } from '../../data/customEmojiCatalog';
 
 interface MessageBubbleProps {
   message: IMessage;
   isMe: boolean;
   isGroup?: boolean;
   senderDisplayName?: string;
+  currentUserId?: string;
   onRetry?: (message: IMessage) => void;
   onOpenMedia?: (message: IMessage) => void;
   onOpenDocument?: (message: IMessage) => void;
   onDownloadDocument?: (message: IMessage) => void;
   onReply?: (message: IMessage) => void;
   onReact?: (messageId: string, emoji: string) => void;
+  onOpenReactions?: (message: IMessage, emoji?: string) => void;
   onDelete?: (messageId: string, deleteForEveryone: boolean) => void;
   onJumpToMessage?: (messageId: string) => void;
   onActionMenu?: (message: IMessage) => void;
@@ -68,12 +71,14 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   isMe,
   isGroup = false,
   senderDisplayName,
+  currentUserId,
   onRetry,
   onOpenMedia,
   onOpenDocument,
   onDownloadDocument,
   onReply,
   onReact,
+  onOpenReactions,
   onDelete,
   onJumpToMessage,
   onActionMenu,
@@ -159,11 +164,31 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Group reactions by emoji
-  const aggregatedReactions = (message.reactions || []).reduce<Record<string, number>>((acc, curr) => {
-    acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
-    return acc;
-  }, {});
+  // Group and sort multiple reactions
+  interface ReactionAggregate {
+    emoji: string;
+    count: number;
+    isMine: boolean;
+  }
+
+  const reactionsList: ReactionAggregate[] = Object.entries(
+    (message.reactions || []).reduce<Record<string, { count: number; isMine: boolean }>>((acc, curr) => {
+      if (!acc[curr.emoji]) {
+        acc[curr.emoji] = { count: 0, isMine: false };
+      }
+      acc[curr.emoji].count += 1;
+      if (currentUserId && curr.userId === currentUserId) {
+        acc[curr.emoji].isMine = true;
+      }
+      return acc;
+    }, {})
+  )
+    .map(([emoji, data]) => ({ emoji, count: data.count, isMine: data.isMine }))
+    .sort((a, b) => b.count - a.count);
+
+  const MAX_VISIBLE_REACTIONS = 5;
+  const visibleReactions = reactionsList.slice(0, MAX_VISIBLE_REACTIONS);
+  const hiddenReactionsCount = Math.max(0, reactionsList.length - MAX_VISIBLE_REACTIONS);
 
   const isCustomEmojiMessage =
     message.type === 'custom_emoji' ||
@@ -175,7 +200,72 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       ? message.text?.trim()
       : message.text?.trim().replace(/^:|:$/g, ''));
 
-  // Standalone Custom Emoji Message (Large, transparent background, no bulky bubble)
+  const customEmojiData = customEmojiId ? getCustomEmojiById(customEmojiId) : null;
+  const burstConfig = customEmojiData?.burst;
+
+  // Render Reaction Badges Row
+  const renderReactionBadges = () => {
+    if (reactionsList.length === 0) return null;
+
+    return (
+      <div
+        className={`flex items-center flex-wrap gap-1 mt-1 z-10 select-none ${
+          isMe ? 'self-end mr-1' : 'self-start ml-1'
+        }`}
+      >
+        {visibleReactions.map(({ emoji, count, isMine }) => {
+          const isCustom = isCustomEmojiId(emoji);
+
+          return (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => onReact && onReact(message._id, emoji)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenReactions && onOpenReactions(message, emoji);
+              }}
+              className={`px-2 py-0.5 rounded-full border text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer select-none active:scale-95 ${
+                isMine
+                  ? 'bg-brand-500/15 border-brand-500/50 text-brand-600 dark:text-brand-400 font-bold'
+                  : 'bg-chat-card/95 border-chat-border text-chat-textPrimary hover:bg-chat-surfaceSecondary'
+              }`}
+              title={isMine ? 'You reacted. Tap to remove' : 'Tap to react or hold for details'}
+            >
+              {isCustom ? (
+                <div className="pointer-events-none">
+                  <AnimatedCustomEmoji
+                    emojiId={emoji}
+                    size={18}
+                    autoPlay={false}
+                    loop={false}
+                    interactive={false}
+                  />
+                </div>
+              ) : (
+                <span className="text-xs leading-none">{emoji}</span>
+              )}
+              <span className="text-[10px] font-mono font-bold leading-none">{count}</span>
+            </button>
+          );
+        })}
+
+        {hiddenReactionsCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onOpenReactions && onOpenReactions(message, 'all')}
+            className="px-2 py-0.5 rounded-full bg-chat-card/95 border border-chat-border text-chat-textMuted hover:text-chat-textPrimary text-[11px] font-bold shadow-xs flex items-center transition-all active:scale-95 cursor-pointer"
+            title="View all reactions"
+          >
+            +{hiddenReactionsCount}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Standalone Custom Emoji Message (Large, transparent background, no bulky bubble + Emoji Burst)
   if (isCustomEmojiMessage && customEmojiId) {
     return (
       <div
@@ -217,8 +307,15 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Large Animated Emoji Display */}
+        {/* Large Animated Emoji Display with Optional Burst */}
         <div className="relative p-1 select-none flex flex-col items-center">
+          {burstConfig?.enabled && (
+            <EmojiBurstEffect
+              type={burstConfig.type}
+              duration={burstConfig.duration || 750}
+            />
+          )}
+
           <AnimatedCustomEmoji
             emojiId={customEmojiId}
             size={136}
@@ -233,25 +330,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         </div>
 
-        {/* Aggregated Reaction Badges */}
-        {Object.keys(aggregatedReactions).length > 0 && (
-          <div
-            className={`flex items-center gap-1 -mt-1 z-10 select-none ${
-              isMe ? 'mr-2' : 'ml-2'
-            }`}
-          >
-            {Object.entries(aggregatedReactions).map(([emoji, count]) => (
-              <button
-                key={emoji}
-                onClick={() => onReact && onReact(message._id, emoji)}
-                className="px-1.5 py-0.5 rounded-full bg-chat-card border border-chat-border text-xs shadow-md flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform"
-              >
-                <span>{emoji}</span>
-                {count > 1 && <span className="text-[10px] text-chat-textSecondary font-bold">{count}</span>}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Multiple Reaction Badges */}
+        {renderReactionBadges()}
 
         {/* Failed Retry CTA */}
         {isMe && message.status === 'failed' && (
@@ -270,12 +350,12 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   const renderTextWithInlineEmojis = (text: string) => {
     const parts = text.split(/(:[a-z0-9_]+:)/g);
     return parts.map((part, index) => {
-      if (part.startsWith(':') && part.endsWith(':')) {
-        const emojiId = part.slice(1, -1);
-        const emojiData = getCustomEmojiById(emojiId);
-        if (emojiData) {
+      const match = part.match(/^:([a-z0-9_]+):$/);
+      if (match) {
+        const emojiId = match[1];
+        if (getCustomEmojiById(emojiId)) {
           return (
-            <span key={index} className="inline-flex items-center justify-center align-middle mx-0.5">
+            <span key={index} className="inline-flex items-center align-middle mx-0.5">
               <AnimatedCustomEmoji emojiId={emojiId} size={28} autoPlay={false} interactive={true} />
             </span>
           );
@@ -297,27 +377,26 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchCancel}
     >
+      {/* Sender Name / Nickname in Group Chat */}
+      {isGroup && !isMe && (
+        <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 ml-2 leading-none select-none tracking-wide`}>
+          {senderDisplayName || message.senderNickname || 'Member'}
+        </p>
+      )}
 
       {/* Main Bubble Container */}
       <div
-        className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl shadow-xs transition-all select-text overflow-hidden ${
+        className={`relative max-w-[82%] sm:max-w-[70%] rounded-2xl p-2.5 pb-5 transition-all shadow-xs select-none ${
           isMe
-            ? 'bg-chat-bubbleOut text-chat-bubbleOutText rounded-tr-none'
-            : 'bg-chat-bubbleIn text-chat-bubbleInText rounded-tl-none border border-chat-bubbleInBorder'
-        } ${message.type === 'image' ? 'p-1 pb-6' : 'px-3.5 py-2'}`}
+            ? 'bg-chat-bubbleOutBg text-chat-bubbleOutText rounded-tr-xs ml-auto border border-brand-500/10'
+            : 'bg-chat-bubbleInBg text-chat-bubbleInText rounded-tl-xs mr-auto border border-chat-border'
+        }`}
       >
-        {/* Sender Name / Nickname in Group Chat */}
-        {isGroup && !isMe && (
-          <p className={`text-[11px] font-bold ${getSenderColor(message.senderId)} mb-1 leading-none select-none tracking-wide`}>
-            {senderDisplayName || message.senderNickname || 'Member'}
-          </p>
-        )}
-
         {/* Reply Quote Banner */}
         {message.replyTo && (
           <div
             onClick={() => onJumpToMessage && onJumpToMessage(String(message.replyTo?.messageId))}
-            className="mb-2 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-brand-500 text-xs cursor-pointer select-none hover:bg-black/10 transition-colors"
+            className="mb-1.5 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-brand-500 text-xs cursor-pointer select-none hover:bg-black/10 transition-colors"
           >
             <div className="font-semibold text-brand-600 dark:text-brand-400 truncate">
               {message.replyTo.senderName || 'Replied Message'}
@@ -334,127 +413,117 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* 1. Image Message */}
-        {message.type === 'image' && message.attachment && (
-          <div
-            onClick={() => onOpenMedia && onOpenMedia(message)}
-            className="cursor-pointer overflow-hidden rounded-xl bg-black/10 dark:bg-black/20 relative group/img"
-          >
-            <img
-              src={getMediaUrl(message.attachment.url)}
-              alt={message.attachment.fileName || 'Photo'}
-              loading="lazy"
-              className="w-full max-h-72 object-cover rounded-xl transition-transform group-hover/img:scale-[1.02]"
-            />
-            {message.text && (
-              <p className="px-2 py-1.5 text-sm whitespace-pre-wrap">{renderTextWithInlineEmojis(message.text)}</p>
-            )}
-          </div>
-        )}
-
-        {/* 2. Document Message Card with Separate Native Open & Download */}
-        {message.type === 'document' && message.attachment && (
-          <div
-            onClick={() => onOpenDocument && onOpenDocument(message)}
-            className="flex flex-col gap-2 p-2.5 rounded-xl bg-black/5 dark:bg-black/20 hover:bg-black/10 dark:hover:bg-black/30 cursor-pointer border border-chat-border transition-colors min-w-[220px]"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-500 flex items-center justify-center flex-shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-chat-textPrimary truncate">
-                  {message.attachment.fileName}
-                </div>
-                <div className="text-[11px] text-chat-textSecondary">
-                  {formatFileSize(message.attachment.size)} • Tap to open
-                </div>
-              </div>
+        {/* Story Context Quote Banner */}
+        {message.storyContext && (
+          <div className="mb-2 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-purple-500 text-xs">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                <span>Story Reply</span>
+              </span>
+              {message.storyContext.storyOwnerName && (
+                <span className="text-[10px] text-chat-textSecondary">
+                  to {message.storyContext.storyOwnerName}'s story
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-chat-divider">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDownloadDocument && onDownloadDocument(message);
-                }}
-                className="flex items-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-semibold py-1 px-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download</span>
-              </button>
-              <span className="text-[10px] text-chat-textTertiary">Native View</span>
-            </div>
-          </div>
-        )}
-
-        {/* 3. Audio / Voice Message */}
-        {message.type === 'audio' && message.attachment && (
-          <VoiceMessagePlayer
-            audioUrl={message.attachment.url}
-            duration={message.attachment.duration}
-            isMe={isMe}
-          />
-        )}
-
-        {/* 4. Text Message */}
-        {message.type === 'text' && (
-          <p className="whitespace-pre-wrap pr-12 text-[14.5px] leading-relaxed">
-            {renderTextWithInlineEmojis(message.text)}
-          </p>
-        )}
-
-        {/* 4.5. Story Reply Message Card */}
-        {message.type === 'story_reply' && (
-          <div className="flex flex-col gap-2 min-w-[200px] pr-8 select-none">
-            <div className="p-2 rounded-xl bg-black/5 dark:bg-black/20 border border-chat-border flex items-center gap-2.5">
-              {message.storyContext?.storyType === 'image' && (message.storyContext.thumbnailUrl || message.storyContext.mediaUrl) ? (
+            <div className="flex items-center gap-2">
+              {message.storyContext.thumbnailUrl || message.storyContext.mediaUrl ? (
                 <img
-                  src={message.storyContext.thumbnailUrl || message.storyContext.mediaUrl}
-                  alt="Story preview"
-                  className="w-10 h-10 object-cover rounded-lg flex-shrink-0"
+                  src={getMediaUrl(message.storyContext.thumbnailUrl || message.storyContext.mediaUrl || '')}
+                  alt="Story"
+                  className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-[10px] text-white font-bold p-1 text-center line-clamp-2 flex-shrink-0 shadow-sm">
-                  Story
+                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-xs font-bold text-purple-600 flex-shrink-0">
+                  Aa
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 text-[10px] text-brand-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Story Reply</span>
-                </div>
-                <p className="text-xs text-chat-textSecondary truncate font-medium mt-0.5">
-                  {message.storyContext?.originalText || (message.storyContext?.storyType === 'image' ? 'Photo story' : 'Story')}
-                </p>
-                {message.storyContext?.reaction && (
-                  <span className="inline-block mt-0.5 text-base leading-none">
+              <div className="min-w-0 flex-1">
+                {message.storyContext.originalText && (
+                  <p className="text-[11px] text-chat-textSecondary truncate italic">
+                    "{message.storyContext.originalText}"
+                  </p>
+                )}
+                {message.storyContext.reaction && (
+                  <div className="text-base mt-0.5">
                     {message.storyContext.reaction}
-                  </span>
+                  </div>
                 )}
               </div>
             </div>
-
-            {/* Comment text if present */}
-            {message.text && (
-              <p className={`whitespace-pre-wrap text-[14.5px] leading-relaxed ${isMe ? 'text-chat-bubbleOutText' : 'text-chat-bubbleInText'}`}>
-                {message.text}
-              </p>
-            )}
           </div>
         )}
 
-        {/* 5. Call Record Event */}
-        {message.type === 'call' && (
-          <div className="flex items-center gap-3 py-1 pr-12">
-            <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
-                  ? 'bg-red-500/20 text-red-500'
-                  : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-              }`}
+        {/* Image / Video Attachment */}
+        {message.type === 'image' && message.attachment && (
+          <div className="mb-1 rounded-xl overflow-hidden cursor-pointer" onClick={() => onOpenMedia && onOpenMedia(message)}>
+            <img
+              src={getMediaUrl(message.attachment.url)}
+              alt="Attachment"
+              className="max-h-72 w-full object-cover rounded-xl hover:opacity-95 transition-opacity"
+              loading="lazy"
+            />
+          </div>
+        )}
+
+        {/* Audio / Voice Message */}
+        {message.type === 'audio' && message.attachment && (
+          <div className="py-1">
+            <VoiceMessagePlayer
+              audioUrl={getMediaUrl(message.attachment.url)}
+              duration={message.attachment.duration || 0}
+              isMe={isMe}
+            />
+          </div>
+        )}
+
+        {/* Document Attachment */}
+        {message.type === 'document' && message.attachment && (
+          <div
+            onClick={() => onOpenDocument ? onOpenDocument(message) : onDownloadDocument && onDownloadDocument(message)}
+            className="flex items-center gap-3 p-2.5 rounded-xl bg-black/5 dark:bg-black/20 hover:bg-black/10 dark:hover:bg-black/30 transition-colors cursor-pointer mb-1 border border-chat-border/50"
+          >
+            <div className="p-2 rounded-lg bg-brand-500/20 text-brand-500 flex-shrink-0">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold truncate text-chat-textPrimary">
+                {message.attachment.fileName || 'Document'}
+              </div>
+              <div className="text-[10px] text-chat-textSecondary">
+                {formatFileSize(message.attachment.size)}
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadDocument && onDownloadDocument(message);
+              }}
+              className="p-1.5 rounded-full hover:bg-chat-surfaceSecondary text-chat-textSecondary hover:text-chat-textPrimary transition-colors flex-shrink-0"
+              title="Download file"
             >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Text Message with Inline Custom Emoji support */}
+        {message.text && message.type !== 'custom_emoji' && (
+          <div className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap select-text pr-10">
+            {renderTextWithInlineEmojis(message.text)}
+          </div>
+        )}
+
+        {/* Voice/Video Call Event Card */}
+        {message.type === 'call' && (
+          <div className="flex items-center gap-2.5 py-1 pr-10">
+            <div className={`p-2 rounded-full ${
+              message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
+                ? 'bg-red-500/15 text-red-500'
+                : 'bg-emerald-500/15 text-emerald-500'
+            }`}>
               {message.callDetails?.status === 'missed' ? (
                 <PhoneMissed className="w-4 h-4" />
               ) : message.callDetails?.status === 'declined' ? (
@@ -466,7 +535,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
               )}
             </div>
             <div>
-              <div className={`text-sm font-semibold ${isMe ? 'text-chat-bubbleOutText' : 'text-chat-bubbleInText'}`}>
+              <div className="text-xs font-semibold">
                 {message.text || 'Voice Call'}
               </div>
               <div className={`text-[11px] ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/70'}`}>
@@ -491,25 +560,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         </div>
       </div>
 
-      {/* Aggregated Reaction Badges */}
-      {Object.keys(aggregatedReactions).length > 0 && (
-        <div
-          className={`flex items-center gap-1 -mt-2.5 z-10 select-none ${
-            isMe ? 'mr-2' : 'ml-2'
-          }`}
-        >
-          {Object.entries(aggregatedReactions).map(([emoji, count]) => (
-            <button
-              key={emoji}
-              onClick={() => onReact && onReact(message._id, emoji)}
-              className="px-1.5 py-0.5 rounded-full bg-chat-card border border-chat-border text-xs shadow-md flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform"
-            >
-              <span>{emoji}</span>
-              {count > 1 && <span className="text-[10px] text-chat-textSecondary font-bold">{count}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Multiple Reaction Badges */}
+      {renderReactionBadges()}
 
       {/* Failed Retry CTA */}
       {isMe && message.status === 'failed' && (
@@ -530,6 +582,7 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.isMe === next.isMe &&
     prev.isGroup === next.isGroup &&
     prev.senderDisplayName === next.senderDisplayName &&
+    prev.currentUserId === next.currentUserId &&
     prev.message._id === next.message._id &&
     prev.message.clientMessageId === next.message.clientMessageId &&
     prev.message.status === next.message.status &&
@@ -541,6 +594,9 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.message.attachment?.url === next.message.attachment?.url &&
     prev.message.attachment?.size === next.message.attachment?.size &&
     prev.message.callDetails?.status === next.message.callDetails?.status &&
-    prev.message.callDetails?.duration === next.message.callDetails?.duration
+    prev.message.callDetails?.duration === next.message.callDetails?.duration &&
+    prev.message.reactions === next.message.reactions
   );
 });
+
+export default MessageBubble;

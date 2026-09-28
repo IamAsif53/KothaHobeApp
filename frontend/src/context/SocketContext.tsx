@@ -421,7 +421,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const bodyText = previewPref ? (previewText || 'Sent a message') : 'Sent you a new message';
 
-        // 1. Dispatch In-App Interactive Notification Banner Event
+        // 1. Dispatch In-App Interactive Notification Banner Event (when inside the app)
         window.dispatchEvent(
           new CustomEvent('kothahobe:inapp_notification', {
             detail: {
@@ -437,26 +437,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             },
           })
         );
-
-        // 2. Schedule Native Local Notification when backgrounded
-        if (Capacitor.isNativePlatform()) {
-          await LocalNotifications.schedule({
-            notifications: [
-              {
-                title: isGroup && groupName ? `${senderName} (${groupName})` : senderName,
-                body: bodyText,
-                id: Math.floor(Math.random() * 1000000),
-                schedule: { at: new Date(Date.now() + 50) },
-                channelId: 'chat_messages',
-                sound: soundPref ? 'default' : undefined,
-                extra: {
-                  conversationId: newMsg.conversationId,
-                  senderId: newMsg.senderId,
-                },
-              },
-            ],
-          });
-        }
       } catch (err) {
         console.warn('[Notifications] Trigger notice:', err);
       }

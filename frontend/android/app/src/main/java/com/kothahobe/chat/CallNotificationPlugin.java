@@ -160,4 +160,31 @@ public class CallNotificationPlugin extends Plugin {
             call.reject("Local test notification error: " + e.getMessage());
         }
     }
+
+    @PluginMethod
+    public void setAuthCredentials(PluginCall call) {
+        String token = call.getString("token");
+        String userId = call.getString("userId");
+        Context ctx = getContext();
+        if (ctx != null && token != null) {
+            android.content.SharedPreferences prefs = ctx.getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
+            prefs.edit()
+                .putString("auth_token", token)
+                .putString("user_id", userId != null ? userId : "")
+                .apply();
+            Log.d(TAG, "Auth credentials securely mirrored to native SharedPreferences");
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearAuthCredentials(PluginCall call) {
+        Context ctx = getContext();
+        if (ctx != null) {
+            android.content.SharedPreferences prefs = ctx.getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
+            prefs.edit().clear().apply();
+            Log.d(TAG, "Auth credentials cleared from native SharedPreferences");
+        }
+        call.resolve();
+    }
 }

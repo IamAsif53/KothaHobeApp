@@ -27,6 +27,8 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
     // Deduplication tracking: callId -> timestamp
     private static final ConcurrentHashMap<String, Long> activeCallNotifications = new ConcurrentHashMap<>();
+    // Deduplication tracking: messageKey -> timestamp
+    private static final ConcurrentHashMap<String, Long> activeMessageNotifications = new ConcurrentHashMap<>();
 
     public static void removeActiveCall(String callId) {
         if (callId != null) {
@@ -316,6 +318,20 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         String conversationId = data.get("conversationId");
         String senderId = data.get("senderId");
         String messageId = data.get("messageId");
+
+        // Deduplicate: If notification for this messageId was already posted within last 15 seconds, ignore
+        long now = System.currentTimeMillis();
+        String dedupKey = (messageId != null && !messageId.isEmpty()) ? messageId : (conversationId + ":" + body);
+        Long prevTime = activeMessageNotifications.get(dedupKey);
+        if (prevTime != null && (now - prevTime) < 15000) {
+            Log.d(TAG, "Ignoring duplicate chat message notification for key: " + dedupKey);
+            return;
+        }
+        activeMessageNotifications.put(dedupKey, now);
+
+        if (activeMessageNotifications.size() > 200) {
+            activeMessageNotifications.entrySet().removeIf(entry -> (now - entry.getValue()) > 60000);
+        }
 
         NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager == null) return;

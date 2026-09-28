@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { IUser } from '../types';
 import { fetchMe, updateProfileApi } from '../api/userApi';
 import { sendEmailOtpApi, verifyEmailOtpApi } from '../api/authApi';
+import { setNativeAuthCredentials, clearNativeAuthCredentials } from '../services/callNotificationService';
 
 interface AuthContextType {
   user: IUser | null;
@@ -37,6 +38,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [email, setEmail] = useState<string>(() => localStorage.getItem('kotha_hobe_pending_email') || '');
 
+  // Keep native SharedPreferences credentials in sync on initialization
+  useEffect(() => {
+    if (token && user?._id) {
+      setNativeAuthCredentials(token, user._id);
+    }
+  }, [token, user]);
+
   // Background session sync (never blocks initial render or offline navigation)
   useEffect(() => {
     const syncAuth = async () => {
@@ -48,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(res.user);
             localStorage.setItem('kotha_hobe_user', JSON.stringify(res.user));
             setToken(storedToken);
+            setNativeAuthCredentials(storedToken, res.user._id);
           }
         } catch (error: any) {
           console.warn('[AuthContext] Background sync notice:', error?.message);
@@ -98,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('kotha_hobe_pending_email');
         setToken(res.token);
         setUser(res.user);
+        setNativeAuthCredentials(res.token, res.user._id);
         return {
           success: true,
           isNewUser: res.isNewUser,
@@ -136,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('kotha_hobe_cached_conversations');
     setToken(null);
     setUser(null);
+    clearNativeAuthCredentials();
   };
 
   return (

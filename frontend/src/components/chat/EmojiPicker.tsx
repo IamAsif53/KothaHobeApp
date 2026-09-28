@@ -100,17 +100,17 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
   });
 
   return (
-    <div className="w-full bg-[#182229] border-t border-white/10 flex flex-col h-64 select-none z-30 animate-fade-in shadow-2xl">
+    <div className="w-full bg-chat-panel border-t border-chat-border flex flex-col h-64 select-none z-30 animate-fade-in shadow-2xl">
       {/* Search and Category Tabs */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-[#111b21] gap-2">
-        <div className="flex-1 flex items-center gap-2 bg-[#202c33] rounded-lg px-2.5 py-1 text-xs">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-chat-border bg-chat-panel gap-2">
+        <div className="flex-1 flex items-center gap-2 bg-chat-input border border-chat-border rounded-lg px-2.5 py-1 text-xs">
           <Search className="w-3.5 h-3.5 text-chat-textMuted" />
           <input
             type="text"
             placeholder="Search emojis..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent text-white outline-none w-full placeholder:text-chat-textMuted text-xs"
+            className="bg-transparent text-chat-textPrimary outline-none w-full placeholder:text-chat-textTertiary text-xs"
           />
         </div>
 
@@ -122,7 +122,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
                 className={`p-1.5 rounded-lg transition-colors ${
-                  activeCategory === cat.id ? 'bg-white/10 text-brand-400' : 'text-chat-textMuted hover:text-white'
+                  activeCategory === cat.id ? 'bg-chat-surfaceSecondary text-brand-500' : 'text-chat-textMuted hover:text-chat-textPrimary'
                 }`}
                 title={cat.name}
               >
@@ -147,7 +147,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
                 <button
                   key={`recent_${idx}`}
                   onClick={() => handleSelectEmoji(emoji)}
-                  className="pressable-icon p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                  className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer"
                 >
                   {emoji}
                 </button>
@@ -169,7 +169,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
                   <button
                     key={`${cat.id}_${idx}`}
                     onClick={() => handleSelectEmoji(emoji)}
-                    className="pressable-icon p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+                    className="pressable-icon p-1 rounded-lg hover:bg-chat-surfaceSecondary cursor-pointer"
                   >
                     {emoji}
                   </button>

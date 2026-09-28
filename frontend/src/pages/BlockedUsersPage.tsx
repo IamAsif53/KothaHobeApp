@@ -58,7 +58,7 @@ export const BlockedUsersPage: React.FC = () => {
     >
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs px-4 py-2 rounded-full shadow-2xl animate-fade-in pointer-events-none">
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-chat-panel border border-chat-border text-chat-textPrimary text-xs px-4 py-2 rounded-full shadow-2xl animate-fade-in pointer-events-none">
           {toast}
         </div>
       )}
@@ -66,17 +66,17 @@ export const BlockedUsersPage: React.FC = () => {
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0"
+        className="px-4 pt-10 pb-3 border-b border-chat-border flex items-center justify-between flex-shrink-0"
       >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings')}
-            className="p-1.5 rounded-full hover:bg-white/10 text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-chat-card text-chat-textPrimary transition-colors"
             title="Back to Settings"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold text-white tracking-tight">Blocked Accounts</h1>
+          <h1 className="text-lg font-bold text-chat-textPrimary tracking-tight">Blocked Accounts</h1>
         </div>
       </header>
 
@@ -92,16 +92,16 @@ export const BlockedUsersPage: React.FC = () => {
               <div
                 key={i}
                 style={{ backgroundColor: themeConfig.card }}
-                className="h-16 rounded-2xl animate-pulse border border-white/5"
+                className="h-16 rounded-2xl animate-pulse border border-chat-border"
               />
             ))}
           </div>
         ) : blockedUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center p-6 space-y-3">
-            <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 flex items-center justify-center">
               <UserCheck className="w-7 h-7" />
             </div>
-            <h3 className="text-sm font-semibold text-white">No Blocked Accounts</h3>
+            <h3 className="text-sm font-semibold text-chat-textPrimary">No Blocked Accounts</h3>
             <p className="text-xs text-chat-textMuted max-w-xs">
               You have not blocked any accounts. Blocked users will appear here where you can manage or unblock them.
             </p>
@@ -112,7 +112,7 @@ export const BlockedUsersPage: React.FC = () => {
               <div
                 key={u._id}
                 style={{ backgroundColor: themeConfig.card }}
-                className="flex items-center justify-between p-3.5 rounded-2xl border border-white/10 shadow-sm"
+                className="flex items-center justify-between p-3.5 rounded-2xl border border-chat-border shadow-sm"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar
@@ -121,7 +121,7 @@ export const BlockedUsersPage: React.FC = () => {
                     size="md"
                   />
                   <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-white truncate">
+                    <h4 className="text-sm font-semibold text-chat-textPrimary truncate">
                       {u.displayName || 'User'}
                     </h4>
                     {u.username && (
@@ -134,7 +134,7 @@ export const BlockedUsersPage: React.FC = () => {
                   type="button"
                   onClick={() => handleUnblock(u)}
                   disabled={unblockingId === u._id}
-                  className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-brand-500 text-white text-xs font-semibold active:scale-95 transition-all flex-shrink-0 disabled:opacity-50"
+                  className="px-3.5 py-1.5 rounded-xl bg-chat-panel hover:bg-brand-500 hover:text-white border border-chat-border text-chat-textPrimary text-xs font-semibold active:scale-95 transition-all flex-shrink-0 disabled:opacity-50"
                 >
                   {unblockingId === u._id ? 'Unblocking...' : 'Unblock'}
                 </button>

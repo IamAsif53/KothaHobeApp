@@ -101,7 +101,7 @@ export const SharedMediaPage: React.FC = () => {
     >
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-1.5 animate-fade-in">
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-chat-panel border border-chat-border text-chat-textPrimary text-xs font-semibold shadow-2xl flex items-center gap-1.5 animate-fade-in">
           <Check className="w-3.5 h-3.5 text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -125,27 +125,27 @@ export const SharedMediaPage: React.FC = () => {
       {/* Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-4 pt-10 pb-2 border-b border-white/10 flex flex-col gap-3 flex-shrink-0"
+        className="px-4 pt-10 pb-2 border-b border-chat-border flex flex-col gap-3 flex-shrink-0"
       >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/chat/${conversationId}`)}
-            className="p-1.5 rounded-full hover:bg-white/10 text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-chat-card text-chat-textPrimary transition-colors"
             title="Back to Chat"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold text-white tracking-tight">Shared Content</h1>
+          <h1 className="text-lg font-bold text-chat-textPrimary tracking-tight">Shared Content</h1>
         </div>
 
         {/* Category Tabs */}
-        <div className="flex items-center justify-around border-t border-white/5 pt-1">
+        <div className="flex items-center justify-around border-t border-chat-border pt-1">
           <button
             onClick={() => setActiveTab('media')}
             className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
               activeTab === 'media'
-                ? 'text-brand-400 border-brand-400'
-                : 'text-chat-textMuted border-transparent hover:text-white'
+                ? 'text-brand-500 dark:text-brand-400 border-brand-500 dark:border-brand-400'
+                : 'text-chat-textMuted border-transparent hover:text-chat-textPrimary'
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5" />
@@ -156,8 +156,8 @@ export const SharedMediaPage: React.FC = () => {
             onClick={() => setActiveTab('documents')}
             className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
               activeTab === 'documents'
-                ? 'text-brand-400 border-brand-400'
-                : 'text-chat-textMuted border-transparent hover:text-white'
+                ? 'text-brand-500 dark:text-brand-400 border-brand-500 dark:border-brand-400'
+                : 'text-chat-textMuted border-transparent hover:text-chat-textPrimary'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -168,8 +168,8 @@ export const SharedMediaPage: React.FC = () => {
             onClick={() => setActiveTab('audio')}
             className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
               activeTab === 'audio'
-                ? 'text-brand-400 border-brand-400'
-                : 'text-chat-textMuted border-transparent hover:text-white'
+                ? 'text-brand-500 dark:text-brand-400 border-brand-500 dark:border-brand-400'
+                : 'text-chat-textMuted border-transparent hover:text-chat-textPrimary'
             }`}
           >
             <Mic className="w-3.5 h-3.5" />
@@ -218,14 +218,14 @@ export const SharedMediaPage: React.FC = () => {
                     key={msg._id}
                     style={{ backgroundColor: themeConfig.card }}
                     onClick={() => handleOpenDoc(msg)}
-                    className="border border-white/5 rounded-xl p-3 flex items-center justify-between hover:bg-white/5 cursor-pointer transition-colors shadow-sm"
+                    className="border border-chat-border rounded-xl p-3 flex items-center justify-between hover:bg-chat-panel cursor-pointer transition-colors shadow-sm"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
-                        <span className="text-sm font-semibold text-white truncate block">
+                        <span className="text-sm font-semibold text-chat-textPrimary truncate block">
                           {msg.attachment?.fileName}
                         </span>
                         <span className="text-[11px] text-chat-textMuted">
@@ -236,7 +236,7 @@ export const SharedMediaPage: React.FC = () => {
 
                     <button
                       onClick={(e) => handleDownloadDoc(e, msg)}
-                      className="p-2 rounded-lg hover:bg-white/10 text-chat-textMuted hover:text-brand-400 transition-colors"
+                      className="p-2 rounded-lg hover:bg-chat-panel text-chat-textMuted hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
                       title="Download to Device"
                     >
                       <Download className="w-4 h-4" />
@@ -253,7 +253,7 @@ export const SharedMediaPage: React.FC = () => {
                   <div
                     key={msg._id}
                     style={{ backgroundColor: themeConfig.card }}
-                    className="border border-white/5 rounded-2xl p-3 flex flex-col gap-2 shadow-sm"
+                    className="border border-chat-border rounded-2xl p-3 flex flex-col gap-2 shadow-sm"
                   >
                     <div className="flex items-center justify-between text-xs text-chat-textMuted">
                       <span>Voice Recording</span>

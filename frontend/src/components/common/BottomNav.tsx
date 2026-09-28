@@ -19,21 +19,21 @@ export const BottomNav: React.FC = () => {
   ];
 
   return (
-    <nav className="border-t border-white/10 bg-chat-panel/95 backdrop-blur-md px-6 py-2 flex justify-around items-center z-30 flex-shrink-0 select-none pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+    <nav className="border-t border-chat-navBorder bg-chat-navBg/95 backdrop-blur-md px-4 py-1.5 flex justify-around items-center z-30 flex-shrink-0 select-none pb-[calc(0.4rem+env(safe-area-inset-bottom))] transition-colors duration-200">
       {items.map(({ path, label, icon: Icon }) => (
         <NavLink
           key={path}
           to={path}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 transition-all py-1 px-4 rounded-xl pressable-icon ${
+            `flex flex-col items-center gap-0.5 transition-all py-1.5 px-3.5 rounded-2xl pressable-icon ${
               isActive
-                ? 'text-brand-400 font-semibold scale-105'
-                : 'text-chat-textMuted hover:text-white'
+                ? 'text-chat-navActiveText bg-chat-navActiveBg font-semibold scale-[1.02]'
+                : 'text-chat-navInactive hover:text-chat-textPrimary'
             }`
           }
         >
-          <Icon className="w-6 h-6 stroke-[2]" />
-          <span className="text-xs">{label}</span>
+          <Icon className="w-5 h-5 stroke-[2.2]" />
+          <span className="text-[11px] tracking-tight">{label}</span>
         </NavLink>
       ))}
     </nav>

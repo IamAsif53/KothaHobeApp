@@ -29,10 +29,10 @@ export const AppLogo: React.FC<AppLogoProps> = ({ size = 'md', showSubtitle = tr
 
       {showSubtitle && (
         <div className="mt-3 text-center">
-          <h1 className={`${current.text} font-extrabold tracking-tight text-white flex items-center justify-center gap-1.5`}>
+          <h1 className={`${current.text} font-extrabold tracking-tight text-chat-textPrimary flex items-center justify-center gap-1.5`}>
             <span>Kotha Hobe</span>
           </h1>
-          <p className={`${current.sub} text-emerald-400 font-bold tracking-wide mt-0.5 font-sans`}>
+          <p className={`${current.sub} text-brand-500 dark:text-emerald-400 font-bold tracking-wide mt-0.5 font-sans`}>
             কথা হবে
           </p>
         </div>

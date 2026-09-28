@@ -827,7 +827,7 @@ export const ChatRoomPage: React.FC = () => {
     >
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#202c33] border border-white/20 text-white text-xs font-semibold shadow-2xl animate-fade-in">
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-chat-card border border-chat-border text-chat-textPrimary text-xs font-semibold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}
@@ -860,24 +860,24 @@ export const ChatRoomPage: React.FC = () => {
           }}
         >
           <div
-            className="bg-[#202c33] border border-white/10 rounded-2xl p-4 w-full max-w-sm shadow-2xl space-y-3 animate-scale-up"
+            className="bg-chat-card border border-chat-border rounded-2xl p-4 w-full max-w-sm shadow-2xl space-y-3 animate-scale-up"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Header / Close Bar */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <span className="text-xs font-semibold text-brand-400">
+            <div className="flex items-center justify-between border-b border-chat-divider pb-2.5">
+              <span className="text-xs font-semibold text-brand-600 dark:text-brand-400">
                 Message Options
               </span>
               <button
                 onClick={() => setActionMenuMessage(null)}
-                className="p-1 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1 rounded-full text-chat-textMuted hover:text-chat-textPrimary hover:bg-chat-surfaceSecondary transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Quick Reactions Bar */}
-            <div className="flex items-center justify-between bg-[#111b21] p-2 rounded-xl text-2xl">
+            <div className="flex items-center justify-between bg-chat-surfaceSecondary p-2 rounded-xl text-2xl">
               {QUICK_REACTIONS.map((emoji) => (
                 <button
                   key={emoji}
@@ -893,15 +893,15 @@ export const ChatRoomPage: React.FC = () => {
             </div>
 
             {/* Action Items */}
-            <div className="space-y-1 divide-y divide-white/5 text-sm">
+            <div className="space-y-1 divide-y divide-chat-divider text-sm">
               <button
                 onClick={() => {
                   handleReply(actionMenuMessage);
                   setActionMenuMessage(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
               >
-                <CornerUpLeft className="w-4 h-4 text-brand-400" />
+                <CornerUpLeft className="w-4 h-4 text-brand-500" />
                 <span>Reply</span>
               </button>
 
@@ -912,7 +912,7 @@ export const ChatRoomPage: React.FC = () => {
                     showToast('Text copied to clipboard');
                     setActionMenuMessage(null);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
                 >
                   <Copy className="w-4 h-4 text-chat-textMuted" />
                   <span>Copy Text</span>
@@ -926,9 +926,9 @@ export const ChatRoomPage: React.FC = () => {
                     else if (actionMenuMessage.type === 'document') handleOpenDocument(actionMenuMessage);
                     setActionMenuMessage(null);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
                 >
-                  <ExternalLink className="w-4 h-4 text-sky-400" />
+                  <ExternalLink className="w-4 h-4 text-sky-500" />
                   <span>Open Attachment</span>
                 </button>
               )}
@@ -939,9 +939,9 @@ export const ChatRoomPage: React.FC = () => {
                     handleDownloadDocument(actionMenuMessage);
                     setActionMenuMessage(null);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-white rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
                 >
-                  <Download className="w-4 h-4 text-emerald-400" />
+                  <Download className="w-4 h-4 text-emerald-500" />
                   <span>Download to Device</span>
                 </button>
               )}
@@ -951,7 +951,7 @@ export const ChatRoomPage: React.FC = () => {
                   handleDelete(actionMenuMessage._id, false);
                   setActionMenuMessage(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-chat-textMuted hover:text-red-400 rounded-lg transition-colors text-left"
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-red-500 rounded-lg transition-colors text-left"
               >
                 <Trash2 className="w-4 h-4 text-chat-textMuted" />
                 <span>Delete for me</span>
@@ -963,9 +963,9 @@ export const ChatRoomPage: React.FC = () => {
                     handleDelete(actionMenuMessage._id, true);
                     setActionMenuMessage(null);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors text-left"
                 >
-                  <Trash2 className="w-4 h-4 text-red-400" />
+                  <Trash2 className="w-4 h-4 text-red-500" />
                   <span>Delete for everyone</span>
                 </button>
               )}
@@ -977,12 +977,12 @@ export const ChatRoomPage: React.FC = () => {
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-2.5 pt-10 pb-2.5 border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200 gap-1.5"
+        className="px-2.5 pt-10 pb-2.5 border-b border-chat-border flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200 gap-1.5"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             onClick={() => navigate('/chats')}
-            className="p-1.5 -ml-1 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors flex-shrink-0"
+            className="p-1.5 -ml-1 rounded-full hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-chat-textPrimary transition-colors flex-shrink-0"
             title="Back to Chats"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -1009,18 +1009,18 @@ export const ChatRoomPage: React.FC = () => {
             </div>
 
             <div className="min-w-0 flex-1 overflow-hidden">
-              <h2 className="text-sm font-semibold text-white truncate leading-tight">
+              <h2 className="text-sm font-semibold text-chat-textPrimary truncate leading-tight">
                 {headerTitle}
               </h2>
-              <p className="text-[11px] text-chat-textMuted truncate mt-0.5 leading-none">
+              <p className="text-[11px] text-chat-textSecondary truncate mt-0.5 leading-none">
                 {isTyping ? (
-                  <span className="text-brand-400 font-medium animate-pulse">typing...</span>
+                  <span className="text-brand-500 font-medium animate-pulse">typing...</span>
                 ) : isGroup ? (
-                  <span className="text-slate-400 font-medium">
+                  <span className="text-chat-textSecondary font-medium">
                     {groupMeta?.members?.length || 1} members
                   </span>
                 ) : recipient?.isOnline ? (
-                  <span className="text-emerald-400 font-medium">online</span>
+                  <span className="text-emerald-500 font-medium">online</span>
                 ) : recipient?.lastSeen ? (
                   <span>{formatLastSeen(recipient.lastSeen)}</span>
                 ) : (
@@ -1057,7 +1057,7 @@ export const ChatRoomPage: React.FC = () => {
                 );
               }
             }}
-            className="p-1.5 rounded-full text-brand-400 hover:text-brand-300 hover:bg-white/5 active:scale-95 transition-all"
+            className="p-1.5 rounded-full text-brand-500 hover:text-brand-600 hover:bg-chat-surfaceSecondary active:scale-95 transition-all"
             title={isGroup ? 'Start Group Video Call' : 'Start Video Call'}
           >
             <Video className="w-4 h-4" />
@@ -1087,7 +1087,7 @@ export const ChatRoomPage: React.FC = () => {
                 );
               }
             }}
-            className="p-1.5 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-white/5 active:scale-95 transition-all"
+            className="p-1.5 rounded-full text-emerald-500 hover:text-emerald-600 hover:bg-chat-surfaceSecondary active:scale-95 transition-all"
             title={isGroup ? 'Start Group Voice Call' : 'Start Voice Call'}
           >
             <Phone className="w-4 h-4" />
@@ -1096,7 +1096,7 @@ export const ChatRoomPage: React.FC = () => {
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={`p-1.5 rounded-full transition-colors ${
-              showSearch ? 'bg-white/10 text-brand-400' : 'text-chat-textMuted hover:text-white'
+              showSearch ? 'bg-chat-surfaceSecondary text-brand-500' : 'text-chat-textMuted hover:text-chat-textPrimary'
             }`}
             title="Search in Chat"
           >
@@ -1107,7 +1107,7 @@ export const ChatRoomPage: React.FC = () => {
             onClick={() =>
               navigate(isGroup ? `/group/${conversationId}/info` : `/chat/${conversationId}/info`)
             }
-            className="p-1.5 rounded-full text-chat-textMuted hover:text-white transition-colors"
+            className="p-1.5 rounded-full text-chat-textMuted hover:text-chat-textPrimary transition-colors"
             title={isGroup ? 'Group Info' : 'Chat Info'}
           >
             <MoreVertical className="w-4 h-4" />
@@ -1117,7 +1117,7 @@ export const ChatRoomPage: React.FC = () => {
             <button
               type="button"
               onClick={() => reconnectNow()}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-400 text-[10px] font-medium flex-shrink-0 ml-0.5 transition-all"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-500 text-[10px] font-medium flex-shrink-0 ml-0.5 transition-all"
               title="Tap to reconnect immediately"
             >
               <WifiOff className={`w-3 h-3 ${isReconnecting ? 'animate-pulse' : ''}`} />
@@ -1138,18 +1138,18 @@ export const ChatRoomPage: React.FC = () => {
 
       {/* In-Chat Search Bar */}
       {showSearch && (
-        <div className="px-4 py-2 bg-[#111b21] border-b border-white/10 flex items-center gap-2 animate-fade-in">
+        <div className="px-4 py-2 bg-chat-panel border-b border-chat-border flex items-center gap-2 animate-fade-in">
           <Search className="w-4 h-4 text-chat-textMuted" />
           <input
             type="text"
             placeholder="Search in this conversation..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent text-white text-xs outline-none placeholder:text-chat-textMuted"
+            className="flex-1 bg-transparent text-chat-textPrimary text-xs outline-none placeholder:text-chat-textTertiary"
             autoFocus
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="text-chat-textMuted hover:text-white">
+            <button onClick={() => setSearchQuery('')} className="text-chat-textMuted hover:text-chat-textPrimary">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
@@ -1199,7 +1199,7 @@ export const ChatRoomPage: React.FC = () => {
               <React.Fragment key={msg.clientMessageId || msg._id}>
                 {showDateHeader && (
                   <div className="flex justify-center my-3">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-chat-textMuted/80 bg-chat-card/80 px-3 py-1 rounded-full border border-white/5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-chat-textSecondary bg-chat-card/90 px-3 py-1 rounded-full border border-chat-border shadow-xs">
                       {formatChatListDate(msg.createdAt)}
                     </span>
                   </div>

@@ -82,7 +82,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   if (message.type === 'system') {
     return (
       <div className="flex justify-center my-2 px-4 animate-fade-in select-none">
-        <div className="bg-[#111b21]/90 border border-white/10 text-emerald-300 text-xs px-3.5 py-1.5 rounded-full text-center max-w-[90%] shadow-sm font-medium">
+        <div className="bg-chat-surfaceSecondary/90 border border-chat-border text-brand-600 dark:text-emerald-300 text-xs px-3.5 py-1.5 rounded-full text-center max-w-[90%] shadow-xs font-medium">
           {message.text}
         </div>
       </div>
@@ -94,17 +94,17 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
     switch (message.status) {
       case 'sending':
-        return <Clock className="w-3.5 h-3.5 text-white/50 animate-spin" />;
+        return <Clock className="w-3.5 h-3.5 text-chat-bubbleOutText/50 animate-spin" />;
       case 'sent':
-        return <Check className="w-3.5 h-3.5 text-white/60" />;
+        return <Check className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5 text-white/60" />;
+        return <CheckCheck className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />;
+        return <CheckCheck className="w-3.5 h-3.5 text-sky-500 stroke-[2.5]" />;
       case 'failed':
-        return <AlertCircle className="w-3.5 h-3.5 text-red-400" />;
+        return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
       default:
-        return <Check className="w-3.5 h-3.5 text-white/60" />;
+        return <Check className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
     }
   };
 
@@ -178,10 +178,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
       {/* Main Bubble Container */}
       <div
-        className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl shadow-md transition-all select-text overflow-hidden ${
+        className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl shadow-xs transition-all select-text overflow-hidden ${
           isMe
-            ? 'bg-chat-bubbleOut text-white rounded-tr-none'
-            : 'bg-chat-bubbleIn text-chat-textPrimary rounded-tl-none border border-white/5'
+            ? 'bg-chat-bubbleOut text-chat-bubbleOutText rounded-tr-none'
+            : 'bg-chat-bubbleIn text-chat-bubbleInText rounded-tl-none border border-chat-bubbleInBorder'
         } ${message.type === 'image' ? 'p-1 pb-6' : 'px-3.5 py-2'}`}
       >
         {/* Sender Name / Nickname in Group Chat */}
@@ -195,12 +195,12 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {message.replyTo && (
           <div
             onClick={() => onJumpToMessage && onJumpToMessage(String(message.replyTo?.messageId))}
-            className="mb-2 p-2 rounded-xl bg-black/20 border-l-4 border-brand-400 text-xs cursor-pointer select-none hover:bg-black/30 transition-colors"
+            className="mb-2 p-2 rounded-xl bg-black/5 dark:bg-black/20 border-l-4 border-brand-500 text-xs cursor-pointer select-none hover:bg-black/10 transition-colors"
           >
-            <div className="font-semibold text-brand-400 truncate">
+            <div className="font-semibold text-brand-600 dark:text-brand-400 truncate">
               {message.replyTo.senderName || 'Replied Message'}
             </div>
-            <div className="text-white/70 truncate text-[11px]">
+            <div className="text-chat-textSecondary truncate text-[11px]">
               {message.replyTo.type === 'image'
                 ? '📷 Photo'
                 : message.replyTo.type === 'audio'
@@ -216,7 +216,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {message.type === 'image' && message.attachment && (
           <div
             onClick={() => onOpenMedia && onOpenMedia(message)}
-            className="cursor-pointer overflow-hidden rounded-xl bg-black/20 relative group/img"
+            className="cursor-pointer overflow-hidden rounded-xl bg-black/10 dark:bg-black/20 relative group/img"
           >
             <img
               src={getMediaUrl(message.attachment.url)}
@@ -234,35 +234,35 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {message.type === 'document' && message.attachment && (
           <div
             onClick={() => onOpenDocument && onOpenDocument(message)}
-            className="flex flex-col gap-2 p-2.5 rounded-xl bg-black/20 hover:bg-black/30 cursor-pointer border border-white/5 transition-colors min-w-[220px]"
+            className="flex flex-col gap-2 p-2.5 rounded-xl bg-black/5 dark:bg-black/20 hover:bg-black/10 dark:hover:bg-black/30 cursor-pointer border border-chat-border transition-colors min-w-[220px]"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-500 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-white truncate">
+                <div className="text-sm font-semibold text-chat-textPrimary truncate">
                   {message.attachment.fileName}
                 </div>
-                <div className="text-[11px] text-white/60">
+                <div className="text-[11px] text-chat-textSecondary">
                   {formatFileSize(message.attachment.size)} • Tap to open
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-white/5">
+            <div className="flex items-center justify-between pt-1 border-t border-chat-divider">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDownloadDocument && onDownloadDocument(message);
                 }}
-                className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 font-semibold py-1 px-2 rounded-lg hover:bg-white/5 transition-colors"
+                className="flex items-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-500 font-semibold py-1 px-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download</span>
               </button>
-              <span className="text-[10px] text-white/40">Native View</span>
+              <span className="text-[10px] text-chat-textTertiary">Native View</span>
             </div>
           </div>
         )}
@@ -286,7 +286,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         {/* 4.5. Story Reply Message Card */}
         {message.type === 'story_reply' && (
           <div className="flex flex-col gap-2 min-w-[200px] pr-8 select-none">
-            <div className="p-2 rounded-xl bg-black/20 border border-white/10 flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-black/5 dark:bg-black/20 border border-chat-border flex items-center gap-2.5">
               {message.storyContext?.storyType === 'image' && (message.storyContext.thumbnailUrl || message.storyContext.mediaUrl) ? (
                 <img
                   src={message.storyContext.thumbnailUrl || message.storyContext.mediaUrl}
@@ -299,11 +299,11 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-1 text-[10px] text-brand-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
                   <Sparkles className="w-3 h-3" />
                   <span>Story Reply</span>
                 </div>
-                <p className="text-xs text-white/80 truncate font-medium mt-0.5">
+                <p className="text-xs text-chat-textSecondary truncate font-medium mt-0.5">
                   {message.storyContext?.originalText || (message.storyContext?.storyType === 'image' ? 'Photo story' : 'Story')}
                 </p>
                 {message.storyContext?.reaction && (
@@ -316,7 +316,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
             {/* Comment text if present */}
             {message.text && (
-              <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-white">
+              <p className={`whitespace-pre-wrap text-[14.5px] leading-relaxed ${isMe ? 'text-chat-bubbleOutText' : 'text-chat-bubbleInText'}`}>
                 {message.text}
               </p>
             )}
@@ -329,8 +329,8 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             <div
               className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
                 message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
-                  ? 'bg-red-500/20 text-red-400'
-                  : 'bg-emerald-500/20 text-emerald-400'
+                  ? 'bg-red-500/20 text-red-500'
+                  : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
               }`}
             >
               {message.callDetails?.status === 'missed' ? (
@@ -344,10 +344,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
               )}
             </div>
             <div>
-              <div className="text-sm font-semibold text-white">
+              <div className={`text-sm font-semibold ${isMe ? 'text-chat-bubbleOutText' : 'text-chat-bubbleInText'}`}>
                 {message.text || 'Voice Call'}
               </div>
-              <div className="text-[11px] text-white/60">
+              <div className={`text-[11px] ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/70'}`}>
                 {message.callDetails?.status === 'missed'
                   ? 'Missed voice call'
                   : message.callDetails?.status === 'declined'
@@ -362,7 +362,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
         {/* Bottom Time & Status Checkmarks */}
         <div className="absolute right-2.5 bottom-1 flex items-center gap-1 select-none">
-          <span className="text-[10px] text-white/60 font-medium tracking-tight">
+          <span className={`text-[10px] font-medium tracking-tight ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/70'}`}>
             {formatMessageTime(message.createdAt)}
           </span>
           {renderStatusIcon()}
@@ -380,10 +380,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             <button
               key={emoji}
               onClick={() => onReact && onReact(message._id, emoji)}
-              className="px-1.5 py-0.5 rounded-full bg-[#202c33] border border-white/10 text-xs shadow-md flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform"
+              className="px-1.5 py-0.5 rounded-full bg-chat-card border border-chat-border text-xs shadow-md flex items-center gap-1 hover:scale-110 active:scale-95 transition-transform"
             >
               <span>{emoji}</span>
-              {count > 1 && <span className="text-[10px] text-white/70 font-bold">{count}</span>}
+              {count > 1 && <span className="text-[10px] text-chat-textSecondary font-bold">{count}</span>}
             </button>
           ))}
         </div>
@@ -393,7 +393,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       {isMe && message.status === 'failed' && (
         <button
           onClick={() => onRetry && onRetry(message)}
-          className="mt-1 flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors pressable"
+          className="mt-1 flex items-center gap-1 text-xs text-red-500 hover:text-red-400 transition-colors pressable"
         >
           <AlertCircle className="w-3 h-3" />
           <span>Failed. Tap to retry</span>

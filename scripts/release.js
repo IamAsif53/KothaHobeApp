@@ -77,13 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ 24h Ephemeral Stories: Share text thoughts with beautiful gradient presets or photos with captions that vanish after 24 hours",
-      "🎨 Immersive Story Composer: Create text stories with custom fonts, colors, and alignments, or pick photos from gallery with smart compression",
-      "👁️ Multi-Segment Story Viewer: Smooth segmented progress bars, touch-and-hold pause, swipe down to dismiss, and instant tap navigation",
-      "❤️ Quick Emoji Reactions: Tap floating reactions (❤️, 🔥, 😂, 😍, 😮, 😢, 👏, 🎉) that animate instantly on screen",
-      "💬 Story-to-Chat Replies: Replying to any story automatically dispatches a message with story context into your 1-on-1 chat",
-      "📊 Story Viewers & Analytics: See who viewed your stories in real time, view counts, and custom viewer lists",
-      "🗄️ Private Story Archive: Revisit and manage your expired stories safely in your personal archive"
+      "☀️ Complete Light Theme Redesign: A high-contrast, premium, cohesive light aesthetic with warm crisp surfaces, sharp typography, and zero washed-out elements",
+      "🎨 Semantic Theme Token System: Dynamically adapt backgrounds, cards, inputs, bubbles, borders, and modals across Light and Dark themes",
+      "👤 Redesigned Contact Info & Group Info: Social-first profile view with media previews, quick action pills, mutual groups, and sleek action drawers",
+      "💬 High-Contrast Chat Bubbles: Crisp outgoing mint emerald bubbles and clean incoming cards with readable timestamps and delivery checkmarks",
+      "🧭 Dynamic Bottom Navigation: Translucent glass bar adapting seamlessly to light and dark themes with active glow indicators",
+      "✨ Stories & Statuses: 24h ephemeral stories, segmented progress bars, touch-to-pause, and direct chat replies"
     ],
     mandatory: false
   };

@@ -116,15 +116,15 @@ export const StoriesPage: React.FC = () => {
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0"
+        className="px-4 pt-10 pb-3 border-b border-chat-border flex items-center justify-between flex-shrink-0"
       >
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-white tracking-tight">Stories</h1>
+          <h1 className="text-xl font-bold text-chat-textPrimary tracking-tight">Stories</h1>
         </div>
 
         {/* Center: App Bengali Brand */}
         <div className="flex items-center justify-center">
-          <span className="text-2xl font-bold text-white tracking-wide font-sans drop-shadow-sm flex items-center gap-1.5">
+          <span className="text-2xl font-bold text-chat-textPrimary tracking-wide font-sans drop-shadow-xs flex items-center gap-1.5">
             💬 কথা হবে
           </span>
         </div>
@@ -134,19 +134,19 @@ export const StoriesPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowArchive(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-white/80 text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary active:scale-95 border border-chat-border text-chat-textPrimary text-xs font-medium transition-all"
             title="Story Archive"
           >
-            <Archive className="w-3.5 h-3.5 text-emerald-400" />
+            <Archive className="w-3.5 h-3.5 text-brand-500" />
             <span>Archive</span>
           </button>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto divide-y divide-white/5 pb-24">
+      <div className="flex-1 overflow-y-auto divide-y divide-chat-divider pb-24">
         {/* 1. My Status / My Story Card */}
-        <div className="p-4 bg-chat-panel/40">
+        <div className="p-4 bg-chat-card">
           <div className="flex items-center justify-between">
             <div
               onClick={() => {
@@ -162,7 +162,7 @@ export const StoriesPage: React.FC = () => {
               <div className="relative flex-shrink-0">
                 {myFeedItem && myFeedItem.slides.length > 0 ? (
                   <div className="p-[2.5px] rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-cyan-500 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                    <div className="p-0.5 rounded-full bg-slate-950">
+                    <div className="p-0.5 rounded-full bg-chat-bg">
                       <Avatar
                         src={currentUser?.avatarUrl}
                         name={currentUser?.displayName || 'You'}
@@ -171,8 +171,8 @@ export const StoriesPage: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-[2.5px] rounded-full border-2 border-dashed border-slate-600 group-hover:border-emerald-500 transition-colors">
-                    <div className="p-0.5 rounded-full bg-slate-900">
+                  <div className="p-[2.5px] rounded-full border-2 border-dashed border-chat-border group-hover:border-brand-500 transition-colors">
+                    <div className="p-0.5 rounded-full bg-chat-surfaceSecondary">
                       <Avatar
                         src={currentUser?.avatarUrl}
                         name={currentUser?.displayName || 'You'}
@@ -189,7 +189,7 @@ export const StoriesPage: React.FC = () => {
                     e.stopPropagation();
                     setShowComposer(true);
                   }}
-                  className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-2 border-slate-950 flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+                  className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-brand-500 hover:bg-brand-400 text-white border-2 border-chat-card flex items-center justify-center shadow-lg active:scale-90 transition-transform"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[3]" />
                 </button>
@@ -197,10 +197,10 @@ export const StoriesPage: React.FC = () => {
 
               {/* Text info */}
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                <h3 className="text-sm font-bold text-chat-textPrimary group-hover:text-brand-500 transition-colors">
                   My Story
                 </h3>
-                <p className="text-xs text-chat-textMuted mt-0.5">
+                <p className="text-xs text-chat-textSecondary mt-0.5">
                   {myFeedItem && myFeedItem.slides.length > 0
                     ? `${myFeedItem.slides.length} slide${myFeedItem.slides.length > 1 ? 's' : ''} • ${formatRelativeTime(myFeedItem.lastUpdated)}`
                     : 'Tap to add to your story (24h)'}
@@ -213,7 +213,7 @@ export const StoriesPage: React.FC = () => {
         {/* 2. Recent Updates Section */}
         {recentUpdates.length > 0 && (
           <div className="p-4 space-y-3">
-            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+            <p className="text-xs font-bold text-brand-600 dark:text-emerald-400 uppercase tracking-wider">
               Recent updates
             </p>
             <div className="space-y-2">
@@ -221,11 +221,11 @@ export const StoriesPage: React.FC = () => {
                 <div
                   key={item.user._id}
                   onClick={() => openStoryViewer(item)}
-                  className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.99] cursor-pointer transition-all"
+                  className="flex items-center justify-between p-2.5 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary active:scale-[0.99] cursor-pointer transition-all border border-chat-border shadow-xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="p-[2.5px] rounded-full bg-gradient-to-tr from-emerald-400 via-teal-400 to-cyan-500 shadow-md shadow-emerald-500/20">
-                      <div className="p-0.5 rounded-full bg-slate-950">
+                      <div className="p-0.5 rounded-full bg-chat-bg">
                         <Avatar
                           src={item.user.avatarUrl}
                           name={item.user.displayName || item.user.username}
@@ -235,11 +235,11 @@ export const StoriesPage: React.FC = () => {
                     </div>
 
                     <div className="min-w-0">
-                      <h4 className="text-sm font-semibold text-white truncate">
+                      <h4 className="text-sm font-semibold text-chat-textPrimary truncate">
                         {item.user.displayName || item.user.username}
                       </h4>
-                      <p className="text-xs text-chat-textMuted flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
+                      <p className="text-xs text-chat-textSecondary flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-chat-textMuted" />
                         <span>{formatRelativeTime(item.lastUpdated)}</span>
                         <span>•</span>
                         <span>{item.slides.length} {item.slides.length > 1 ? 'updates' : 'update'}</span>
@@ -247,7 +247,7 @@ export const StoriesPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-white/40" />
+                  <ChevronRight className="w-4 h-4 text-chat-textTertiary" />
                 </div>
               ))}
             </div>
@@ -265,11 +265,11 @@ export const StoriesPage: React.FC = () => {
                 <div
                   key={item.user._id}
                   onClick={() => openStoryViewer(item, 0)}
-                  className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.99] cursor-pointer opacity-75 hover:opacity-100 transition-all"
+                  className="flex items-center justify-between p-2.5 rounded-2xl bg-chat-card hover:bg-chat-surfaceSecondary active:scale-[0.99] cursor-pointer opacity-80 hover:opacity-100 transition-all border border-chat-border"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-[2.5px] rounded-full bg-slate-700/60">
-                      <div className="p-0.5 rounded-full bg-slate-950">
+                    <div className="p-[2.5px] rounded-full bg-chat-surfaceTertiary">
+                      <div className="p-0.5 rounded-full bg-chat-bg">
                         <Avatar
                           src={item.user.avatarUrl}
                           name={item.user.displayName || item.user.username}
@@ -279,16 +279,16 @@ export const StoriesPage: React.FC = () => {
                     </div>
 
                     <div className="min-w-0">
-                      <h4 className="text-sm font-semibold text-white truncate">
+                      <h4 className="text-sm font-semibold text-chat-textPrimary truncate">
                         {item.user.displayName || item.user.username}
                       </h4>
-                      <p className="text-xs text-chat-textMuted">
+                      <p className="text-xs text-chat-textSecondary">
                         {formatRelativeTime(item.lastUpdated)}
                       </p>
                     </div>
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-white/30" />
+                  <ChevronRight className="w-4 h-4 text-chat-textTertiary" />
                 </div>
               ))}
             </div>
@@ -298,19 +298,19 @@ export const StoriesPage: React.FC = () => {
         {/* 4. Empty State if no contacts' stories */}
         {contactsFeed.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center p-12 text-center space-y-3">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 flex items-center justify-center">
               <CircleDot className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">No Story Updates</h3>
-              <p className="text-xs text-chat-textMuted max-w-xs mt-1 leading-relaxed">
+              <h3 className="text-base font-bold text-chat-textPrimary">No Story Updates</h3>
+              <p className="text-xs text-chat-textSecondary max-w-xs mt-1 leading-relaxed">
                 Stories from your contacts will appear here. Share your own thoughts or photos to get the conversation started!
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowComposer(true)}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 flex items-center gap-2 transition-all"
+              className="mt-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-brand-500/25 flex items-center gap-2 transition-all"
             >
               <Sparkles className="w-4 h-4" />
               <span>Create a Story</span>

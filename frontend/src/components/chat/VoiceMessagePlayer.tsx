@@ -270,7 +270,7 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
         disabled={isLoading}
         className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-md active:scale-95 ${
           isMe
-            ? 'bg-white text-emerald-800 hover:bg-white/90'
+            ? 'bg-brand-500 text-white hover:bg-brand-600'
             : 'bg-brand-500 text-white hover:bg-brand-600'
         }`}
         title={isPlaying ? 'Pause' : 'Play Voice Message'}
@@ -293,12 +293,12 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
           className="relative w-full h-5 flex items-center cursor-pointer group"
         >
           {/* Base Track */}
-          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+          <div className={`w-full h-1.5 rounded-full overflow-hidden ${isMe ? 'bg-black/15 dark:bg-white/20' : 'bg-black/10 dark:bg-white/20'}`}>
             {/* Played Fill */}
             <div
               style={{ width: `${progressPercent}%` }}
               className={`h-full rounded-full transition-all duration-75 ${
-                isMe ? 'bg-white' : 'bg-brand-400'
+                isMe ? 'bg-brand-500 dark:bg-white' : 'bg-brand-500'
               }`}
             />
           </div>
@@ -307,13 +307,13 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
           <div
             style={{ left: `${progressPercent}%` }}
             className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full shadow-md transition-transform group-hover:scale-125 ${
-              isMe ? 'bg-white' : 'bg-brand-400'
+              isMe ? 'bg-brand-500 dark:bg-white' : 'bg-brand-500'
             }`}
           />
         </div>
 
         {/* Timestamps: Elapsed & Safe Total Duration */}
-        <div className="flex items-center justify-between text-[11px] text-white/80 font-mono font-medium -mt-1">
+        <div className={`flex items-center justify-between text-[11px] font-mono font-medium -mt-1 ${isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/75'}`}>
           <span>{formatTime(currentTime)}</span>
           <span>{isLoading ? 'Loading...' : formatTime(totalDuration)}</span>
         </div>

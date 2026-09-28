@@ -65,18 +65,18 @@ export const SearchUserPage: React.FC = () => {
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col max-w-md mx-auto overflow-hidden">
       {/* Header with Safe Area Status Bar Padding */}
-      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-white/10 flex items-center gap-3 flex-shrink-0">
+      <header className="px-4 pt-10 pb-3 bg-chat-panel border-b border-chat-border flex items-center gap-3 flex-shrink-0">
         <button
           onClick={() => navigate('/chats')}
-          className="p-1.5 rounded-full hover:bg-white/5 text-chat-textMuted hover:text-white transition-colors"
+          className="p-1.5 rounded-full hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-chat-textPrimary transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-bold text-white">Find a Person</h1>
+        <h1 className="text-lg font-bold text-chat-textPrimary">Find a Person</h1>
       </header>
 
       <div className="p-4 flex-1 overflow-y-auto">
-        <p className="text-xs text-chat-textMuted mb-4 leading-relaxed">
+        <p className="text-xs text-chat-textSecondary mb-4 leading-relaxed">
           Enter a friend's exact username to find their profile and start a private 1-to-1 conversation.
         </p>
 
@@ -92,7 +92,7 @@ export const SearchUserPage: React.FC = () => {
               }}
               placeholder="Search by username (e.g. asif_53)"
               autoFocus
-              className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl py-3.5 pl-10 pr-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
+              className="w-full bg-chat-input border border-chat-border text-chat-textPrimary placeholder:text-chat-textTertiary rounded-xl py-3.5 pl-10 pr-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
             />
             <AtSign className="w-4 h-4 text-chat-textMuted absolute left-3.5 top-4" />
             <Search className="w-4 h-4 text-chat-textMuted absolute right-3.5 top-4" />
@@ -112,7 +112,7 @@ export const SearchUserPage: React.FC = () => {
         </form>
 
         {error && (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-2 mb-4 animate-fade-in">
+          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-medium flex items-center gap-2 mb-4 animate-fade-in">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -120,7 +120,7 @@ export const SearchUserPage: React.FC = () => {
 
         {/* Result Card */}
         {searchResult && (
-          <div className="bg-chat-card border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center shadow-lg animate-fade-in">
+          <div className="bg-chat-card border border-chat-border rounded-2xl p-5 flex flex-col items-center text-center shadow-sm animate-fade-in">
             <Avatar
               src={searchResult.avatarUrl}
               name={searchResult.displayName || searchResult.username || 'User'}
@@ -129,9 +129,9 @@ export const SearchUserPage: React.FC = () => {
               className="mb-3"
             />
 
-            <h3 className="text-base font-bold text-white mb-0.5">{searchResult.displayName}</h3>
+            <h3 className="text-base font-bold text-chat-textPrimary mb-0.5">{searchResult.displayName}</h3>
             {searchResult.username && (
-              <p className="text-xs font-mono text-brand-400 mb-5">
+              <p className="text-xs font-mono text-brand-500 dark:text-brand-400 mb-5">
                 @{searchResult.username}
               </p>
             )}
@@ -155,12 +155,12 @@ export const SearchUserPage: React.FC = () => {
 
         {/* Not Found State */}
         {notFound && (
-          <div className="bg-chat-card/40 border border-white/5 rounded-2xl p-6 flex flex-col items-center text-center animate-fade-in">
-            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-chat-textMuted mb-3">
+          <div className="bg-chat-card border border-chat-border rounded-2xl p-6 flex flex-col items-center text-center animate-fade-in">
+            <div className="w-12 h-12 rounded-full bg-chat-surfaceSecondary flex items-center justify-center text-chat-textMuted mb-3">
               <UserX className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-semibold text-white mb-1">No user found</h3>
-            <p className="text-xs text-chat-textMuted">
+            <h3 className="text-sm font-semibold text-chat-textPrimary mb-1">No user found</h3>
+            <p className="text-xs text-chat-textSecondary">
               No registered user was found matching that username. Please make sure the spelling is exact.
             </p>
           </div>

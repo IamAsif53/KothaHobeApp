@@ -360,23 +360,23 @@ export const ChatInfoPage: React.FC = () => {
       {/* ================= TOP APP BAR ================= */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200"
+        className="px-4 pt-10 pb-3 border-b border-chat-border flex items-center justify-between flex-shrink-0 z-10 transition-colors duration-200"
       >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/chat/${conversationId}`)}
-            className="p-2 rounded-full hover:bg-white/10 text-white transition-colors active:scale-95"
+            className="p-2 rounded-full hover:bg-chat-card text-chat-textPrimary transition-colors active:scale-95"
             title="Back to Chat"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-base font-bold text-white tracking-tight">Contact Info</h1>
+          <h1 className="text-base font-bold text-chat-textPrimary tracking-tight">Contact Info</h1>
         </div>
 
         <div className="flex items-center gap-1">
           <button
             onClick={handleShareContact}
-            className="p-2 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
+            className="p-2 rounded-full hover:bg-chat-card text-chat-textMuted hover:text-chat-textPrimary transition-colors"
             title="Share Contact"
           >
             <Share2 className="w-4 h-4" />
@@ -397,7 +397,7 @@ export const ChatInfoPage: React.FC = () => {
         {/* 1. SOCIAL PROFILE HEADER */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-md relative overflow-hidden"
+          className="border border-chat-border rounded-3xl p-6 flex flex-col items-center text-center shadow-md relative overflow-hidden"
         >
           {/* Subtle Ambient Background Accent Glow */}
           <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-brand-500/10 to-transparent pointer-events-none" />
@@ -426,7 +426,7 @@ export const ChatInfoPage: React.FC = () => {
 
               {/* Story Badge indicator */}
               {hasActiveStory && (
-                <div className="absolute -bottom-1 -right-1 bg-brand-500 border-2 border-slate-900 text-white rounded-full p-1 shadow-md">
+                <div className="absolute -bottom-1 -right-1 bg-brand-500 border-2 border-chat-bg text-white rounded-full p-1 shadow-md">
                   <Play className="w-2.5 h-2.5 fill-current" />
                 </div>
               )}
@@ -435,7 +435,7 @@ export const ChatInfoPage: React.FC = () => {
 
           {/* Display Name & Custom Nickname */}
           <div className="space-y-1 w-full max-w-xs">
-            <h2 className="text-xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
+            <h2 className="text-xl font-bold text-chat-textPrimary tracking-tight flex items-center justify-center gap-2">
               <span className="truncate">{effectiveDisplayName}</span>
               {recipient?.isOnline && (
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" />
@@ -451,7 +451,7 @@ export const ChatInfoPage: React.FC = () => {
 
             {/* Username */}
             {recipient?.username && (
-              <p className="text-xs font-mono text-brand-400 font-medium tracking-wide">
+              <p className="text-xs font-mono text-brand-500 dark:text-brand-400 font-medium tracking-wide">
                 @{recipient.username}
               </p>
             )}
@@ -459,7 +459,7 @@ export const ChatInfoPage: React.FC = () => {
             {/* Status / Activity */}
             <p className="text-[12px] text-chat-textMuted pt-0.5">
               {recipient?.isOnline ? (
-                <span className="text-emerald-400 font-medium">Active now</span>
+                <span className="text-emerald-500 dark:text-emerald-400 font-medium">Active now</span>
               ) : (
                 `Last seen ${formatLastSeen(recipient?.lastSeen, recipient?.isOnline)}`
               )}
@@ -474,16 +474,16 @@ export const ChatInfoPage: React.FC = () => {
           </div>
 
           {/* 2. QUICK ACTION ROW (COMPACT SOCIAL PILLS) */}
-          <div className="grid grid-cols-4 gap-2 w-full mt-5 pt-4 border-t border-white/5">
+          <div className="grid grid-cols-4 gap-2 w-full mt-5 pt-4 border-t border-chat-border">
             {/* Message Button */}
             <button
               onClick={() => navigate(`/chat/${conversationId}`)}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95 group"
+              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-chat-panel hover:bg-chat-panel/80 border border-chat-border text-chat-textPrimary transition-all active:scale-95 group"
             >
-              <div className="w-9 h-9 rounded-xl bg-brand-500/15 text-brand-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-brand-500/15 text-brand-500 dark:text-brand-400 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <MessageSquare className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-white">
+              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary">
                 Message
               </span>
             </button>
@@ -491,12 +491,12 @@ export const ChatInfoPage: React.FC = () => {
             {/* Audio Call Button */}
             <button
               onClick={() => handleStartCall('voice')}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95 group"
+              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-chat-panel hover:bg-chat-panel/80 border border-chat-border text-chat-textPrimary transition-all active:scale-95 group"
             >
-              <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-500 dark:text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Phone className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-white">
+              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary">
                 Audio
               </span>
             </button>
@@ -504,12 +504,12 @@ export const ChatInfoPage: React.FC = () => {
             {/* Video Call Button */}
             <button
               onClick={() => handleStartCall('video')}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95 group"
+              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-chat-panel hover:bg-chat-panel/80 border border-chat-border text-chat-textPrimary transition-all active:scale-95 group"
             >
-              <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-500 dark:text-purple-400 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Video className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-white">
+              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary">
                 Video
               </span>
             </button>
@@ -517,12 +517,12 @@ export const ChatInfoPage: React.FC = () => {
             {/* Search Button */}
             <button
               onClick={() => navigate(`/chat/${conversationId}?search=true`)}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95 group"
+              className="flex flex-col items-center gap-1.5 p-2 rounded-2xl bg-chat-panel hover:bg-chat-panel/80 border border-chat-border text-chat-textPrimary transition-all active:scale-95 group"
             >
-              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 dark:text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Search className="w-4 h-4" />
               </div>
-              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-white">
+              <span className="text-[11px] font-semibold text-chat-textMuted group-hover:text-chat-textPrimary">
                 Search
               </span>
             </button>
@@ -543,8 +543,8 @@ export const ChatInfoPage: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">Active Story</h3>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                    <h3 className="text-sm font-bold text-chat-textPrimary">Active Story</h3>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-500 dark:text-brand-400 border border-brand-500/30">
                       24h
                     </span>
                   </div>
@@ -553,7 +553,7 @@ export const ChatInfoPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="w-8 h-8 rounded-full bg-brand-500/10 text-brand-400 flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all">
+              <div className="w-8 h-8 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all">
                 <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
               </div>
             </div>
@@ -563,7 +563,7 @@ export const ChatInfoPage: React.FC = () => {
         {/* 4. SHARED MEDIA, LINKS & DOCS (VISUAL PREVIEW STRIP) */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl p-4 shadow-sm space-y-3"
+          className="border border-chat-border rounded-2xl p-4 shadow-sm space-y-3"
         >
           <div
             onClick={() => navigate(`/chat/${conversationId}/shared`)}
@@ -571,14 +571,14 @@ export const ChatInfoPage: React.FC = () => {
           >
             <div className="flex items-center gap-2.5">
               <ImageIcon className="w-4 h-4 text-purple-400" />
-              <span className="text-sm font-bold text-white">Media, Links & Docs</span>
+              <span className="text-sm font-bold text-chat-textPrimary">Media, Links & Docs</span>
               {mediaCount > 0 && (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white/10 text-chat-textMuted">
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-chat-panel text-chat-textMuted border border-chat-border">
                   {mediaCount}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-brand-400 group-hover:text-brand-300 transition-colors">
+            <div className="flex items-center gap-1 text-xs font-semibold text-brand-500 dark:text-brand-400 group-hover:text-brand-400 transition-colors">
               <span>See all</span>
               <ChevronRight className="w-4 h-4" />
             </div>
@@ -591,7 +591,7 @@ export const ChatInfoPage: React.FC = () => {
                 <div
                   key={msg._id}
                   onClick={() => setSelectedMediaMessage(msg)}
-                  className="aspect-square rounded-xl bg-black/40 overflow-hidden border border-white/10 cursor-pointer hover:opacity-90 active:scale-95 transition-all relative group"
+                  className="aspect-square rounded-xl bg-chat-panel overflow-hidden border border-chat-border cursor-pointer hover:opacity-90 active:scale-95 transition-all relative group"
                 >
                   <img
                     src={getMediaUrl(msg.attachment?.thumbnailUrl || msg.attachment?.url || '')}
@@ -608,7 +608,7 @@ export const ChatInfoPage: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="py-2 text-center text-xs text-chat-textMuted bg-white/5 rounded-xl">
+            <div className="py-2 text-center text-xs text-chat-textMuted bg-chat-panel rounded-xl">
               No media, files or links shared yet
             </div>
           )}
@@ -617,25 +617,25 @@ export const ChatInfoPage: React.FC = () => {
         {/* 5. GROUPS IN COMMON (MUTUAL CONNECTIONS) */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl p-4 shadow-sm space-y-3"
+          className="border border-chat-border rounded-2xl p-4 shadow-sm space-y-3"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Users className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm font-bold text-white">Groups in Common</span>
+              <span className="text-sm font-bold text-chat-textPrimary">Groups in Common</span>
             </div>
-            <span className="text-xs font-semibold text-chat-textMuted px-2 py-0.5 rounded-full bg-white/5">
+            <span className="text-xs font-semibold text-chat-textMuted px-2 py-0.5 rounded-full bg-chat-panel border border-chat-border">
               {commonGroups.length}
             </span>
           </div>
 
           {commonGroups.length > 0 ? (
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-chat-border">
               {commonGroups.map((g) => (
                 <div
                   key={g._id}
                   onClick={() => navigate(`/chat/${g._id}`)}
-                  className="flex items-center justify-between py-2.5 first:pt-1 last:pb-1 cursor-pointer hover:bg-white/5 rounded-xl px-2 transition-colors"
+                  className="flex items-center justify-between py-2.5 first:pt-1 last:pb-1 cursor-pointer hover:bg-chat-panel rounded-xl px-2 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar
@@ -644,7 +644,7 @@ export const ChatInfoPage: React.FC = () => {
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate">
+                      <h4 className="text-xs font-bold text-chat-textPrimary truncate">
                         {g.groupMeta?.name || 'Group Chat'}
                       </h4>
                       <p className="text-[11px] text-chat-textMuted truncate">
@@ -657,7 +657,7 @@ export const ChatInfoPage: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="py-2 text-center text-xs text-chat-textMuted bg-white/5 rounded-xl">
+            <div className="py-2 text-center text-xs text-chat-textMuted bg-chat-panel rounded-xl">
               No common groups
             </div>
           )}
@@ -666,7 +666,7 @@ export const ChatInfoPage: React.FC = () => {
         {/* 6. CHAT SETTINGS & PREFERENCES */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden shadow-sm"
+          className="border border-chat-border rounded-2xl divide-y divide-chat-border overflow-hidden shadow-sm"
         >
           {/* Custom Nickname */}
           <div
@@ -674,14 +674,14 @@ export const ChatInfoPage: React.FC = () => {
               setNicknameInput(customNickname);
               setShowNicknameModal(true);
             }}
-            className="flex items-center justify-between p-4 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 dark:text-amber-400 flex items-center justify-center">
                 <Tag className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Set Nickname</div>
+                <div className="text-sm font-semibold text-chat-textPrimary">Set Nickname</div>
                 <div className="text-xs text-chat-textMuted">
                   {customNickname ? `"${customNickname}"` : 'Add a custom nickname'}
                 </div>
@@ -693,14 +693,14 @@ export const ChatInfoPage: React.FC = () => {
           {/* Mute Notifications Toggle */}
           <div
             onClick={handleToggleMute}
-            className="flex items-center justify-between p-4 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-500 dark:text-sky-400 flex items-center justify-center">
                 {isMuted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Mute Notifications</div>
+                <div className="text-sm font-semibold text-chat-textPrimary">Mute Notifications</div>
                 <div className="text-xs text-chat-textMuted">
                   {isMuted ? 'Muted for this conversation' : 'Sound & vibration enabled'}
                 </div>
@@ -708,7 +708,7 @@ export const ChatInfoPage: React.FC = () => {
             </div>
             <div
               className={`w-11 h-6 rounded-full transition-colors relative ${
-                isMuted ? 'bg-brand-500' : 'bg-white/20'
+                isMuted ? 'bg-brand-500' : 'bg-chat-panel border border-chat-border'
               }`}
             >
               <span
@@ -722,14 +722,14 @@ export const ChatInfoPage: React.FC = () => {
           {/* Search in Conversation */}
           <div
             onClick={() => navigate(`/chat/${conversationId}?search=true`)}
-            className="flex items-center justify-between p-4 hover:bg-white/5 cursor-pointer transition-colors"
+            className="flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-500 dark:text-teal-400 flex items-center justify-center">
                 <Search className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Search in Conversation</div>
+                <div className="text-sm font-semibold text-chat-textPrimary">Search in Conversation</div>
                 <div className="text-xs text-chat-textMuted">Find messages, links, and dates</div>
               </div>
             </div>
@@ -740,13 +740,13 @@ export const ChatInfoPage: React.FC = () => {
         {/* 7. CONNECTION INFO & SHARED DETAILS */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl p-4 shadow-sm space-y-2.5"
+          className="border border-chat-border rounded-2xl p-4 shadow-sm space-y-2.5"
         >
           <div className="flex items-center gap-3 text-xs text-chat-textMuted">
             <Calendar className="w-4 h-4 text-brand-400 flex-shrink-0" />
             <span>
               Connected since{' '}
-              <strong className="text-white font-medium">
+              <strong className="text-chat-textPrimary font-medium">
                 {formatConnectedSince(conversation?.createdAt)}
               </strong>
             </span>
@@ -761,19 +761,19 @@ export const ChatInfoPage: React.FC = () => {
         {/* 8. PRIVACY, SAFETY & DANGER ZONE */}
         <div
           style={{ backgroundColor: themeConfig.card }}
-          className="border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden shadow-sm"
+          className="border border-chat-border rounded-2xl divide-y divide-chat-border overflow-hidden shadow-sm"
         >
           {/* Block / Unblock User */}
           <div
             onClick={() => setShowBlockConfirm(true)}
-            className={`flex items-center justify-between p-4 hover:bg-white/5 cursor-pointer transition-colors ${
-              isBlocked ? 'text-emerald-400' : 'text-amber-400'
+            className={`flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors ${
+              isBlocked ? 'text-emerald-500 dark:text-emerald-400' : 'text-amber-500 dark:text-amber-400'
             }`}
           >
             <div className="flex items-center gap-3.5">
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                  isBlocked ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                  isBlocked ? 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-500 dark:text-amber-400'
                 }`}
               >
                 {isBlocked ? <UserCheck className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
@@ -795,14 +795,14 @@ export const ChatInfoPage: React.FC = () => {
           {/* Report User */}
           <div
             onClick={handleReportUser}
-            className="flex items-center justify-between p-4 hover:bg-white/5 cursor-pointer transition-colors text-chat-textMuted hover:text-white"
+            className="flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors text-chat-textMuted hover:text-chat-textPrimary"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-white/5 text-chat-textMuted flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-chat-panel text-chat-textMuted flex items-center justify-center border border-chat-border">
                 <ShieldAlert className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Report Contact</div>
+                <div className="text-sm font-semibold text-chat-textPrimary">Report Contact</div>
                 <div className="text-xs text-chat-textMuted">Report spam or suspicious activity</div>
               </div>
             </div>
@@ -812,20 +812,20 @@ export const ChatInfoPage: React.FC = () => {
           {/* Clear Chat History */}
           <div
             onClick={() => setShowClearConfirm(true)}
-            className="flex items-center justify-between p-4 hover:bg-red-500/10 cursor-pointer transition-colors text-red-400"
+            className="flex items-center justify-between p-4 hover:bg-red-500/10 cursor-pointer transition-colors text-red-500 dark:text-red-400"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-red-500/10 text-red-500 dark:text-red-400 flex items-center justify-center">
                 <Trash2 className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-red-400">Clear Chat History</div>
+                <div className="text-sm font-semibold text-red-500 dark:text-red-400">Clear Chat History</div>
                 <div className="text-xs text-chat-textMuted">
                   Permanently delete all messages in this chat
                 </div>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-red-400/50" />
+            <ChevronRight className="w-4 h-4 text-red-500/50" />
           </div>
         </div>
 
@@ -886,23 +886,21 @@ export const ChatInfoPage: React.FC = () => {
             )}
           </div>
         </div>
-      )}
-
-      {/* 4. SET NICKNAME MODAL */}
+      )}      {/* 4. SET NICKNAME MODAL */}
       {showNicknameModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-fade-in">
           <div
             style={{ backgroundColor: themeConfig.panel }}
-            className="border border-white/10 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
+            className="border border-chat-border w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-chat-border pb-3">
               <div className="flex items-center gap-2">
-                <Tag className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Set Nickname</h3>
+                <Tag className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+                <h3 className="text-base font-bold text-chat-textPrimary">Set Nickname</h3>
               </div>
               <button
                 onClick={() => setShowNicknameModal(false)}
-                className="p-1 rounded-full text-chat-textMuted hover:text-white"
+                className="p-1 rounded-full text-chat-textMuted hover:text-chat-textPrimary"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -919,7 +917,7 @@ export const ChatInfoPage: React.FC = () => {
                   onChange={(e) => setNicknameInput(e.target.value)}
                   placeholder="e.g. Captain, Bestie, Brother..."
                   maxLength={40}
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-chat-textMuted text-sm focus:outline-none focus:border-brand-500 transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-chat-input border border-chat-border text-chat-textPrimary placeholder-chat-textMuted text-sm focus:outline-none focus:border-brand-500 transition-colors"
                   autoFocus
                 />
                 <p className="text-[11px] text-chat-textMuted mt-1">
@@ -940,7 +938,7 @@ export const ChatInfoPage: React.FC = () => {
                       }
                       setShowNicknameModal(false);
                     }}
-                    className="py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-chat-textMuted font-semibold text-xs border border-white/10 transition-colors"
+                    className="py-2.5 px-4 rounded-xl bg-chat-card hover:bg-chat-panel text-chat-textMuted font-semibold text-xs border border-chat-border transition-colors"
                   >
                     Clear
                   </button>
@@ -962,14 +960,14 @@ export const ChatInfoPage: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div
             style={{ backgroundColor: themeConfig.panel }}
-            className="border border-white/10 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
+            className="border border-chat-border w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
           >
-            <div className="flex items-center gap-3 text-amber-400">
+            <div className="flex items-center gap-3 text-amber-500 dark:text-amber-400">
               <div className="w-10 h-10 rounded-2xl bg-amber-500/15 flex items-center justify-center flex-shrink-0">
                 <Ban className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-chat-textPrimary">
                   {isBlocked ? 'Unblock Contact?' : 'Block Contact?'}
                 </h3>
                 <p className="text-xs text-chat-textMuted mt-0.5">
@@ -989,7 +987,7 @@ export const ChatInfoPage: React.FC = () => {
                 type="button"
                 onClick={() => setShowBlockConfirm(false)}
                 disabled={isActionLoading}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-xs border border-white/10 transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-chat-card hover:bg-chat-panel text-chat-textPrimary font-semibold text-xs border border-chat-border transition-colors"
               >
                 Cancel
               </button>
@@ -1021,14 +1019,14 @@ export const ChatInfoPage: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div
             style={{ backgroundColor: themeConfig.panel }}
-            className="border border-white/10 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
+            className="border border-chat-border w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 animate-scale-up"
           >
-            <div className="flex items-center gap-3 text-red-400">
+            <div className="flex items-center gap-3 text-red-500 dark:text-red-400">
               <div className="w-10 h-10 rounded-2xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Clear Chat History?</h3>
+                <h3 className="text-base font-bold text-chat-textPrimary">Clear Chat History?</h3>
                 <p className="text-xs text-chat-textMuted mt-0.5">
                   This action cannot be undone
                 </p>
@@ -1044,7 +1042,7 @@ export const ChatInfoPage: React.FC = () => {
                 type="button"
                 onClick={() => setShowClearConfirm(false)}
                 disabled={isActionLoading}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-xs border border-white/10 transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-chat-card hover:bg-chat-panel text-chat-textPrimary font-semibold text-xs border border-chat-border transition-colors"
               >
                 Cancel
               </button>

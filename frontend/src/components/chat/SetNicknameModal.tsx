@@ -4,6 +4,7 @@ import { setGroupNicknameApi } from '../../api/groupApi';
 import { IUser } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { modalStack } from '../../utils/modalStack';
+import { useTheme } from '../../context/ThemeContext';
 
 interface SetNicknameModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
   currentNickname = '',
   onNicknameUpdated,
 }) => {
+  const { themeConfig } = useTheme();
   const [nickname, setNickname] = useState(currentNickname);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -77,35 +79,41 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div
+        style={{ backgroundColor: themeConfig.panel }}
+        className="border border-chat-border rounded-3xl w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4"
+      >
+        <div className="flex items-center justify-between border-b border-chat-border pb-3">
           <div className="flex items-center gap-2">
-            <Tag className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-base font-bold text-white">Set Group Nickname</h3>
+            <Tag className="w-5 h-5 text-brand-500 dark:text-brand-400" />
+            <h3 className="text-base font-bold text-chat-textPrimary">Set Group Nickname</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-full text-chat-textMuted hover:text-chat-textPrimary hover:bg-chat-card transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* User Info Header */}
-        <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/50">
+        <div
+          style={{ backgroundColor: themeConfig.card }}
+          className="flex items-center gap-3 p-3 rounded-2xl border border-chat-border"
+        >
           <Avatar
             src={targetUser.avatarUrl}
             name={targetUser.displayName || targetUser.username || 'User'}
             size="md"
           />
           <div className="min-w-0">
-            <h4 className="text-sm font-semibold text-white truncate">{targetUser.displayName}</h4>
-            <p className="text-xs text-slate-400 truncate">@{targetUser.username}</p>
+            <h4 className="text-sm font-semibold text-chat-textPrimary truncate">{targetUser.displayName}</h4>
+            <p className="text-xs text-chat-textMuted truncate">@{targetUser.username}</p>
           </div>
         </div>
 
         {errorMessage && (
-          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium">
+          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 dark:text-red-400 text-xs font-medium">
             {errorMessage}
           </div>
         )}
@@ -113,7 +121,7 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSave} className="flex flex-col gap-3">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+            <label className="block text-xs font-semibold text-chat-textMuted mb-1.5">
               Custom Nickname in this Group
             </label>
             <input
@@ -122,9 +130,9 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
               onChange={(e) => setNickname(e.target.value)}
               placeholder="e.g. Captain, Boss, Pro..."
               maxLength={50}
-              className="w-full px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500"
+              className="w-full px-4 py-3 rounded-2xl bg-chat-input border border-chat-border text-chat-textPrimary placeholder:text-chat-textMuted text-sm focus:outline-none focus:border-brand-500"
             />
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-chat-textMuted mt-1">
               Nicknames are only visible to members of this group.
             </p>
           </div>
@@ -135,7 +143,7 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
                 type="button"
                 onClick={handleClear}
                 disabled={isSubmitting}
-                className="py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition-colors active:scale-95 disabled:opacity-50"
+                className="py-3 px-4 rounded-2xl bg-chat-card hover:bg-chat-panel text-chat-textMuted hover:text-chat-textPrimary font-medium text-xs border border-chat-border transition-colors active:scale-95 disabled:opacity-50"
               >
                 Clear
               </button>
@@ -144,7 +152,7 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+              className="flex-1 py-3 px-4 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>

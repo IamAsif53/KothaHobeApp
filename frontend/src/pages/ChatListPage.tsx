@@ -294,7 +294,7 @@ export const ChatListPage: React.FC = () => {
     >
       {/* Toast Notification */}
       {actionToast && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs px-4 py-2 rounded-full shadow-2xl animate-fade-in pointer-events-none">
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-chat-panel/90 backdrop-blur-md border border-chat-border text-chat-textPrimary text-xs px-4 py-2 rounded-full shadow-2xl animate-fade-in pointer-events-none">
           {actionToast}
         </div>
       )}
@@ -302,16 +302,16 @@ export const ChatListPage: React.FC = () => {
       {/* Top Header */}
       <header
         style={{ backgroundColor: themeConfig.panel }}
-        className="px-4 pt-10 pb-3 border-b border-white/10 flex items-center justify-between flex-shrink-0 transition-colors duration-200"
+        className="px-4 pt-10 pb-3 border-b border-chat-border flex items-center justify-between flex-shrink-0 transition-colors duration-200"
       >
         {/* Left: Chats Title */}
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
+          <h1 className="text-xl font-bold text-chat-textPrimary tracking-tight">Chats</h1>
         </div>
 
         {/* Center: App Bengali Brand Name */}
         <div className="flex items-center justify-center">
-          <span className="text-2xl font-bold text-white tracking-wide font-sans select-none drop-shadow-sm flex items-center gap-1.5">
+          <span className="text-2xl font-bold text-chat-textPrimary tracking-wide font-sans select-none drop-shadow-sm flex items-center gap-1.5">
             💬 কথা হবে
           </span>
         </div>
@@ -326,7 +326,7 @@ export const ChatListPage: React.FC = () => {
                 reconnectNow();
                 loadConversations(true);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-400 text-xs font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 text-amber-500 text-xs font-medium transition-all"
               title="Tap to reconnect immediately"
             >
               <WifiOff className={`w-3.5 h-3.5 ${isReconnecting ? 'animate-pulse' : ''}`} />
@@ -337,7 +337,7 @@ export const ChatListPage: React.FC = () => {
           {/* New Group Button */}
           <button
             onClick={() => setShowCreateGroupModal(true)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 active:scale-95 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-soft hover:opacity-90 active:scale-95 border border-brand-500/30 text-brand-500 text-xs font-semibold transition-all"
             title="Create New Group"
           >
             <Users className="w-3.5 h-3.5" />
@@ -347,25 +347,25 @@ export const ChatListPage: React.FC = () => {
       </header>
 
       {/* Search Input Bar */}
-      <div className="p-3 bg-chat-panel/50 border-b border-white/5 flex-shrink-0">
+      <div className="p-3 bg-chat-panel/60 border-b border-chat-divider flex-shrink-0 transition-colors duration-200">
         <div className="relative">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search chats or groups..."
-            className="w-full bg-chat-input border border-white/5 text-white placeholder:text-chat-textMuted/60 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-brand-500/50 transition-colors"
+            className="w-full bg-chat-input border border-chat-border text-chat-textPrimary placeholder:text-chat-textTertiary rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-brand-500 focus:bg-chat-card transition-all"
           />
           <Search className="w-4 h-4 text-chat-textMuted absolute left-3.5 top-3" />
         </div>
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+      <div className="flex-1 overflow-y-auto divide-y divide-chat-divider">
         {/* Pending Group Invites Section */}
         {pendingInvites.length > 0 && (
-          <div className="p-3 bg-emerald-950/20 border-b border-emerald-500/20 space-y-2">
-            <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider px-1">
+          <div className="p-3 bg-emerald-500/10 border-b border-emerald-500/20 space-y-2">
+            <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-1">
               Group Invitations ({pendingInvites.length})
             </p>
             {pendingInvites.map((inv) => (
@@ -393,10 +393,10 @@ export const ChatListPage: React.FC = () => {
           </>
         ) : activeConversations.length === 0 && pendingInvites.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-chat-card flex items-center justify-center mb-4 text-chat-textMuted">
+            <div className="w-16 h-16 rounded-full bg-chat-surfaceSecondary flex items-center justify-center mb-4 text-chat-textMuted">
               <MessageSquare className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-semibold text-white mb-1">
+            <h3 className="text-base font-semibold text-chat-textPrimary mb-1">
               {searchQuery ? 'No matching conversations' : 'No conversations yet'}
             </h3>
             <p className="text-xs text-chat-textMuted mb-6 max-w-xs leading-relaxed">
@@ -408,7 +408,7 @@ export const ChatListPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setShowCreateGroupModal(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md shadow-emerald-600/20"
+                  className="bg-brand-500 hover:bg-brand-600 active:scale-95 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md shadow-brand-500/20"
                 >
                   <Users className="w-4 h-4" />
                   <span>New Group</span>
@@ -434,7 +434,7 @@ export const ChatListPage: React.FC = () => {
             return (
               <div
                 key={conv._id}
-                className="flex items-center gap-3.5 px-4 py-3.5 pressable-card cursor-pointer select-none relative group hardware-accelerated"
+                className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-chat-surfaceSecondary/50 active:bg-chat-surfaceSecondary pressable-card cursor-pointer select-none relative group hardware-accelerated transition-colors duration-150"
               >
                 {/* Click to open chat */}
                 <div
@@ -444,7 +444,7 @@ export const ChatListPage: React.FC = () => {
                   {isGroup ? (
                     <div className="relative flex-shrink-0">
                       <Avatar src={avatarUrl} name={title} size="md" />
-                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 border-2 border-slate-900 flex items-center justify-center text-white">
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-brand-500 border-2 border-chat-bg flex items-center justify-center text-white">
                         <Users className="w-3 h-3" />
                       </div>
                     </div>
@@ -460,9 +460,9 @@ export const ChatListPage: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h2 className="text-sm font-semibold text-white truncate">{title}</h2>
+                        <h2 className="text-sm font-semibold text-chat-textPrimary truncate">{title}</h2>
                         {isGroup && (
-                          <span className="text-[10px] text-emerald-400/80 font-medium px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                          <span className="text-[10px] text-brand-500 font-medium px-1.5 py-0.2 rounded bg-brand-soft border border-brand-500/20 shrink-0">
                             {conv.groupMeta?.members?.length || 1}
                           </span>
                         )}
@@ -475,7 +475,7 @@ export const ChatListPage: React.FC = () => {
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <p className="text-xs text-chat-textMuted truncate pr-2">
+                      <p className="text-xs text-chat-textSecondary truncate pr-2">
                         {renderStatusCheck(conv.lastMessage?.status)}
                         {conv.lastMessage?.text || (isGroup ? 'Group created' : 'Started conversation')}
                       </p>
@@ -496,7 +496,7 @@ export const ChatListPage: React.FC = () => {
                     e.stopPropagation();
                     setSelectedConvForAction(conv);
                   }}
-                  className="p-2 rounded-full text-chat-textMuted hover:text-white hover:bg-white/10 pressable-icon flex-shrink-0"
+                  className="p-2 rounded-full text-chat-textMuted hover:text-chat-textPrimary hover:bg-chat-surfaceSecondary pressable-icon flex-shrink-0"
                   title="Chat Options"
                 >
                   <MoreVertical className="w-4 h-4" />
@@ -525,10 +525,10 @@ export const ChatListPage: React.FC = () => {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ backgroundColor: themeConfig.card }}
-            className="w-full max-w-sm rounded-3xl border border-white/10 overflow-hidden shadow-2xl p-5 space-y-4 animate-slide-up"
+            className="w-full max-w-sm rounded-3xl border border-chat-border overflow-hidden shadow-2xl p-5 space-y-4 animate-slide-up"
           >
             {/* Header info */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-chat-divider pb-3">
               <div className="flex items-center gap-3">
                 <Avatar
                   src={
@@ -544,7 +544,7 @@ export const ChatListPage: React.FC = () => {
                   size="sm"
                 />
                 <div>
-                  <h3 className="text-sm font-bold text-white">
+                  <h3 className="text-sm font-bold text-chat-textPrimary">
                     {selectedConvForAction.isGroup
                       ? selectedConvForAction.groupMeta?.name || 'Group Chat'
                       : selectedConvForAction.recipient?.displayName || 'User'}
@@ -560,7 +560,7 @@ export const ChatListPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedConvForAction(null)}
-                className="p-1.5 rounded-full hover:bg-white/10 text-chat-textMuted hover:text-white transition-colors"
+                className="p-1.5 rounded-full hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-chat-textPrimary transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -576,13 +576,13 @@ export const ChatListPage: React.FC = () => {
                     navigate(`/group/${selectedConvForAction._id}/info`);
                     setSelectedConvForAction(null);
                   }}
-                  className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-white text-sm font-semibold transition-all text-left"
+                  className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary active:scale-[0.98] text-chat-textPrimary text-sm font-semibold transition-all text-left"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <div className="w-8 h-8 rounded-xl bg-brand-soft flex items-center justify-center text-brand-500">
                     <Info className="w-4 h-4" />
                   </div>
                   <div>
-                    <div>Group Details & Members</div>
+                    <div className="text-chat-textPrimary">Group Details & Members</div>
                     <div className="text-[11px] text-chat-textMuted font-normal">
                       Manage nicknames, media, and members
                     </div>
@@ -594,13 +594,13 @@ export const ChatListPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleDeleteChat(selectedConvForAction)}
-                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-white text-sm font-semibold transition-all text-left"
+                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary active:scale-[0.98] text-chat-textPrimary text-sm font-semibold transition-all text-left"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-chat-textMuted">
+                <div className="w-8 h-8 rounded-xl bg-chat-surfaceTertiary flex items-center justify-center text-chat-textMuted">
                   <Trash2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <div>Clear Messages</div>
+                  <div className="text-chat-textPrimary">Clear Messages</div>
                   <div className="text-[11px] text-chat-textMuted font-normal">
                     Remove messages from your device
                   </div>
@@ -613,13 +613,13 @@ export const ChatListPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleLeaveGroup(selectedConvForAction)}
-                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-white text-sm font-semibold transition-all text-left"
+                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary active:scale-[0.98] text-chat-textPrimary text-sm font-semibold transition-all text-left"
                   >
-                    <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                    <div className="w-8 h-8 rounded-xl bg-chat-surfaceTertiary flex items-center justify-center text-chat-textMuted">
                       <LogOut className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-200">Leave Group</div>
+                      <div className="font-semibold text-chat-textPrimary">Leave Group</div>
                       <div className="text-[11px] text-chat-textMuted font-normal">
                         Exit this group conversation
                       </div>
@@ -644,12 +644,12 @@ export const ChatListPage: React.FC = () => {
                         onClick={() => handleDeleteGroup(selectedConvForAction)}
                         className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/15 active:scale-[0.98] text-red-500 text-sm font-bold transition-all text-left border border-red-500/20"
                       >
-                        <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+                        <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500">
                           <Trash2 className="w-4 h-4" />
                         </div>
                         <div>
                           <div className="text-red-500 font-bold">Delete Group (Admin)</div>
-                          <div className="text-[11px] text-red-400/80 font-normal">
+                          <div className="text-[11px] text-red-500/80 font-normal">
                             Permanently remove group for everyone
                           </div>
                         </div>
@@ -663,12 +663,12 @@ export const ChatListPage: React.FC = () => {
                   onClick={() => handleBlockUser(selectedConvForAction)}
                   className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/15 active:scale-[0.98] text-red-500 text-sm font-bold transition-all text-left border border-red-500/20"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+                  <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500">
                     <Ban className="w-4 h-4" />
                   </div>
                   <div>
                     <div className="text-red-500 font-bold">Block User</div>
-                    <div className="text-[11px] text-red-400/80 font-normal">
+                    <div className="text-[11px] text-red-500/80 font-normal">
                       Hide from chats and search completely
                     </div>
                   </div>
@@ -680,7 +680,7 @@ export const ChatListPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setSelectedConvForAction(null)}
-              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-chat-textMuted hover:text-white transition-colors"
+              className="w-full py-2.5 rounded-xl bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary text-xs font-semibold text-chat-textMuted hover:text-chat-textPrimary transition-colors"
             >
               Cancel
             </button>

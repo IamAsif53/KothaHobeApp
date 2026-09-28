@@ -136,23 +136,23 @@ export const OtpPage: React.FC = () => {
   const targetEmail = email || localStorage.getItem('kotha_hobe_pending_email') || '';
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto">
+    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto select-none transition-colors duration-200">
       <div className="pt-10">
         <button
           onClick={() => navigate('/login')}
-          className="inline-flex items-center gap-2 text-xs font-medium text-chat-textMuted hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-medium text-chat-textMuted hover:text-chat-textPrimary mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Change Email</span>
         </button>
 
         <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6">
-          <ShieldCheck className="w-7 h-7 text-brand-400" />
+          <ShieldCheck className="w-7 h-7 text-brand-500 dark:text-brand-400" />
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Enter Verification Code</h1>
+        <h1 className="text-2xl font-bold text-chat-textPrimary mb-2">Enter Verification Code</h1>
         <p className="text-chat-textMuted text-sm leading-relaxed mb-8">
-          Verification code sent to <strong className="text-white">{maskEmail(targetEmail)}</strong>
+          Verification code sent to <strong className="text-chat-textPrimary">{maskEmail(targetEmail)}</strong>
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -169,13 +169,13 @@ export const OtpPage: React.FC = () => {
                 onChange={(e) => handleDigitChange(idx, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(idx, e)}
                 autoFocus={idx === 0}
-                className="w-12 h-14 bg-chat-card border border-white/10 text-white rounded-xl text-center text-xl font-bold font-mono focus:outline-none focus:border-brand-500 transition-colors"
+                className="w-12 h-14 bg-chat-card border border-chat-border text-chat-textPrimary rounded-xl text-center text-xl font-bold font-mono focus:outline-none focus:border-brand-500 transition-colors shadow-sm"
               />
             ))}
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-xs font-medium">
               {error}
             </div>
           )}
@@ -196,13 +196,13 @@ export const OtpPage: React.FC = () => {
         <div className="mt-8 text-center">
           {countdown > 0 ? (
             <p className="text-xs text-chat-textMuted">
-              Resend code in <strong className="text-white font-mono">{countdown}s</strong>
+              Resend code in <strong className="text-chat-textPrimary font-mono">{countdown}s</strong>
             </p>
           ) : (
             <button
               onClick={handleResend}
               disabled={isResending}
-              className="inline-flex items-center gap-1.5 text-xs text-brand-400 font-semibold hover:text-brand-300 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-brand-500 dark:text-brand-400 font-semibold hover:text-brand-400 transition-colors"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isResending ? 'animate-spin' : ''}`} />
               <span>Resend code</span>

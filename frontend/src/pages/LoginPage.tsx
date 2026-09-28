@@ -45,13 +45,13 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto select-none">
+    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 max-w-md mx-auto select-none transition-colors duration-200">
       <div className="pt-10">
         <div className="flex justify-start mb-6">
           <AppLogo size="md" showSubtitle={true} />
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Welcome</h1>
+        <h1 className="text-2xl font-bold text-chat-textPrimary mb-2">Welcome</h1>
         <p className="text-chat-textMuted text-sm leading-relaxed mb-6">
           Chat privately with friends and family. Enter your email address to get started.
         </p>
@@ -68,13 +68,13 @@ export const LoginPage: React.FC = () => {
                 onChange={handleEmailChange}
                 placeholder="name@example.com"
                 disabled={isSubmitting}
-                className="w-full bg-chat-input text-chat-textPrimary placeholder:text-chat-textMuted px-4 py-3.5 pl-11 rounded-xl border border-white/5 focus:border-brand-500 focus:outline-none transition-colors text-sm"
+                className="w-full bg-chat-input text-chat-textPrimary placeholder:text-chat-textMuted px-4 py-3.5 pl-11 rounded-xl border border-chat-border focus:border-brand-500 focus:outline-none transition-colors text-sm"
                 autoComplete="email"
                 autoFocus
               />
               <Mail className="w-5 h-5 text-chat-textMuted absolute left-3.5 top-1/2 -translate-y-1/2" />
             </div>
-            {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+            {error && <p className="text-red-500 dark:text-red-400 text-xs mt-2">{error}</p>}
           </div>
 
           <button

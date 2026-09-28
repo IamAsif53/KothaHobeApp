@@ -101,9 +101,9 @@ export const ProfileSetupPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 pt-10 max-w-md mx-auto overflow-y-auto">
+    <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 pt-10 max-w-md mx-auto overflow-y-auto select-none transition-colors duration-200">
       <div className="pt-2">
-        <h1 className="text-2xl font-bold text-white text-center mb-1">Set Up Profile</h1>
+        <h1 className="text-2xl font-bold text-chat-textPrimary text-center mb-1">Set Up Profile</h1>
         <p className="text-chat-textMuted text-xs text-center mb-6">
           Upload your photo and choose a unique username.
         </p>
@@ -138,7 +138,7 @@ export const ProfileSetupPage: React.FC = () => {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 font-semibold mt-1 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-brand-500 dark:text-brand-400 hover:text-brand-400 font-semibold mt-1 bg-chat-card hover:bg-chat-panel px-3 py-1.5 rounded-full border border-chat-border transition-colors"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Choose from Gallery</span>
@@ -152,7 +152,7 @@ export const ProfileSetupPage: React.FC = () => {
                   type="button"
                   onClick={() => setAvatarUrl(preset)}
                   className={`w-9 h-9 rounded-full overflow-hidden border-2 transition-all ${
-                    avatarUrl === preset ? 'border-brand-400 scale-110' : 'border-transparent opacity-70 hover:opacity-100'
+                    avatarUrl === preset ? 'border-brand-500 scale-110 shadow-md shadow-brand-500/20' : 'border-transparent opacity-70 hover:opacity-100'
                   }`}
                 >
                   <img src={preset} alt="avatar" className="w-full h-full object-cover" />
@@ -174,11 +174,11 @@ export const ProfileSetupPage: React.FC = () => {
                 placeholder="asif_53"
                 autoFocus
                 maxLength={30}
-                className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl px-4 py-3 pl-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
+                className="w-full bg-chat-card border border-chat-border text-chat-textPrimary placeholder:text-chat-textMuted/50 rounded-xl px-4 py-3 pl-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
               />
               <AtSign className="w-4 h-4 text-chat-textMuted absolute left-3.5 top-3.5" />
             </div>
-            <span className="text-[11px] text-chat-textMuted/70 mt-1 block">
+            <span className="text-[11px] text-chat-textMuted mt-1 block">
               Friends can search and find you with @{username || 'username'}
             </span>
           </div>
@@ -198,7 +198,7 @@ export const ProfileSetupPage: React.FC = () => {
                 }}
                 placeholder="Jiaul Asif"
                 maxLength={50}
-                className="w-full bg-chat-card border border-white/10 text-white placeholder:text-chat-textMuted/50 rounded-xl px-4 py-3 pl-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
+                className="w-full bg-chat-card border border-chat-border text-chat-textPrimary placeholder:text-chat-textMuted/50 rounded-xl px-4 py-3 pl-10 text-sm font-medium focus:outline-none focus:border-brand-500 transition-colors"
               />
               <UserIcon className="w-4 h-4 text-chat-textMuted absolute left-3.5 top-3.5" />
             </div>
@@ -209,11 +209,11 @@ export const ProfileSetupPage: React.FC = () => {
             <label className="block text-xs font-semibold uppercase tracking-wider text-chat-textMuted mb-1.5">
               Verified Email
             </label>
-            <div className="bg-chat-card/50 border border-white/5 rounded-xl px-4 py-2.5 flex items-center justify-between">
-              <span className="text-white text-xs font-mono truncate mr-2">
+            <div className="bg-chat-card border border-chat-border rounded-xl px-4 py-2.5 flex items-center justify-between">
+              <span className="text-chat-textPrimary text-xs font-mono truncate mr-2">
                 {user?.email || ''}
               </span>
-              <span className="flex items-center gap-1 text-[11px] text-brand-400 font-medium flex-shrink-0">
+              <span className="flex items-center gap-1 text-[11px] text-brand-500 dark:text-brand-400 font-medium flex-shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Verified</span>
               </span>
@@ -221,7 +221,7 @@ export const ProfileSetupPage: React.FC = () => {
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-xs font-medium">
               {error}
             </div>
           )}

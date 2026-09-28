@@ -2,10 +2,11 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Avatar } from '../components/common/Avatar';
-import { Camera, CheckCircle2, User as UserIcon, AtSign, Image as ImageIcon, Upload } from 'lucide-react';
+import { Camera, CheckCircle2, User as UserIcon, AtSign, Image as ImageIcon, Upload, ArrowLeft } from 'lucide-react';
 
 export const ProfileSetupPage: React.FC = () => {
   const { user, updateProfile } = useAuth();
+  const isEditing = !!(user?.username);
   const [username, setUsername] = useState(user?.username || '');
   const [displayName, setDisplayName] = useState(
     user?.displayName && !user.displayName.startsWith('User ') ? user.displayName : ''
@@ -94,7 +95,11 @@ export const ProfileSetupPage: React.FC = () => {
     setIsSubmitting(false);
 
     if (res.success) {
-      navigate('/chats', { replace: true });
+      if (isEditing) {
+        navigate('/settings', { replace: true });
+      } else {
+        navigate('/chats', { replace: true });
+      }
     } else {
       setError(res.error || 'Failed to update profile. Please try again.');
     }
@@ -103,9 +108,26 @@ export const ProfileSetupPage: React.FC = () => {
   return (
     <div className="h-full w-full bg-chat-bg flex flex-col justify-between p-6 pt-10 max-w-md mx-auto overflow-y-auto select-none transition-colors duration-200">
       <div className="pt-2">
-        <h1 className="text-2xl font-bold text-chat-textPrimary text-center mb-1">Set Up Profile</h1>
+        {isEditing && (
+          <div className="flex items-center gap-3 mb-4 -ml-2">
+            <button
+              onClick={() => navigate('/settings', { replace: true })}
+              className="p-2 rounded-full hover:bg-chat-card text-chat-textPrimary transition-colors"
+              title="Back to Settings"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="text-sm font-semibold text-chat-textSecondary">Back to Settings</span>
+          </div>
+        )}
+
+        <h1 className="text-2xl font-bold text-chat-textPrimary text-center mb-1">
+          {isEditing ? 'Edit Profile' : 'Set Up Profile'}
+        </h1>
         <p className="text-chat-textMuted text-xs text-center mb-6">
-          Upload your photo and choose a unique username.
+          {isEditing
+            ? 'Update your photo, display name, and unique username.'
+            : 'Upload your photo and choose a unique username.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

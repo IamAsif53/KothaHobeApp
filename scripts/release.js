@@ -77,16 +77,10 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "👥 Complete Social Group Management Experience: Enterprise-grade group architecture with rich social features",
-      "👑 3-Tier Role Hierarchy & Member Action Sheet: Creator, Admin, and Member roles with creator protection and ownership transfer",
-      "🔗 Shareable Invite Links & Dynamic QR Codes: Instant join codes, revocation, reset, and direct clipboard sharing",
-      "🛡️ Private Group Join Requests Queue: Require admin approval to join, manage pending approvals with one-tap batch acceptance",
-      "📊 Interactive Group Polls: Real-time voting, single/multi-choice polls, live vote percentage breakdown",
-      "📅 Group Events & RSVP: Schedule meetups and group events with Going / Maybe / Can't Go status tracking",
-      "⚙️ Granular Group Permissions: Admin-controlled toggles for messaging, adding members, editing info, pinning, and polls",
-      "⏳ Disappearing Messages: Ephemeral mode with configurable timer options (24h, 7d, 90d, off) and TTL auto-cleanup",
-      "📌 Pinned Messages Manager: View all pinned items in one place with quick unpinning and message jump",
-      "📜 Admin Activity Audit Logs: Real-time event log recording admin actions, role changes, and setting updates"
+      "⚙️ Settings Back Navigation Fix: Tapping back from any setting modal (Notifications, Privacy, Themes, Storage) or subpage (Blocked Accounts, Edit Profile) smoothly returns to Settings without kicking to chat or exiting",
+      "🏷️ Complete Nickname System: Nicknames appear prominently in group member lists and live in chat message bubbles; clearing a nickname immediately restores the original display name",
+      "👥 Social Group Management: Roles, invites, approval queues, events, live polls, permissions, and audit logs",
+      "☀️ Light & Dark Theme Excellence: High-contrast, premium, cohesive aesthetics across all dialogs and screens"
     ],
     mandatory: false
   };

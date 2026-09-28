@@ -558,40 +558,43 @@ export const ChatRoomPage: React.FC = () => {
     (msg: IMessage): string => {
       if (!isGroup) return '';
       const senderId = msg.senderId;
+      if (!senderId) return 'Member';
 
-      // 1. Check custom nicknames in groupMeta
-      if (conversation?.groupMeta?.nicknames && senderId) {
+      // 1. Check custom nicknames in groupMeta (highest priority)
+      if (conversation?.groupMeta?.nicknames) {
         const nicks = conversation.groupMeta.nicknames;
         const customNick =
           typeof (nicks as any).get === 'function'
             ? (nicks as any).get(senderId)
             : (nicks as any)[senderId];
-        if (customNick) return customNick;
+        if (customNick && typeof customNick === 'string' && customNick.trim()) {
+          return customNick.trim();
+        }
       }
 
-      // 2. Check senderNickname stored on message
-      if (msg.senderNickname) return msg.senderNickname;
-
-      // 3. Check group members
-      if (conversation?.groupMeta?.members && senderId) {
+      // 2. Check group members for current live display name/username
+      if (conversation?.groupMeta?.members) {
         const member = conversation.groupMeta.members.find((m: any) => {
           const uId = m.user?._id || m.user;
-          return uId?.toString() === senderId?.toString();
+          return uId?.toString() === senderId.toString();
         });
         if (member?.user?.displayName) return member.user.displayName;
         if (member?.user?.username) return member.user.username;
       }
 
-      // 4. Check conversation participants
-      if (conversation?.participants && senderId) {
+      // 3. Check conversation participants
+      if (conversation?.participants) {
         const p = conversation.participants.find(
-          (part: any) => (part._id || part)?.toString() === senderId?.toString()
+          (part: any) => (part._id || part)?.toString() === senderId.toString()
         );
         if (p && typeof p === 'object') {
           if (p.displayName) return p.displayName;
           if (p.username) return p.username;
         }
       }
+
+      // 4. Last-resort fallback to msg.senderNickname if participant left group
+      if (msg.senderNickname) return msg.senderNickname;
 
       return 'Member';
     },
@@ -763,7 +766,7 @@ export const ChatRoomPage: React.FC = () => {
     const isMine = msg.senderId === user?._id;
     const senderName = isMine
       ? 'You'
-      : msg.senderNickname || recipient?.displayName || recipient?.username || 'User';
+      : (isGroup ? getSenderName(msg) : (recipient?.displayName || recipient?.username || 'User'));
 
     setReplyingTo({
       messageId: msg._id,
@@ -772,7 +775,7 @@ export const ChatRoomPage: React.FC = () => {
       type: msg.type,
       fileName: msg.attachment?.fileName,
     });
-  }, [user, recipient]);
+  }, [user, recipient, isGroup, getSenderName]);
 
   const handleTyping = useCallback(() => {
     if (!conversationId) return;

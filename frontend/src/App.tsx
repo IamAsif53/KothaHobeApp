@@ -186,14 +186,14 @@ export const AppContent: React.FC = () => {
           navigate('/chats', { replace: true });
         } else if (path === '/stories') {
           navigate('/chats', { replace: true });
+        } else if (path === '/settings/blocked' || path === '/blocked') {
+          navigate('/settings', { replace: true });
+        } else if (path === '/profile-setup') {
+          navigate('/settings', { replace: true });
         } else if (path === '/settings') {
           navigate('/chats', { replace: true });
-        } else if (path === '/blocked') {
-          navigate('/settings', { replace: true });
         } else if (path === '/otp') {
           navigate('/login', { replace: true });
-        } else if (path === '/profile-setup') {
-          navigate('/chats', { replace: true });
         } else if (path === '/chats' || path === '/login' || path === '/') {
           // On main root screen, double-tap or exit app
           const now = Date.now();
@@ -204,7 +204,7 @@ export const AppContent: React.FC = () => {
             CapApp.exitApp();
           }
         } else {
-          CapApp.exitApp();
+          navigate('/chats', { replace: true });
         }
       });
     };

@@ -34,6 +34,7 @@ import {
 import { CURRENT_VERSION } from '../config/version';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { modalStack } from '../utils/modalStack';
 
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -49,6 +50,18 @@ export const SettingsPage: React.FC = () => {
 
   // Active Modals: 'notifications' | 'privacy' | 'chatTheme' | 'storage' | 'about' | 'logoutConfirm' | null
   const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  // Register active modal with modalStack for Android hardware & gesture back button support
+  useEffect(() => {
+    if (activeModal) {
+      const unregister = modalStack.register(`settings_${activeModal}`, () => {
+        setActiveModal(null);
+      });
+      return () => {
+        unregister();
+      };
+    }
+  }, [activeModal]);
 
   // Notification Preferences
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('kotha_hobe_sound_enabled') !== 'false');

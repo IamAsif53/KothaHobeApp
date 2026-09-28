@@ -220,12 +220,36 @@ export const GroupInfoPage: React.FC = () => {
       loadGroupDetails(true);
     };
 
+    const handleNicknameUpdated = (data: { conversationId: string; userId: string; nickname: string | null }) => {
+      if (data.conversationId === conversationId) {
+        setGroup((prev: any) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updatedNicknames = { ...(prev.groupMeta.nicknames || {}) };
+          if (data.nickname) {
+            updatedNicknames[data.userId] = data.nickname;
+          } else {
+            delete updatedNicknames[data.userId];
+          }
+          const updated = {
+            ...prev,
+            groupMeta: {
+              ...prev.groupMeta,
+              nicknames: updatedNicknames,
+            },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
     socket.on('group:deleted', handleGroupDeleted);
     socket.on('conversation:deleted', handleGroupDeleted);
     socket.on('group:avatar_updated', handleAvatarUpdated);
     socket.on('group:name_updated', handleNameUpdated);
     socket.on('group:member_removed', handleMemberRemoved);
     socket.on('group:updated', handleGroupUpdated);
+    socket.on('group:nickname_updated', handleNicknameUpdated);
 
     return () => {
       socket.off('group:deleted', handleGroupDeleted);
@@ -234,6 +258,7 @@ export const GroupInfoPage: React.FC = () => {
       socket.off('group:name_updated', handleNameUpdated);
       socket.off('group:member_removed', handleMemberRemoved);
       socket.off('group:updated', handleGroupUpdated);
+      socket.off('group:nickname_updated', handleNicknameUpdated);
     };
   }, [socket, conversationId, currentUser, navigate]);
 
@@ -828,13 +853,13 @@ export const GroupInfoPage: React.FC = () => {
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar
                         src={u.avatarUrl || ''}
-                        name={customNickname || u.displayName || u.username}
+                        name={customNickname || u.displayName || u.username || 'User'}
                         size="md"
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-bold text-chat-textPrimary truncate">
-                            {u.displayName || u.username}
+                            {customNickname || u.displayName || u.username}
                           </p>
                           {isSelf && (
                             <span className="px-1.5 py-0.5 rounded-md bg-chat-panel text-chat-textMuted text-[10px] font-medium border border-chat-border">
@@ -861,12 +886,10 @@ export const GroupInfoPage: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-2 text-xs text-chat-textMuted mt-0.5">
-                          <span>@{u.username}</span>
-                          {customNickname && (
-                            <>
-                              <span>•</span>
-                              <span className="text-brand-500 font-medium">"{customNickname}"</span>
-                            </>
+                          {customNickname ? (
+                            <span className="truncate">~{u.displayName || u.username} • @{u.username}</span>
+                          ) : (
+                            <span>@{u.username}</span>
                           )}
                           {member.status === 'pending' && (
                             <>
@@ -1299,7 +1322,25 @@ export const GroupInfoPage: React.FC = () => {
           groupId={conversationId!}
           targetUser={nicknameModalUser}
           currentNickname={meta.nicknames ? (meta.nicknames as any)[nicknameModalUser._id] : ''}
-          onNicknameUpdated={() => {
+          onNicknameUpdated={(targetUserId, newNick) => {
+            setGroup((prev: any) => {
+              if (!prev || !prev.groupMeta) return prev;
+              const updatedNicknames = { ...(prev.groupMeta.nicknames || {}) };
+              if (newNick) {
+                updatedNicknames[targetUserId] = newNick;
+              } else {
+                delete updatedNicknames[targetUserId];
+              }
+              const updated = {
+                ...prev,
+                groupMeta: {
+                  ...prev.groupMeta,
+                  nicknames: updatedNicknames,
+                },
+              };
+              localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+              return updated;
+            });
             loadGroupDetails(true);
           }}
         />

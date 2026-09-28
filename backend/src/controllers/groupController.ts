@@ -2276,16 +2276,21 @@ export const setGroupNickname = async (req: AuthenticatedRequest, res: Response)
     const targetUser = await User.findById(targetUserId).select('displayName username');
     const cleanNickname = typeof nickname === 'string' ? nickname.trim().slice(0, 50) : '';
 
-    if (!group.groupMeta.nicknames) {
-      group.groupMeta.nicknames = {};
-    }
+    const currentNicknames = (group.groupMeta.nicknames as any) || {};
+    const nickObj: Record<string, string> =
+      currentNicknames instanceof Map
+        ? Object.fromEntries(currentNicknames.entries())
+        : typeof currentNicknames === 'object'
+        ? { ...currentNicknames }
+        : {};
 
     if (cleanNickname) {
-      (group.groupMeta.nicknames as any)[targetUserId] = cleanNickname;
+      nickObj[targetUserId] = cleanNickname;
     } else {
-      delete (group.groupMeta.nicknames as any)[targetUserId];
+      delete nickObj[targetUserId];
     }
 
+    group.groupMeta.nicknames = nickObj;
     group.markModified('groupMeta.nicknames');
     await group.save();
 

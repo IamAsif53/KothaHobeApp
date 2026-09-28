@@ -201,13 +201,13 @@ const GroupMetaSchema = new Schema(
     admins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     moderators: [{ type: Schema.Types.ObjectId, ref: 'User', default: [] }],
     members: [GroupMemberSchema],
-    nicknames: { type: Map, of: String, default: {} },
+    nicknames: { type: Schema.Types.Mixed, default: {} },
     inviteCode: { type: String, sparse: true, index: true },
     requiresApproval: { type: Boolean, default: false },
     joinRequests: [GroupJoinRequestSchema],
     pinnedMessages: [{ type: Schema.Types.ObjectId, ref: 'Message', default: [] }],
     disappearingMode: { type: Number, default: 0 },
-    notificationSettings: { type: Map, of: String, default: {} },
+    notificationSettings: { type: Schema.Types.Mixed, default: {} },
     permissions: {
       type: GroupPermissionsSchema,
       default: () => ({

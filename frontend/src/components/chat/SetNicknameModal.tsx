@@ -29,6 +29,13 @@ export const SetNicknameModal: React.FC<SetNicknameModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
+    if (isOpen) {
+      setNickname(currentNickname);
+      setErrorMessage('');
+    }
+  }, [isOpen, currentNickname, targetUser]);
+
+  useEffect(() => {
     if (!isOpen) return;
     return modalStack.register('set_nickname_modal', onClose);
   }, [isOpen, onClose]);

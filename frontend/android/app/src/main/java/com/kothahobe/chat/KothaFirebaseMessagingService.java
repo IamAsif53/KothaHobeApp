@@ -346,6 +346,40 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
+        // RemoteInput Direct Reply Setup
+        androidx.core.app.RemoteInput remoteInput = new androidx.core.app.RemoteInput.Builder(MessageReplyReceiver.KEY_TEXT_REPLY)
+            .setLabel("Reply (max 50 words)...")
+            .build();
+
+        Intent replyIntent = new Intent(this, MessageReplyReceiver.class);
+        replyIntent.setAction(MessageReplyReceiver.ACTION_REPLY_MESSAGE);
+        if (conversationId != null) replyIntent.putExtra("conversationId", conversationId);
+        if (senderId != null) replyIntent.putExtra("senderId", senderId);
+        replyIntent.putExtra("notificationId", notifId);
+
+        int replyFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            replyFlags |= PendingIntent.FLAG_MUTABLE;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            replyFlags |= PendingIntent.FLAG_MUTABLE;
+        }
+
+        PendingIntent replyPendingIntent = PendingIntent.getBroadcast(
+            this,
+            notifId + 5,
+            replyIntent,
+            replyFlags
+        );
+
+        NotificationCompat.Action replyAction = new NotificationCompat.Action.Builder(
+            R.drawable.ic_call_accept,
+            "Reply",
+            replyPendingIntent
+        )
+            .addRemoteInput(remoteInput)
+            .setAllowGeneratedReplies(true)
+            .build();
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHAT_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -356,7 +390,8 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setContentIntent(pendingIntent);
+            .setContentIntent(pendingIntent)
+            .addAction(replyAction);
 
         if (conversationId != null && !conversationId.isEmpty()) {
             builder.setGroup(conversationId);

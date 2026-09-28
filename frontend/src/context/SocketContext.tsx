@@ -389,24 +389,61 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const soundPref = localStorage.getItem('kotha_hobe_sound_enabled') !== 'false';
         const previewPref = localStorage.getItem('kotha_hobe_preview_enabled') !== 'false';
 
-        let senderName = 'New Message';
+        let senderName = newMsg.senderNickname || 'New Message';
+        let senderAvatar: string | undefined = undefined;
+        let isGroup = false;
+        let groupName: string | undefined = undefined;
+
         try {
           const cachedConvs = localStorage.getItem('kotha_hobe_cached_conversations');
           if (cachedConvs) {
             const parsed = JSON.parse(cachedConvs);
             const conv = parsed.find((c: any) => c._id === newMsg.conversationId || c.recipient?._id === newMsg.senderId);
-            if (conv?.recipient) {
-              senderName = conv.recipient.displayName || conv.recipient.username || 'New Message';
+            if (conv) {
+              if (conv.isGroup) {
+                isGroup = true;
+                groupName = conv.groupMeta?.name || 'Group Chat';
+                senderName = newMsg.senderNickname || (conv.groupMeta?.nicknames && conv.groupMeta.nicknames[newMsg.senderId]) || 'Group Member';
+                senderAvatar = conv.groupMeta?.avatarUrl;
+              } else if (conv.recipient) {
+                senderName = conv.recipient.displayName || conv.recipient.username || 'New Message';
+                senderAvatar = conv.recipient.avatarUrl;
+              }
             }
           }
         } catch {}
-        const bodyText = previewPref ? newMsg.text : 'Sent you a new message';
 
+        let previewText = newMsg.text;
+        if (newMsg.type === 'image') previewText = '📷 Photo';
+        else if (newMsg.type === 'audio') previewText = '🎤 Voice message';
+        else if (newMsg.type === 'document') previewText = `📄 ${newMsg.attachment?.fileName || 'Document'}`;
+        else if (newMsg.type === 'custom_emoji') previewText = '✨ Animated Emoji';
+
+        const bodyText = previewPref ? (previewText || 'Sent a message') : 'Sent you a new message';
+
+        // 1. Dispatch In-App Interactive Notification Banner Event
+        window.dispatchEvent(
+          new CustomEvent('kothahobe:inapp_notification', {
+            detail: {
+              conversationId: newMsg.conversationId,
+              senderId: newMsg.senderId,
+              senderName,
+              senderAvatar,
+              messageText: previewText || 'Sent a message',
+              isGroup,
+              groupName,
+              messageType: newMsg.type,
+              createdAt: newMsg.createdAt,
+            },
+          })
+        );
+
+        // 2. Schedule Native Local Notification when backgrounded
         if (Capacitor.isNativePlatform()) {
           await LocalNotifications.schedule({
             notifications: [
               {
-                title: senderName,
+                title: isGroup && groupName ? `${senderName} (${groupName})` : senderName,
                 body: bodyText,
                 id: Math.floor(Math.random() * 1000000),
                 schedule: { at: new Date(Date.now() + 50) },
@@ -414,6 +451,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 sound: soundPref ? 'default' : undefined,
                 extra: {
                   conversationId: newMsg.conversationId,
+                  senderId: newMsg.senderId,
                 },
               },
             ],

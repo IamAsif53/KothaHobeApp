@@ -57,6 +57,15 @@
         <receiver
             android:name=".CallActionReceiver"
             android:exported="false" />
+
+        <!-- Receiver for background Message Direct Reply action button -->
+        <receiver
+            android:name=".MessageReplyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kothahobe.chat.ACTION_REPLY_MESSAGE" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions for Network, Push Notifications & Vibration -->

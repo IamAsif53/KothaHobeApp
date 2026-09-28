@@ -1,13 +1,13 @@
 {
-  "versionCode": 85,
-  "versionName": "1.1.40",
+  "versionCode": 86,
+  "versionName": "1.1.41",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "7a532e8d72bdd59e4b90e66e95e70a2ceef159779da6a8d04ead0025063de2c0",
+  "sha256": "4ba0b1ae287af093a4ce47c3bc109b5d4e73a95a9f912c4ebc6df2d2a4a1f5fe",
   "releaseNotes": [
-    "Release v1.1.40 (Build 85)",
-    "✨ Redesigned Chat Message Experience: Soft semantic bubble surfaces, organic message grouping with adaptive corner radii, upgraded typography, and inline tucked timestamps",
-    "🎙️ Reimagined Floating Message Composer: Modern elevated composer with backdrop blur, smooth animated Send ↔ Microphone transitions, compact circular attachment tray, and polished dismissible reply previews",
-    "💬 Dynamic Typing Bubble & Micro-interactions: Subtle animated in-chat 3-dot typing indicator and responsive touch interactions"
+    "Release v1.1.41 (Build 86)",
+    "⚡ Instant Notification Quick Reply: Reply directly from Android system notification shade or floating in-app banner with zero screen interruption for 1-on-1 and Group chats",
+    "📏 Word-Count Constraint & Live Counter: Enforced 50-word maximum limit with live counter badge to keep quick replies lightweight and fast",
+    "💬 Effortless Quick Chips & Cancel Draft: 1-tap quick response chips (👍, ❤️, 😂, Sure!, On my way) and cancel option that preserves notification while resetting typed draft"
   ],
   "mandatory": false
 }

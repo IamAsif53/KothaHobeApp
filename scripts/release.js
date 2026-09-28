@@ -77,9 +77,9 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ Redesigned Chat Message Experience: Soft semantic bubble surfaces, organic message grouping with adaptive corner radii, upgraded typography, and inline tucked timestamps",
-      "🎙️ Reimagined Floating Message Composer: Modern elevated composer with backdrop blur, smooth animated Send ↔ Microphone transitions, compact circular attachment tray, and polished dismissible reply previews",
-      "💬 Dynamic Typing Bubble & Micro-interactions: Subtle animated in-chat 3-dot typing indicator and responsive touch interactions"
+      "⚡ Instant Notification Quick Reply: Reply directly from Android system notification shade or floating in-app banner with zero screen interruption for 1-on-1 and Group chats",
+      "📏 Word-Count Constraint & Live Counter: Enforced 50-word maximum limit with live counter badge to keep quick replies lightweight and fast",
+      "💬 Effortless Quick Chips & Cancel Draft: 1-tap quick response chips (👍, ❤️, 😂, Sure!, On my way) and cancel option that preserves notification while resetting typed draft"
     ],
     mandatory: false
   };

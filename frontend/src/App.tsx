@@ -23,6 +23,7 @@ import { Capacitor } from '@capacitor/core';
 import { CURRENT_VERSION } from './config/version';
 import { modalStack } from './utils/modalStack';
 import { NativeCallNotification } from './services/callNotificationService';
+import { InAppNotificationBanner } from './components/notification/InAppNotificationBanner';
 
 import { SplashPage } from './pages/SplashPage';
 import { LoginPage } from './pages/LoginPage';
@@ -354,6 +355,9 @@ export const AppContent: React.FC = () => {
       {/* Global Multi-Party WebRTC Group Voice & Video Calling UI Modals */}
       <GroupCallScreen />
       <IncomingGroupCallModal />
+
+      {/* Global In-App Interactive Notification Banner with Quick Reply */}
+      <InAppNotificationBanner />
 
       {/* In-App Update Modal */}
       {updateManifest && (

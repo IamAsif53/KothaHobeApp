@@ -534,6 +534,11 @@ export function setupSocketIO(io: SocketIOServer): void {
             readBy: userId,
             readAt: now,
           });
+          io.to(`user:${userId}`).emit('message:read', {
+            conversationId,
+            readBy: userId,
+            readAt: now,
+          });
         } else {
           // In 1-to-1 Chat: update status to 'read'
           await Message.updateMany(
@@ -563,6 +568,11 @@ export function setupSocketIO(io: SocketIOServer): void {
               readAt: now,
             });
           }
+          io.to(`user:${userId}`).emit('message:read', {
+            conversationId,
+            readBy: userId,
+            readAt: now,
+          });
         }
       } catch (error) {
         console.error('[Socket] message:read error:', error);

@@ -291,3 +291,106 @@ export const sendDirectReply = async (
     res.status(500).json({ success: false, message: 'Failed to send direct reply' });
   }
 };
+
+export const markConversationAsRead = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { conversationId } = req.body;
+    if (!conversationId) {
+      res.status(400).json({ success: false, message: 'Missing conversationId' });
+      return;
+    }
+
+    const userId = req.user._id.toString();
+    const conv = await Conversation.findOne({
+      _id: conversationId,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
+    });
+
+    if (!conv) {
+      res.status(404).json({ success: false, message: 'Conversation not found or access denied' });
+      return;
+    }
+
+    const now = new Date();
+    const io = getGlobalIO();
+
+    if (conv.isGroup) {
+      await Message.updateMany(
+        {
+          conversationId,
+          senderId: { $ne: req.user._id },
+          'readBy.user': { $ne: req.user._id },
+        },
+        {
+          $addToSet: { readBy: { user: req.user._id, readAt: now } },
+        }
+      );
+
+      if (io) {
+        io.to(`conv:${conversationId}`).emit('message:read', {
+          conversationId,
+          readBy: userId,
+          readAt: now,
+        });
+        io.to(`user:${userId}`).emit('message:read', {
+          conversationId,
+          readBy: userId,
+          readAt: now,
+        });
+      }
+    } else {
+      await Message.updateMany(
+        {
+          conversationId,
+          receiverId: req.user._id,
+          status: { $in: ['sent', 'delivered'] },
+        },
+        {
+          $set: { status: 'read', readAt: now },
+        }
+      );
+
+      await Conversation.updateOne(
+        { _id: conversationId, 'lastMessage.senderId': { $ne: req.user._id } },
+        { $set: { 'lastMessage.status': 'read' } }
+      );
+
+      const otherParticipantId = conv.participants.find(
+        (p) => p.toString() !== userId
+      );
+
+      if (io) {
+        if (otherParticipantId) {
+          io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+            conversationId,
+            readBy: userId,
+            readAt: now,
+          });
+        }
+        io.to(`user:${userId}`).emit('message:read', {
+          conversationId,
+          readBy: userId,
+          readAt: now,
+        });
+      }
+    }
+
+    res.status(200).json({ success: true, conversationId, readAt: now });
+  } catch (error) {
+    console.error('[MessageController] markConversationAsRead error:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark conversation as read' });
+  }
+};
+

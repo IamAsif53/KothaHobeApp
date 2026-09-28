@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { IMessage } from '../types';
 import { registerPushTokenApi } from '../api/userApi';
+import { markConversationReadApi } from '../api/messageApi';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -372,9 +373,35 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const cacheKey = `kotha_hobe_msgs_${newMsg.conversationId}`;
           const cached = localStorage.getItem(cacheKey);
           const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
-          if (!currentList.some((m) => m._id === newMsg._id || m.clientMessageId === newMsg.clientMessageId)) {
+          if (!currentList.some((m) => m._id === newMsg._id || (m.clientMessageId && newMsg.clientMessageId && m.clientMessageId === newMsg.clientMessageId))) {
             currentList.push(newMsg);
+            currentList.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             localStorage.setItem(cacheKey, JSON.stringify(currentList));
+          }
+
+          // Immediately update conversation preview in local storage
+          const convsCached = localStorage.getItem('kotha_hobe_cached_conversations');
+          if (convsCached) {
+            const list = JSON.parse(convsCached);
+            const idx = list.findIndex((c: any) => c._id === newMsg.conversationId);
+            if (idx > -1) {
+              const isActive = activeChatRef.current === newMsg.conversationId;
+              list[idx] = {
+                ...list[idx],
+                lastMessage: {
+                  text: newMsg.text,
+                  senderId: newMsg.senderId,
+                  createdAt: newMsg.createdAt,
+                  status: isActive ? 'read' : newMsg.status || 'sent',
+                },
+                lastMessageAt: newMsg.createdAt,
+                unreadCount: isActive ? 0 : (list[idx].unreadCount || 0) + 1,
+              };
+              list.sort(
+                (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+              );
+              localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
+            }
           }
         } catch {}
       }
@@ -608,8 +635,40 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const markAsRead = (conversationId: string) => {
-    if (socket && isConnected && conversationId) {
+    if (!conversationId) return;
+
+    // 1. Immediately update local conversation cache in localStorage
+    try {
+      const cached = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const idx = list.findIndex((c: any) => c._id === conversationId);
+        if (idx > -1) {
+          list[idx] = {
+            ...list[idx],
+            unreadCount: 0,
+            lastMessage: list[idx].lastMessage
+              ? { ...list[idx].lastMessage, status: 'read' }
+              : undefined,
+          };
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
+        }
+      }
+    } catch {}
+
+    // 2. Dispatch event for all active subscribers (ChatList, notification banners, unread badges)
+    window.dispatchEvent(
+      new CustomEvent('kothahobe:conversation_read', {
+        detail: { conversationId, readAt: new Date().toISOString() },
+      })
+    );
+
+    // 3. Emit over socket if connected
+    if (socket && isConnected) {
       socket.emit('message:read', { conversationId });
+    } else {
+      // 4. Fallback to background REST API
+      markConversationReadApi(conversationId).catch(() => {});
     }
   };
 

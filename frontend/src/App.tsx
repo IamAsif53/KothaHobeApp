@@ -119,9 +119,38 @@ export const AppContent: React.FC = () => {
             }
           });
 
+          const preloadNotificationMessage = (payload: any) => {
+            if (!payload || !payload.conversationId) return;
+            const convId = payload.conversationId;
+            const msgId = payload.messageId || `notif_${Date.now()}`;
+            const text = payload.messageText || payload.text;
+            if (!text) return;
+
+            try {
+              const cacheKey = `kotha_hobe_msgs_${convId}`;
+              const cached = localStorage.getItem(cacheKey);
+              const msgs: any[] = cached ? JSON.parse(cached) : [];
+              if (!msgs.some((m) => m._id === msgId || (m.clientMessageId && m.clientMessageId === payload.clientMessageId))) {
+                msgs.push({
+                  _id: msgId,
+                  conversationId: convId,
+                  senderId: payload.senderId || '',
+                  senderNickname: payload.senderName,
+                  text,
+                  type: payload.messageType || 'text',
+                  status: 'sent',
+                  createdAt: payload.createdAt || new Date().toISOString(),
+                });
+                msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                localStorage.setItem(cacheKey, JSON.stringify(msgs));
+              }
+            } catch {}
+          };
+
           NativeCallNotification.addListener('chatNotificationOpened', (data: any) => {
             console.log('[App] Chat notification opened:', data);
             if (data && data.conversationId) {
+              preloadNotificationMessage(data);
               navigate(`/chat/${data.conversationId}`, { replace: false });
             }
           });
@@ -137,6 +166,7 @@ export const AppContent: React.FC = () => {
                   window.dispatchEvent(new CustomEvent('kothahobe:incoming_call', { detail: pending }));
                 }
               } else if (pending.conversationId) {
+                preloadNotificationMessage(pending);
                 navigate(`/chat/${pending.conversationId}`, { replace: false });
               }
             }

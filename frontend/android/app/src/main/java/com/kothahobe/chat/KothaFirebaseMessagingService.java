@@ -350,6 +350,8 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         if (conversationId != null) intent.putExtra("conversationId", conversationId);
         if (senderId != null) intent.putExtra("senderId", senderId);
         if (messageId != null) intent.putExtra("messageId", messageId);
+        if (body != null) intent.putExtra("messageText", body);
+        if (title != null) intent.putExtra("senderName", title);
 
         int notifId = conversationId != null ? Math.abs(conversationId.hashCode()) : (int) System.currentTimeMillis();
 

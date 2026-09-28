@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchConversations, deleteConversationApi } from '../api/conversationApi';
 import { leaveGroupApi, deleteGroupApi } from '../api/groupApi';
 import { blockUserApi } from '../api/userApi';
-import { IConversation } from '../types';
+import { IConversation, MessageStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
@@ -57,6 +57,7 @@ export const ChatListPage: React.FC = () => {
 
   const { socket } = useSocket();
   const navigate = useNavigate();
+  const locallyReadConversationsRef = useRef<Record<string, number>>({});
 
   const loadConversations = async (silent = false) => {
     if (!silent && !localStorage.getItem('kotha_hobe_cached_conversations')) {
@@ -65,8 +66,26 @@ export const ChatListPage: React.FC = () => {
     try {
       const res = await fetchConversations();
       if (res.success && res.conversations) {
-        setConversations(res.conversations);
-        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(res.conversations));
+        // Protect against stale server unread state overwriting newer local read state
+        const sanitized: IConversation[] = res.conversations.map((c: IConversation) => {
+          const localReadTimestamp = locallyReadConversationsRef.current[c._id];
+          if (localReadTimestamp) {
+            const msgTime = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
+            if (localReadTimestamp >= msgTime) {
+              return {
+                ...c,
+                unreadCount: 0,
+                lastMessage: c.lastMessage
+                  ? { ...c.lastMessage, status: 'read' as MessageStatus }
+                  : undefined,
+              };
+            }
+          }
+          return c;
+        });
+
+        setConversations(sanitized);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(sanitized));
       }
     } catch (err) {
       console.warn('[ChatList] Failed to fetch:', err);
@@ -77,6 +96,39 @@ export const ChatListPage: React.FC = () => {
 
   useEffect(() => {
     loadConversations();
+  }, []);
+
+  // Listen for local conversation_read window events
+  useEffect(() => {
+    const handleLocalRead = (e: Event) => {
+      const customEvent = e as CustomEvent<{ conversationId: string; readAt?: string }>;
+      const { conversationId } = customEvent.detail || {};
+      if (!conversationId) return;
+
+      locallyReadConversationsRef.current[conversationId] = Date.now();
+
+      setConversations((prev) => {
+        const index = prev.findIndex((c) => c._id === conversationId);
+        if (index > -1) {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            unreadCount: 0,
+            lastMessage: updated[index].lastMessage
+              ? { ...updated[index].lastMessage!, status: 'read' as MessageStatus }
+              : undefined,
+          };
+          localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('kothahobe:conversation_read', handleLocalRead);
+    return () => {
+      window.removeEventListener('kothahobe:conversation_read', handleLocalRead);
+    };
   }, []);
 
   // Listen for real-time conversation updates
@@ -116,15 +168,17 @@ export const ChatListPage: React.FC = () => {
         const index = prev.findIndex((c) => c._id === data.conversationId);
         if (index > -1) {
           const updated = [...prev];
-          if (updated[index].lastMessage) {
-            updated[index] = {
-              ...updated[index],
-              lastMessage: {
-                ...updated[index].lastMessage!,
-                status: 'read',
-              },
-            };
-          }
+          const isCurrentUserReader = currentUser?._id && data.readBy === currentUser._id;
+          updated[index] = {
+            ...updated[index],
+            unreadCount: isCurrentUserReader ? 0 : updated[index].unreadCount,
+            lastMessage: updated[index].lastMessage
+              ? {
+                  ...updated[index].lastMessage!,
+                  status: 'read' as MessageStatus,
+                }
+              : undefined,
+          };
           localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
           return updated;
         }
@@ -180,7 +234,7 @@ export const ChatListPage: React.FC = () => {
       socket.off('group:deleted', handleGroupDeleted);
       socket.off('conversation:deleted', handleGroupDeleted);
     };
-  }, [socket]);
+  }, [socket, currentUser]);
 
   const filteredConversations = conversations.filter((c) => {
     if (c.isGroup) {

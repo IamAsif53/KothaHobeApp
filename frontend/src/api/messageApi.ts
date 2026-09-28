@@ -130,3 +130,13 @@ export async function searchInConversationApi(
 ): Promise<{ success: boolean; results: IMessage[] }> {
   return apiFetch(`/conversations/${conversationId}/search?q=${encodeURIComponent(query)}`);
 }
+
+export async function markConversationReadApi(
+  conversationId: string
+): Promise<{ success: boolean; conversationId?: string; readAt?: string }> {
+  return apiFetch(`/messages/mark-read`, {
+    method: 'POST',
+    body: JSON.stringify({ conversationId }),
+  });
+}
+

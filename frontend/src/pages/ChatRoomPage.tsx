@@ -147,16 +147,13 @@ export const ChatRoomPage: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Debounced LocalStorage save
+  // Immediate LocalStorage save (zero delay)
   const persistMessages = useCallback(
     (msgs: IMessage[]) => {
       if (!conversationId) return;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        try {
-          localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(msgs));
-        } catch {}
-      }, 400);
+      try {
+        localStorage.setItem(`kotha_hobe_msgs_${conversationId}`, JSON.stringify(msgs));
+      } catch {}
     },
     [conversationId]
   );
@@ -189,6 +186,9 @@ export const ChatRoomPage: React.FC = () => {
 
     if (isNearBottomRef.current) {
       setUnreadNewCount(0);
+      if (conversationId) {
+        markAsRead(conversationId);
+      }
     }
 
     // Trigger loading older messages when near top (within 50px)
@@ -234,10 +234,13 @@ export const ChatRoomPage: React.FC = () => {
     };
   }, [conversationId, setActiveConversationId]);
 
-  // Load conversation details & initial messages
+  // Load conversation details & initial messages (Local-first background sync)
   useEffect(() => {
     if (!conversationId) return;
     initialScrollDoneRef.current = false;
+
+    // Immediately mark read locally upon opening chat
+    markAsRead(conversationId);
 
     const initChat = async () => {
       if (!localStorage.getItem(`kotha_hobe_msgs_${conversationId}`)) {
@@ -275,12 +278,24 @@ export const ChatRoomPage: React.FC = () => {
 
         if (msgRes.success && msgRes.messages) {
           setMessages((prev) => {
-            const pendingOptimistic = prev.filter(
-              (m) =>
-                m._id.startsWith('temp_') &&
-                !msgRes.messages.some((serverM) => serverM.clientMessageId === m.clientMessageId)
+            const map = new Map<string, IMessage>();
+            // 1. Add current local/optimistic messages
+            prev.forEach((m) => {
+              const key = m._id || m.clientMessageId;
+              if (key) map.set(key, m);
+            });
+            // 2. Add/overwrite with authoritative server messages
+            msgRes.messages.forEach((m) => {
+              if (m.clientMessageId && map.has(m.clientMessageId)) {
+                map.delete(m.clientMessageId);
+              }
+              if (m._id) {
+                map.set(m._id, m);
+              }
+            });
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
-            const merged = [...msgRes.messages, ...pendingOptimistic];
             persistMessages(merged);
             return merged;
           });
@@ -296,19 +311,24 @@ export const ChatRoomPage: React.FC = () => {
     };
 
     initChat();
-  }, [conversationId, persistMessages, scrollToBottom]);
+  }, [conversationId, persistMessages, scrollToBottom, markAsRead]);
 
   // Join socket conversation room & mark messages as read
   useEffect(() => {
-    if (!socket || !conversationId) return;
+    if (!conversationId) return;
 
-    socket.emit('conversation:join', conversationId);
     markAsRead(conversationId);
 
+    if (socket) {
+      socket.emit('conversation:join', conversationId);
+    }
+
     return () => {
-      socket.emit('conversation:leave', conversationId);
+      if (socket) {
+        socket.emit('conversation:leave', conversationId);
+      }
     };
-  }, [socket, conversationId]);
+  }, [socket, conversationId, markAsRead]);
 
   // Real-time Socket & Window event listeners
   useEffect(() => {

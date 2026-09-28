@@ -1,45 +1,133 @@
 export const APPROVED_CUSTOM_EMOJI_IDS = new Set<string>([
-  // Cat (5)
+  // 1. Cute Friends (30)
   'cat_laugh',
   'cat_cry',
   'cat_love',
   'cat_angry',
   'cat_surprised',
-
-  // Dog (5)
   'dog_laugh',
   'dog_cry',
   'dog_love',
   'dog_angry',
   'dog_surprised',
-
-  // Panda (5)
   'panda_laugh',
   'panda_cry',
   'panda_love',
   'panda_angry',
   'panda_surprised',
-
-  // Bunny (5)
   'bunny_laugh',
   'bunny_cry',
   'bunny_love',
   'bunny_angry',
   'bunny_surprised',
-
-  // Bear (5)
   'bear_laugh',
   'bear_cry',
   'bear_love',
   'bear_angry',
   'bear_surprised',
-
-  // Fox (5)
   'fox_laugh',
   'fox_cry',
   'fox_love',
   'fox_angry',
   'fox_surprised',
+
+  // 2. Love & Relationships (14)
+  'love_heart',
+  'love_kiss',
+  'love_hug',
+  'love_blush',
+  'love_miss_you',
+  'love_couple',
+  'love_heart_eyes',
+  'love_sending',
+  'love_broken_heart',
+  'love_sparkle',
+  'love_cupid',
+  'love_rose',
+  'love_letter',
+  'love_glow',
+
+  // 3. Funny Reactions (14)
+  'funny_lol',
+  'funny_rofl',
+  'funny_facepalm',
+  'funny_dead',
+  'funny_wink',
+  'funny_troll',
+  'funny_awkward',
+  'funny_oops',
+  'funny_laugh_hard',
+  'funny_mindblown',
+  'funny_popcorn',
+  'funny_smirk',
+  'funny_giggle',
+  'funny_shrug',
+
+  // 4. Mood & Expressions (14)
+  'mood_happy',
+  'mood_sad',
+  'mood_angry',
+  'mood_sleepy',
+  'mood_confused',
+  'mood_shocked',
+  'mood_excited',
+  'mood_bored',
+  'mood_nervous',
+  'mood_embarrassed',
+  'mood_cool',
+  'mood_thinking',
+  'mood_peace',
+  'mood_silly',
+
+  // 5. Celebration & Party (14)
+  'party_popper',
+  'party_congrats',
+  'party_clap',
+  'party_fire',
+  'party_dance',
+  'party_trophy',
+  'party_confetti',
+  'party_birthday',
+  'party_champagne',
+  'party_star',
+  'party_disco',
+  'party_thumbs_up',
+  'party_high_five',
+  'party_cheers',
+
+  // 6. Food & Drinks (14)
+  'food_pizza',
+  'food_burger',
+  'food_coffee',
+  'food_tea',
+  'food_cake',
+  'food_icecream',
+  'food_donut',
+  'food_hungry',
+  'food_yummy',
+  'food_chef',
+  'food_ramen',
+  'food_taco',
+  'food_cookie',
+  'food_boba',
+
+  // 7. Animal Kingdom (16)
+  'animal_penguin_cool',
+  'animal_penguin_waddle',
+  'animal_koala_sleepy',
+  'animal_koala_hug',
+  'animal_hamster_eat',
+  'animal_hamster_panic',
+  'animal_frog_sip',
+  'animal_frog_derp',
+  'animal_duck_dance',
+  'animal_duck_quack',
+  'animal_lion_roar',
+  'animal_tiger_pounce',
+  'animal_elephant_spray',
+  'animal_monkey_hide',
+  'animal_owl_wink',
+  'animal_owl_smart',
 ]);
 
 export const isValidCustomEmojiId = (id?: string | null): boolean => {

@@ -77,10 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ Animated Custom Emoji Pack 1: 'Cute Friends' pack with 30 animated character emojis across 6 characters (Cat, Dog, Panda, Bunny, Bear, Fox) and 5 emotions (Laugh, Cry, Love, Angry, Surprised)",
-      "😀 Dual Emoji Picker: Seamless switching between Standard Unicode emojis and Animated Custom emojis with character filters and animated recents",
-      "🎭 Interactive Playback: Standalone animated emojis render large with transparent backgrounds, play on appearance, and bounce to replay on tap",
-      "⚡ High Performance & Offline Ready: Vector SVGs with smooth hardware-accelerated Framer Motion physics, 0 network lag, and full real-time socket delivery"
+      "✨ 7 Animated Custom Emoji Packs: 116 animated reactions across Cute Friends (30), Love (14), Funny (14), Mood (14), Celebration (14), Food & Drinks (14), and Animal Kingdom (16)",
+      "⭐ Favorites System: Star up to 50 of your favorite animated emojis with instant access under the Favorites tab",
+      "🕒 Recently Used: Smart recent reaction tracking (max 20, latest-first, deduplicated, persistent across sessions)",
+      "🔍 Fast Emoji Search & Categories: Instant live search across emoji names, emotions, characters, and keywords with horizontal category tabs",
+      "📱 Long-Press Preview Modal: Hold any emoji for an interactive high-res preview dialog with tap-to-replay, description, keyword tags, favorite toggle, and quick send"
     ],
     mandatory: false
   };

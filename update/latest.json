@@ -1,14 +1,15 @@
 {
-  "versionCode": 82,
-  "versionName": "1.1.37",
+  "versionCode": 83,
+  "versionName": "1.1.38",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "5883596b021966817c879f280d5db2fcad1a9e7fd447fb09563e230b3343e145",
+  "sha256": "cad5177a22349cd26ca5d72043e6f8a5fc62592248bdd599c057aa7fb98520e9",
   "releaseNotes": [
-    "Release v1.1.37 (Build 82)",
-    "✨ Animated Custom Emoji Pack 1: 'Cute Friends' pack with 30 animated character emojis across 6 characters (Cat, Dog, Panda, Bunny, Bear, Fox) and 5 emotions (Laugh, Cry, Love, Angry, Surprised)",
-    "😀 Dual Emoji Picker: Seamless switching between Standard Unicode emojis and Animated Custom emojis with character filters and animated recents",
-    "🎭 Interactive Playback: Standalone animated emojis render large with transparent backgrounds, play on appearance, and bounce to replay on tap",
-    "⚡ High Performance & Offline Ready: Vector SVGs with smooth hardware-accelerated Framer Motion physics, 0 network lag, and full real-time socket delivery"
+    "Release v1.1.38 (Build 83)",
+    "✨ 7 Animated Custom Emoji Packs: 116 animated reactions across Cute Friends (30), Love (14), Funny (14), Mood (14), Celebration (14), Food & Drinks (14), and Animal Kingdom (16)",
+    "⭐ Favorites System: Star up to 50 of your favorite animated emojis with instant access under the Favorites tab",
+    "🕒 Recently Used: Smart recent reaction tracking (max 20, latest-first, deduplicated, persistent across sessions)",
+    "🔍 Fast Emoji Search & Categories: Instant live search across emoji names, emotions, characters, and keywords with horizontal category tabs",
+    "📱 Long-Press Preview Modal: Hold any emoji for an interactive high-res preview dialog with tap-to-replay, description, keyword tags, favorite toggle, and quick send"
   ],
   "mandatory": false
 }

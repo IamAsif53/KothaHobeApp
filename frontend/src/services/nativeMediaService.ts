@@ -15,6 +15,7 @@ export interface NativeMediaPluginInterface {
   isSpeakerphoneOn(): Promise<{ isSpeakerphoneOn: boolean }>;
   saveImageToGallery(options: { base64Data: string; fileName: string }): Promise<{ success: boolean; uri?: string; filePath?: string }>;
   downloadDocument(options: { base64Data: string; fileName: string; mimeType: string }): Promise<{ success: boolean; fileName: string; uri?: string; filePath?: string }>;
+  openUrl(options: { url: string }): Promise<{ success: boolean }>;
 }
 
 export const NativeMedia = registerPlugin<NativeMediaPluginInterface>('NativeMedia');
@@ -311,3 +312,31 @@ export async function getNativeSpeakerphoneStatus(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Open external URL in system browser or dedicated native app (e.g. Facebook, YouTube)
+ */
+export async function openExternalUrl(url: string): Promise<void> {
+  if (!url || typeof url !== 'string') return;
+  let cleanUrl = url.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = 'https://' + cleanUrl;
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await NativeMedia.openUrl({ url: cleanUrl });
+      if (res && res.success) return;
+    } catch (err) {
+      console.warn('[NativeMedia] openUrl error, falling back to window.open:', err);
+    }
+  }
+
+  // Browser / Web fallback
+  try {
+    window.open(cleanUrl, '_blank', 'noopener,noreferrer');
+  } catch {
+    window.location.href = cleanUrl;
+  }
+}
+

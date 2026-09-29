@@ -480,4 +480,34 @@ public class NativeMediaPlugin extends Plugin {
             }
         });
     }
+
+    // =========================================================================
+    // 5. Open External URL via Android Intent (Browser or Native App)
+    // =========================================================================
+
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String urlString = call.getString("url");
+        if (urlString == null || urlString.trim().isEmpty()) {
+            call.reject("url is required");
+            return;
+        }
+
+        try {
+            String cleanUrl = urlString.trim();
+            if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+                cleanUrl = "https://" + cleanUrl;
+            }
+
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to open URL: " + e.getMessage(), e);
+        }
+    }
 }

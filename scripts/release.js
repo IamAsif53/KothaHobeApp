@@ -77,12 +77,13 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground (where live typing and messages are already visible), while preserving notifications in all other cases (other chats, chat list, or background/closed)",
-      "💬 Notification Instant Reply: Pure data-only FCM push payloads and custom background RemoteInput action for direct reply straight from notification shade",
+      "🔗 Production-Grade Link Previews & URL Handling: Automatically linkifies all URLs in chat messages with full tap-to-open support for native apps (Facebook, YouTube, etc.) and external browser",
+      "🛡️ Social Link Preview Scraper: Optimized User-Agent header and error sanitization so Facebook profiles, Instagram, Twitter, and web links extract valid OpenGraph titles and previews instead of error cards",
+      "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground, while preserving notifications in all other cases",
+      "💬 Notification Instant Reply: Background RemoteInput action for direct reply straight from notification shade",
       "✏️ Message Edit: In-place message editing within 15 minutes with real-time socket synchronization",
-      "↪️ Message Forwarding: Multi-target message forwarding with 'Forwarded' attribution banner",
-      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section and search support",
-      "🔗 Rich Link Previews: Automatic URL detection with SSRF-protected preview scrapers",
+      "↪️ Message Forwarding: Multi-target message forwarding with attribution banner",
+      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section",
       "👥 Group-Only Typing Indicators: Aggregated real-time typing indicators for group chats"
     ],
     mandatory: false

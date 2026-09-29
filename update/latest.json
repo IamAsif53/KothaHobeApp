@@ -1,16 +1,17 @@
 {
-  "versionCode": 95,
-  "versionName": "1.1.50",
+  "versionCode": 96,
+  "versionName": "1.1.51",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "98d335605a49bf6ebb93e62b21f1e4675c71a3585332ac4cf25ca26e15844b99",
+  "sha256": "dcc877110d021c1e294e1d0ef8c3c87fbe1309c0b416b437bd499133e997b5ee",
   "releaseNotes": [
-    "Release v1.1.50 (Build 95)",
-    "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground (where live typing and messages are already visible), while preserving notifications in all other cases (other chats, chat list, or background/closed)",
-    "💬 Notification Instant Reply: Pure data-only FCM push payloads and custom background RemoteInput action for direct reply straight from notification shade",
+    "Release v1.1.51 (Build 96)",
+    "🔗 Production-Grade Link Previews & URL Handling: Automatically linkifies all URLs in chat messages with full tap-to-open support for native apps (Facebook, YouTube, etc.) and external browser",
+    "🛡️ Social Link Preview Scraper: Optimized User-Agent header and error sanitization so Facebook profiles, Instagram, Twitter, and web links extract valid OpenGraph titles and previews instead of error cards",
+    "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground, while preserving notifications in all other cases",
+    "💬 Notification Instant Reply: Background RemoteInput action for direct reply straight from notification shade",
     "✏️ Message Edit: In-place message editing within 15 minutes with real-time socket synchronization",
-    "↪️ Message Forwarding: Multi-target message forwarding with 'Forwarded' attribution banner",
-    "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section and search support",
-    "🔗 Rich Link Previews: Automatic URL detection with SSRF-protected preview scrapers",
+    "↪️ Message Forwarding: Multi-target message forwarding with attribution banner",
+    "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section",
     "👥 Group-Only Typing Indicators: Aggregated real-time typing indicators for group chats"
   ],
   "mandatory": false

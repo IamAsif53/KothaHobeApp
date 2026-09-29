@@ -23,6 +23,7 @@ import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
 import { EmojiBurstEffect } from '../emoji/EmojiBurstEffect';
 import { getCustomEmojiById, isCustomEmojiId } from '../../data/customEmojiCatalog';
 import { LinkPreviewCard } from './LinkPreviewCard';
+import { openExternalUrl } from '../../services/nativeMediaService';
 
 export type MessagePositionInGroup = 'single' | 'first' | 'middle' | 'last';
 
@@ -411,8 +412,11 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   }
 
   const renderTextWithInlineEmojis = (text: string) => {
-    const parts = text.split(/(:[a-z0-9_]+:)/g);
-    return parts.map((part, index) => {
+    // 1. Split text into emoji codes and text segments
+    const emojiParts = text.split(/(:[a-z0-9_]+:)/g);
+    const URL_SPLIT_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|(?:www\.)[^\s<]+[^<.,:;"')\]\s])/gi;
+
+    return emojiParts.map((part, index) => {
       const match = part.match(/^:([a-z0-9_]+):$/);
       if (match) {
         const emojiId = match[1];
@@ -424,9 +428,50 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           );
         }
       }
-      return <React.Fragment key={index}>{part}</React.Fragment>;
+
+      // If plain text, check for URLs and linkify them
+      const urlParts = part.split(URL_SPLIT_REGEX);
+      if (urlParts.length === 1) {
+        return <React.Fragment key={index}>{part}</React.Fragment>;
+      }
+
+      return (
+        <React.Fragment key={index}>
+          {urlParts.map((subpart, subIndex) => {
+            if (/^(https?:\/\/|www\.)/i.test(subpart)) {
+              let targetUrl = subpart;
+              if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                targetUrl = 'https://' + targetUrl;
+              }
+              return (
+                <a
+                  key={`url-${index}-${subIndex}`}
+                  href={targetUrl}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openExternalUrl(targetUrl);
+                  }}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className={`underline break-all transition-opacity font-medium ${
+                    isMe
+                      ? 'text-white underline decoration-white/70 hover:opacity-80'
+                      : 'text-brand-600 dark:text-brand-400 underline decoration-brand-500/50 hover:opacity-80'
+                  }`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {subpart}
+                </a>
+              );
+            }
+            return <React.Fragment key={`txt-${index}-${subIndex}`}>{subpart}</React.Fragment>;
+          })}
+        </React.Fragment>
+      );
     });
   };
+
 
   return (
     <div

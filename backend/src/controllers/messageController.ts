@@ -793,7 +793,7 @@ export const getLinkPreview = async (
         signal: controller.signal,
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (KothaHobeBot)',
+            'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php) Facebot Twitterbot/1.0 Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
       });
@@ -803,9 +803,10 @@ export const getLinkPreview = async (
       const contentType = fetchRes.headers.get('content-type') || '';
       if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
         // Fallback simple domain preview if not an HTML page
+        const domain = hostname.replace(/^www\./, '');
         const preview: ILinkPreview = {
           url: trimmedUrl,
-          domain: hostname.replace(/^www\./, ''),
+          domain,
         };
         linkPreviewCache.set(trimmedUrl, { data: preview, expiresAt: Date.now() + 2 * 3600 * 1000 });
         res.status(200).json({ success: true, preview });
@@ -837,23 +838,36 @@ export const getLinkPreview = async (
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
       // Fallback domain-only preview on fetch timeout or blocks
+      const domain = hostname.replace(/^www\./, '');
       const preview: ILinkPreview = {
         url: trimmedUrl,
-        domain: hostname.replace(/^www\./, ''),
+        domain,
       };
       res.status(200).json({ success: true, preview });
       return;
     }
 
+    const decodeEntities = (str: string): string => {
+      return str
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .trim();
+    };
+
     // Extract OpenGraph / Meta tags
     const getMetaContent = (nameOrProp: string): string => {
       const regex1 = new RegExp(`<meta[^>]+(?:property|name)=["'](?:og:)?${nameOrProp}["'][^>]+content=["']([^"']*)["']`, 'i');
       const match1 = htmlText.match(regex1);
-      if (match1 && match1[1]) return match1[1].trim();
+      if (match1 && match1[1]) return decodeEntities(match1[1]);
 
       const regex2 = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["'](?:og:)?${nameOrProp}["']`, 'i');
       const match2 = htmlText.match(regex2);
-      if (match2 && match2[1]) return match2[1].trim();
+      if (match2 && match2[1]) return decodeEntities(match2[1]);
 
       return '';
     };
@@ -861,7 +875,7 @@ export const getLinkPreview = async (
     let title = getMetaContent('title');
     if (!title) {
       const titleMatch = htmlText.match(/<title[^>]*>([^<]*)<\/title>/i);
-      if (titleMatch && titleMatch[1]) title = titleMatch[1].trim();
+      if (titleMatch && titleMatch[1]) title = decodeEntities(titleMatch[1]);
     }
 
     let description = getMetaContent('description');
@@ -877,6 +891,31 @@ export const getLinkPreview = async (
     }
 
     const domain = hostname.replace(/^www\./, '');
+
+    const isGenericErrorTitle = (t: string): boolean => {
+      const lower = t.toLowerCase().trim();
+      return (
+        lower === 'error' ||
+        lower === '404' ||
+        lower === 'not found' ||
+        lower === '404 not found' ||
+        lower === 'access denied' ||
+        lower === 'forbidden' ||
+        lower === 'security check' ||
+        lower === 'security check required' ||
+        lower === 'log in to facebook' ||
+        lower === 'attention required! | cloudflare'
+      );
+    };
+
+    if (!title || isGenericErrorTitle(title)) {
+      const pathClean = parsedUrl.pathname.replace(/^\/+|\/+$/g, '');
+      if (pathClean && pathClean.length < 35 && !pathClean.includes('=')) {
+        title = `${pathClean} · ${domain}`;
+      } else {
+        title = domain;
+      }
+    }
 
     const preview: ILinkPreview = {
       url: trimmedUrl,

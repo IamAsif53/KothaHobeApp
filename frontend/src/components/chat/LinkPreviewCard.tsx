@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ILinkPreview } from '../../types';
 import { fetchLinkPreviewApi } from '../../api/messageApi';
+import { openExternalUrl } from '../../services/nativeMediaService';
 import { Globe, ExternalLink } from 'lucide-react';
 
 interface LinkPreviewCardProps {
@@ -11,13 +12,47 @@ interface LinkPreviewCardProps {
 
 const previewLocalCache = new Map<string, ILinkPreview>();
 
+const isInvalidTitle = (t?: string): boolean => {
+  if (!t) return true;
+  const lower = t.toLowerCase().trim();
+  return (
+    lower === 'error' ||
+    lower === '404' ||
+    lower === 'not found' ||
+    lower === '404 not found' ||
+    lower === 'access denied' ||
+    lower === 'forbidden' ||
+    lower === 'security check' ||
+    lower === 'security check required' ||
+    lower === 'log in to facebook' ||
+    lower === 'attention required! | cloudflare'
+  );
+};
+
+const getDisplayTitle = (preview: ILinkPreview, targetUrl: string): string => {
+  if (preview.title && !isInvalidTitle(preview.title)) {
+    return preview.title;
+  }
+  try {
+    const parsed = new URL(targetUrl);
+    const domain = preview.domain || parsed.hostname.replace(/^www\./, '');
+    const pathClean = parsed.pathname.replace(/^\/+|\/+$/g, '');
+    if (pathClean && pathClean.length < 35 && !pathClean.includes('=')) {
+      return `${pathClean} · ${domain}`;
+    }
+    return domain;
+  } catch {
+    return preview.domain || targetUrl;
+  }
+};
+
 export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
   url,
   initialPreview,
   isMe = false,
 }) => {
   const [preview, setPreview] = useState<ILinkPreview | null>(() => {
-    if (initialPreview && (initialPreview.title || initialPreview.image)) {
+    if (initialPreview && ((initialPreview.title && !isInvalidTitle(initialPreview.title)) || initialPreview.image)) {
       return initialPreview;
     }
     return previewLocalCache.get(url) || null;
@@ -59,11 +94,7 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch {
-      window.location.href = url;
-    }
+    openExternalUrl(url);
   };
 
   if (loading) {
@@ -80,6 +111,8 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
 
   if (!preview) return null;
 
+  const displayTitle = getDisplayTitle(preview, url);
+
   return (
     <div
       onClick={handleClick}
@@ -94,7 +127,7 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
         <div className="relative w-full h-32 bg-chat-surfaceSecondary overflow-hidden">
           <img
             src={preview.image}
-            alt={preview.title || 'Link Preview'}
+            alt={displayTitle || 'Link Preview'}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
             onError={(e) => {
@@ -116,9 +149,9 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
         </div>
 
         {/* Title */}
-        {preview.title && (
+        {displayTitle && (
           <h4 className="text-xs font-bold text-chat-textPrimary line-clamp-2 leading-snug">
-            {preview.title}
+            {displayTitle}
           </h4>
         )}
 
@@ -132,3 +165,4 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
     </div>
   );
 };
+

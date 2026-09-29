@@ -17,6 +17,8 @@ import {
   PhoneOutgoing,
   PhoneMissed,
   PhoneOff,
+  Video,
+  VideoOff,
   Sparkles,
 } from 'lucide-react';
 import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
@@ -710,7 +712,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         )}
 
         {/* Text Message Content + Inline/Tucked Timestamp */}
-        {message.text && message.type !== 'custom_emoji' && (
+        {message.text && message.type !== 'custom_emoji' && message.type !== 'call' && (
           <div className={`${isImageWithTextOrQuote ? 'px-1 pt-1' : ''} text-[15.5px] leading-[1.45] tracking-[-0.01em] break-words whitespace-pre-wrap select-text`}>
             {renderTextWithInlineEmojis(message.text)}
             
@@ -735,46 +737,76 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         )}
 
         {/* Voice/Video Call Event Card */}
-        {message.type === 'call' && (
-          <div className="flex items-center gap-2.5 py-1 min-w-[200px]">
-            <div className={`p-2 rounded-full ${
-              message.callDetails?.status === 'missed' || message.callDetails?.status === 'declined'
-                ? 'bg-red-500/15 text-red-500'
-                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-            }`}>
-              {message.callDetails?.status === 'missed' ? (
-                <PhoneMissed className="w-4 h-4" />
-              ) : message.callDetails?.status === 'declined' ? (
-                <PhoneOff className="w-4 h-4" />
-              ) : isMe ? (
-                <PhoneOutgoing className="w-4 h-4" />
-              ) : (
-                <PhoneIncoming className="w-4 h-4" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-chat-textPrimary">
-                {message.text || 'Voice Call'}
+        {message.type === 'call' && (() => {
+          const isMissed = message.callDetails?.status === 'missed';
+          const isDeclined = message.callDetails?.status === 'declined';
+          const isVideo = message.callDetails?.callType === 'video' || (typeof message.text === 'string' && message.text.toLowerCase().includes('video'));
+          
+          let callTitle = 'Voice call';
+          if (isMissed) {
+            callTitle = isVideo ? 'Missed video call' : 'Missed voice call';
+          } else if (isDeclined) {
+            callTitle = isVideo ? 'Declined video call' : 'Call declined';
+          } else {
+            callTitle = isVideo ? 'Video call' : 'Voice call';
+          }
+
+          let callSubtitle = '';
+          if (message.callDetails?.duration && message.callDetails.duration > 0) {
+            const mins = Math.floor(message.callDetails.duration / 60);
+            const secs = message.callDetails.duration % 60;
+            callSubtitle = `${mins}:${secs.toString().padStart(2, '0')}`;
+          } else if (isMissed) {
+            callSubtitle = isMe ? 'No answer' : 'Tap to call back';
+          } else if (isDeclined) {
+            callSubtitle = 'Declined';
+          } else {
+            callSubtitle = isVideo ? 'Video call' : 'Voice call';
+          }
+
+          return (
+            <div className="flex items-center gap-3 py-1 min-w-[210px] select-none">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                isMissed || isDeclined
+                  ? 'bg-red-500/15 text-red-500 dark:text-red-400'
+                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              }`}>
+                {isVideo ? (
+                  isMissed || isDeclined ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />
+                ) : isMissed ? (
+                  <PhoneMissed className="w-5 h-5" />
+                ) : isDeclined ? (
+                  <PhoneOff className="w-5 h-5" />
+                ) : isMe ? (
+                  <PhoneOutgoing className="w-5 h-5" />
+                ) : (
+                  <PhoneIncoming className="w-5 h-5" />
+                )}
               </div>
-              <div className={`text-[11px] ${isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/75'}`}>
-                {message.callDetails?.status === 'missed'
-                  ? 'Missed voice call'
-                  : message.callDetails?.status === 'declined'
-                  ? 'Call declined'
-                  : message.callDetails?.duration
-                  ? `${Math.floor(message.callDetails.duration / 60)}:${(message.callDetails.duration % 60).toString().padStart(2, '0')}`
-                  : 'Voice call'}
+              <div className="min-w-0 flex-1">
+                <div className={`text-sm font-semibold truncate ${
+                  isMe ? 'text-chat-bubbleOutText' : 'text-chat-textPrimary'
+                }`}>
+                  {callTitle}
+                </div>
+                <div className={`text-xs ${
+                  isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-textSecondary'
+                }`}>
+                  {callSubtitle}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 ml-2 self-end pb-0.5 shrink-0">
+                <span className={`text-[11px] font-normal tracking-tight ${
+                  isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'
+                }`}>
+                  {formatMessageTime(message.createdAt)}
+                  {message.editedAt && <span className="text-[9.5px] italic opacity-80 ml-1">Edited</span>}
+                </span>
+                {renderStatusIcon()}
               </div>
             </div>
-            <div className="flex items-center gap-1 ml-2 select-none self-end">
-              <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'}`}>
-                {formatMessageTime(message.createdAt)}
-                {message.editedAt && <span className="text-[9.5px] italic opacity-80 ml-1">Edited</span>}
-              </span>
-              {renderStatusIcon()}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Media/Doc Bottom Timestamp fallback if no text and not pure image */}
         {!message.text && !isPureImage && message.type !== 'call' && message.type !== 'custom_emoji' && (

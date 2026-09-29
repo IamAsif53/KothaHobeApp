@@ -1,10 +1,10 @@
 {
-  "versionCode": 101,
-  "versionName": "1.1.56",
+  "versionCode": 102,
+  "versionName": "1.1.57",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "b3d64c2aee0931fbcb90c0e96288561ec1d5514d538243d2c2df51102a1ffac7",
+  "sha256": "5f2fef928ccdf63b12397db6ca3d26c7da43a29f87e0232ead468faa1e2d7088",
   "releaseNotes": [
-    "Release v1.1.56 (Build 101)",
+    "Release v1.1.57 (Build 102)",
     "✨ Smooth Upward Message Scrolling: Eliminated jump/glitch when sliding up to earlier messages with synchronous scroll anchoring",
     "📌 Smart Bottom Scroll Pinning: Prevents forced auto-scroll to bottom while user is actively reading older message history",
     "🎨 Light Theme Redesign (Soft Neutral): Clean #F5F7F6 surface, mint outgoing bubbles, high contrast typography & WCAG AA sender colors",

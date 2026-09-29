@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { IMessage } from '../types';
 import { registerPushTokenApi } from '../api/userApi';
-import { markConversationReadApi } from '../api/messageApi';
+import { markConversationReadApi, sendMessageRestApi } from '../api/messageApi';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -38,6 +38,7 @@ interface SocketContextType {
     customEmojiId?: string
   ) => void;
   flushPendingOutbox: () => void;
+  removeOutboxItem: (clientMessageId?: string) => void;
   markAsRead: (conversationId: string) => void;
   startTyping: (conversationId: string, receiverId?: string) => void;
   stopTyping: (conversationId: string, receiverId?: string) => void;
@@ -58,6 +59,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const ackTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const activeChatRef = useRef<string | null>(null);
   const watchdogIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -252,6 +254,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const removeOutboxItem = (clientMessageId?: string) => {
+    if (!clientMessageId) return;
+    if (ackTimeoutsRef.current[clientMessageId]) {
+      clearTimeout(ackTimeoutsRef.current[clientMessageId]);
+      delete ackTimeoutsRef.current[clientMessageId];
+    }
+    removeSentFromOutbox(clientMessageId);
+  };
+
   // Flush Outbox when socket or internet reconnects
   const flushOutbox = (targetSocket: Socket) => {
     const pending = getStoredOutbox();
@@ -347,9 +358,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Remove from Outbox when message is confirmed sent by server and update cache
     newSocket.on('message:sent', (sentMsg: IMessage) => {
-      const outbox = getStoredOutbox();
-      const filtered = outbox.filter((item) => item.clientMessageId !== sentMsg.clientMessageId);
-      saveOutbox(filtered);
+      if (sentMsg.clientMessageId && ackTimeoutsRef.current[sentMsg.clientMessageId]) {
+        clearTimeout(ackTimeoutsRef.current[sentMsg.clientMessageId]);
+        delete ackTimeoutsRef.current[sentMsg.clientMessageId];
+      }
+      removeSentFromOutbox(sentMsg.clientMessageId);
 
       // Instantly update local conversation cache
       if (sentMsg.conversationId) {
@@ -629,34 +642,93 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     replyTo?: any,
     customEmojiId?: string
   ) => {
+    const payload = {
+      conversationId,
+      receiverId,
+      text,
+      clientMessageId,
+      type,
+      attachment,
+      replyTo,
+      customEmojiId,
+    };
+
     const outbox = getStoredOutbox();
     if (!outbox.some((item) => item.clientMessageId === clientMessageId)) {
       outbox.push({
-        conversationId,
-        receiverId,
-        text,
-        clientMessageId,
-        type,
-        attachment,
-        replyTo,
-        customEmojiId,
+        ...payload,
         timestamp: Date.now(),
       });
       saveOutbox(outbox);
     }
 
     if (socket && isConnected) {
-      socket.emit('message:send', {
-        conversationId,
-        receiverId,
-        text,
-        clientMessageId,
-        type,
-        attachment,
-        replyTo,
-        customEmojiId,
-      });
+      socket.emit('message:send', payload);
     }
+
+    if (ackTimeoutsRef.current[clientMessageId]) {
+      clearTimeout(ackTimeoutsRef.current[clientMessageId]);
+    }
+
+    // 4.5s Automatic REST Fallback / Failure Watchdog
+    ackTimeoutsRef.current[clientMessageId] = setTimeout(async () => {
+      delete ackTimeoutsRef.current[clientMessageId];
+      console.warn(`[Socket] ⚠️ No ACK received for ${clientMessageId} within 4.5s. Triggering HTTP REST fallback...`);
+
+      try {
+        const res = await sendMessageRestApi(payload);
+        if (res.success && res.message) {
+          console.log(`[Socket] ✅ Message ${clientMessageId} sent successfully via HTTP REST fallback.`);
+          removeOutboxItem(clientMessageId);
+
+          if (conversationId) {
+            try {
+              const cacheKey = `kotha_hobe_msgs_${conversationId}`;
+              const cached = localStorage.getItem(cacheKey);
+              const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
+              const updated = currentList.map((m) =>
+                m.clientMessageId === clientMessageId || m._id === res.message!._id
+                  ? { ...m, ...res.message, status: res.message!.status || 'sent' }
+                  : m
+              );
+              if (!updated.some((m) => m._id === res.message!._id || m.clientMessageId === clientMessageId)) {
+                updated.push(res.message);
+              }
+              localStorage.setItem(cacheKey, JSON.stringify(updated));
+            } catch {}
+          }
+
+          window.dispatchEvent(new CustomEvent('kothahobe:message_sent', { detail: res.message }));
+          return;
+        }
+      } catch (err) {
+        console.warn(`[Socket] REST fallback failed for ${clientMessageId}:`, err);
+      }
+
+      // If REST fallback also failed, mark as failed so user can retry or delete
+      console.warn(`[Socket] ❌ Message ${clientMessageId} marked as failed.`);
+      if (conversationId) {
+        try {
+          const cacheKey = `kotha_hobe_msgs_${conversationId}`;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const currentList: IMessage[] = JSON.parse(cached);
+            const updated = currentList.map((m) =>
+              m.clientMessageId === clientMessageId
+                ? { ...m, status: 'failed' as const }
+                : m
+            );
+            localStorage.setItem(cacheKey, JSON.stringify(updated));
+          }
+        } catch {}
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('kothahobe:message_failed', {
+          detail: { clientMessageId, conversationId },
+        })
+      );
+    }, 4500);
   };
 
   const flushPendingOutbox = () => {
@@ -735,6 +807,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         reconnectNow,
         sendMessage,
         flushPendingOutbox,
+        removeOutboxItem,
         markAsRead,
         startTyping,
         stopTyping,

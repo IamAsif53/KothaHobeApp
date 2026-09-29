@@ -169,4 +169,35 @@ export async function fetchLinkPreviewApi(
   });
 }
 
+export async function sendMessageRestApi(payload: {
+  conversationId: string;
+  receiverId?: string;
+  text?: string;
+  clientMessageId: string;
+  type?: string;
+  attachment?: any;
+  replyTo?: any;
+  customEmojiId?: string;
+}): Promise<{ success: boolean; message?: IMessage; isDuplicate?: boolean }> {
+  return apiFetch(`/messages/send`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMessageRestApi(
+  messageId: string,
+  conversationId?: string,
+  deleteForEveryone: boolean = false
+): Promise<{ success: boolean; message?: string }> {
+  let url = `/messages/${messageId}?deleteForEveryone=${deleteForEveryone}`;
+  if (conversationId) {
+    url += `&conversationId=${encodeURIComponent(conversationId)}`;
+  }
+  return apiFetch(url, {
+    method: 'DELETE',
+  });
+}
+
+
 

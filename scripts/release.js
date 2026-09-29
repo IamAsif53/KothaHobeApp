@@ -77,12 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "📱 Production Conversation Notifications: Native Android MessagingStyle & Person metadata with zero-delay sender avatars and circular initials",
-      "💬 Native Message History Stream: Groups and aggregates consecutive messages per conversation cleanly into expandable Android conversation cards",
-      "⚡ Instant Inline Reply & Mark as Read: Preserves high-speed RemoteInput direct reply and introduces one-tap 'Mark as read' action in notification shade",
-      "🎨 Rich Message Previews: Clean previews for Photos, Videos, Documents, Voice messages with duration, Custom emojis, Reactions, and Story replies without exposing technical URLs",
-      "🔗 Production Link Previews: Universal clickable links with native app intent routing (Facebook, YouTube, Browser)",
-      "🔕 Smart Foreground Suppression: Suppresses push notifications when actively inside the open chat"
+      "⚡ Delivery Watchdog & HTTP Fallback: Automatically catches stuck 'sending' messages with 4.5s HTTP fallback & one-tap Retry CTA",
+      "🗑️ Instant Stuck Message Deletion: Immediate local purge and outbox cancellation for sending, failed, and temporary messages",
+      "📩 Universal 'Mark as read' Sync: Notification & in-app mark-as-read syncs in real-time across laptop/web and Android app unread badges",
+      "📱 Production Conversation Notifications: Android MessagingStyle with inline reply and avatar grouping",
+      "🔗 Production Link Previews: Universal clickable links with native app intent routing (Facebook, YouTube, Browser)"
     ],
     mandatory: false
   };

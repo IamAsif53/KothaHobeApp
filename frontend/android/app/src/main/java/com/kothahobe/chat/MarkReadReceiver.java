@@ -7,6 +7,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import org.json.JSONObject;
+
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
@@ -40,12 +43,13 @@ public class MarkReadReceiver extends BroadcastReceiver {
             new Thread(() -> {
                 HttpURLConnection conn = null;
                 try {
-                    URL url = new URL(API_BASE_URL + "/conversations/" + conversationId + "/read");
+                    URL url = new URL(API_BASE_URL + "/messages/mark-read");
                     conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestMethod("POST");
                     conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                     conn.setConnectTimeout(5000);
                     conn.setReadTimeout(5000);
+                    conn.setDoOutput(true);
 
                     SharedPreferences authPrefs = context.getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
                     String token = authPrefs.getString("auth_token", null);
@@ -56,6 +60,14 @@ public class MarkReadReceiver extends BroadcastReceiver {
 
                     if (token != null && !token.isEmpty()) {
                         conn.setRequestProperty("Authorization", "Bearer " + token);
+                    }
+
+                    JSONObject jsonBody = new JSONObject();
+                    jsonBody.put("conversationId", conversationId);
+                    byte[] input = jsonBody.toString().getBytes("utf-8");
+
+                    try (OutputStream os = conn.getOutputStream()) {
+                        os.write(input, 0, input.length);
                     }
 
                     int responseCode = conn.getResponseCode();

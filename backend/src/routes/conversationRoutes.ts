@@ -9,6 +9,7 @@ import {
   unarchiveConversation,
 } from '../controllers/conversationController';
 import { getSharedMedia, searchInConversation } from '../controllers/mediaController';
+import { markConversationAsRead } from '../controllers/messageController';
 import { authenticateToken } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -18,6 +19,7 @@ router.use(authenticateToken);
 router.post('/', getOrCreateConversation);
 router.get('/', listConversations);
 router.get('/:conversationId', getConversationDetails);
+router.post('/:conversationId/read', markConversationAsRead);
 router.post('/:conversationId/clear', clearChatHistory);
 router.delete('/:conversationId', deleteConversation);
 router.put('/:conversationId/archive', archiveConversation);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchMessagesApi, uploadMediaApi, searchInConversationApi, editMessageApi } from '../api/messageApi';
+import { fetchMessagesApi, uploadMediaApi, searchInConversationApi, editMessageApi, deleteMessageRestApi } from '../api/messageApi';
 import { fetchConversations, fetchConversationDetailsApi } from '../api/conversationApi';
 import { IMessage, IUser, IReplyTo, IAttachment, IConversation } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +41,7 @@ import {
   Download,
   Trash2,
   Sparkles,
+  RotateCw,
 } from 'lucide-react';
 
 const QUICK_REACTIONS = ['❤️', '😂', '🔥', '👍', '😮', '😢', '👏'];
@@ -52,6 +53,7 @@ export const ChatRoomPage: React.FC = () => {
   const {
     socket,
     sendMessage,
+    removeOutboxItem,
     markAsRead,
     startTyping,
     stopTyping,
@@ -362,6 +364,38 @@ export const ChatRoomPage: React.FC = () => {
     };
     window.addEventListener('kothahobe:message_saved', handleSavedEvent);
 
+    const handleWindowMessageSent = (e: any) => {
+      const sentMsg = e.detail;
+      if (sentMsg && sentMsg.conversationId === conversationId) {
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id
+              ? { ...m, ...sentMsg, status: sentMsg.status || 'sent' }
+              : m
+          );
+          persistMessages(updated);
+          return updated;
+        });
+      }
+    };
+    window.addEventListener('kothahobe:message_sent', handleWindowMessageSent);
+
+    const handleWindowMessageFailed = (e: any) => {
+      const detail = e.detail;
+      if (detail && detail.conversationId === conversationId) {
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m.clientMessageId === detail.clientMessageId || m._id === detail.clientMessageId
+              ? { ...m, status: 'failed' as const }
+              : m
+          );
+          persistMessages(updated);
+          return updated;
+        });
+      }
+    };
+    window.addEventListener('kothahobe:message_failed', handleWindowMessageFailed);
+
     // 1. Incoming Message
     const handleNewMessage = (newMsg: IMessage) => {
       if (newMsg.conversationId === conversationId) {
@@ -605,6 +639,8 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('user:offline', handleUserOffline);
       socket.off('group:nickname_updated', handleNicknameUpdated);
       window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
+      window.removeEventListener('kothahobe:message_sent', handleWindowMessageSent);
+      window.removeEventListener('kothahobe:message_failed', handleWindowMessageFailed);
     };
   }, [socket, conversationId, recipient, user, persistMessages, scrollToBottom]);
 
@@ -842,11 +878,46 @@ export const ChatRoomPage: React.FC = () => {
     socket.emit('message:react', { messageId, conversationId, emoji });
   }, [socket, conversationId]);
 
-  // Delete Message
-  const handleDelete = useCallback((messageId: string, deleteForEveryone: boolean) => {
-    if (!socket || !conversationId) return;
-    socket.emit('message:delete', { messageId, conversationId, deleteForEveryone });
-  }, [socket, conversationId]);
+  // Delete Message (Instant local optimistic delete + Outbox purge + Socket/REST sync)
+  const handleDelete = useCallback((messageId: string, deleteForEveryone: boolean = false) => {
+    if (!conversationId) return;
+
+    // 1. Purge from outbox if it's pending / stuck / failed
+    const targetMsg = messages.find((m) => m._id === messageId || m.clientMessageId === messageId);
+    const clientMessageId = targetMsg?.clientMessageId || (messageId.startsWith('temp_') ? messageId : undefined);
+    if (clientMessageId) {
+      removeOutboxItem(clientMessageId);
+    }
+
+    // 2. Immediately update local state & localStorage cache
+    setMessages((prev) => {
+      let updated: IMessage[];
+      if (deleteForEveryone && !messageId.startsWith('temp_')) {
+        updated = prev.map((m) =>
+          m._id === messageId
+            ? { ...m, text: 'This message was deleted', attachment: undefined, isDeletedForEveryone: true }
+            : m
+        );
+      } else {
+        updated = prev.filter((m) => m._id !== messageId && m.clientMessageId !== messageId);
+      }
+      persistMessages(updated);
+      return updated;
+    });
+
+    // 3. If it's a real server message (persisted in DB), sync with server
+    if (!messageId.startsWith('temp_')) {
+      if (socket && socket.connected) {
+        socket.emit('message:delete', { messageId, conversationId, deleteForEveryone });
+      }
+      // Proactively call REST delete for guaranteed persistence
+      deleteMessageRestApi(messageId, conversationId, deleteForEveryone).catch((err) => {
+        console.warn('[Chat] Delete REST note:', err?.message || err);
+      });
+    }
+
+    showToast(deleteForEveryone ? 'Message deleted for everyone' : 'Message deleted');
+  }, [conversationId, messages, removeOutboxItem, persistMessages, socket]);
 
   // Reply to Message
   const handleReply = useCallback((msg: IMessage) => {
@@ -912,13 +983,15 @@ export const ChatRoomPage: React.FC = () => {
     if (!conversationId) return;
     if (!isGroup && !recipient) return;
 
-    setMessages((prev) =>
-      prev.map((m) =>
+    setMessages((prev) => {
+      const updated = prev.map((m) =>
         (m._id === msg._id || m.clientMessageId === msg.clientMessageId)
           ? { ...m, status: 'sending' as const }
           : m
-      )
-    );
+      );
+      persistMessages(updated);
+      return updated;
+    });
 
     sendMessage(
       conversationId,
@@ -927,9 +1000,10 @@ export const ChatRoomPage: React.FC = () => {
       msg.clientMessageId || msg._id,
       msg.type,
       msg.attachment,
-      msg.replyTo
+      msg.replyTo,
+      msg.customEmojiId
     );
-  }, [conversationId, isGroup, recipient, sendMessage]);
+  }, [conversationId, isGroup, recipient, sendMessage, persistMessages]);
 
   const filteredMessages = showSearch && searchQuery.trim()
     ? messages.filter(
@@ -1058,6 +1132,24 @@ export const ChatRoomPage: React.FC = () => {
 
             {/* Action Items */}
             <div className="space-y-1 divide-y divide-chat-divider text-sm">
+              {/* Retry sending if message is stuck sending or failed */}
+              {(actionMenuMessage.status === 'failed' ||
+                actionMenuMessage.status === 'sending' ||
+                actionMenuMessage._id.startsWith('temp_')) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const msg = actionMenuMessage;
+                    setActionMenuMessage(null);
+                    handleRetryMessage(msg);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-brand-600 dark:text-brand-400 font-semibold rounded-lg transition-colors text-left"
+                >
+                  <RotateCw className="w-4 h-4 text-brand-500" />
+                  <span>Retry Sending</span>
+                </button>
+              )}
+
               {actionMenuMessage.reactions && actionMenuMessage.reactions.length > 0 && (
                 <button
                   type="button"
@@ -1075,36 +1167,42 @@ export const ChatRoomPage: React.FC = () => {
               )}
               
               {/* Reply */}
-              <button
-                onClick={() => {
-                  handleReply(actionMenuMessage);
-                  setActionMenuMessage(null);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
-              >
-                <CornerUpLeft className="w-4 h-4 text-brand-500" />
-                <span>Reply</span>
-              </button>
-
-              {/* Forward Message */}
-              {actionMenuMessage.type !== 'system' && !actionMenuMessage.isDeletedForEveryone && (
+              {actionMenuMessage.status !== 'failed' && (
                 <button
                   onClick={() => {
-                    const msg = actionMenuMessage;
+                    handleReply(actionMenuMessage);
                     setActionMenuMessage(null);
-                    setForwardingMessage(msg);
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
                 >
-                  <CornerUpRight className="w-4 h-4 text-emerald-500" />
-                  <span>Forward</span>
+                  <CornerUpLeft className="w-4 h-4 text-brand-500" />
+                  <span>Reply</span>
                 </button>
+              )}
+
+              {/* Forward Message */}
+              {actionMenuMessage.type !== 'system' &&
+                !actionMenuMessage.isDeletedForEveryone &&
+                actionMenuMessage.status !== 'failed' &&
+                !actionMenuMessage._id.startsWith('temp_') && (
+                  <button
+                    onClick={() => {
+                      const msg = actionMenuMessage;
+                      setActionMenuMessage(null);
+                      setForwardingMessage(msg);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
+                  >
+                    <CornerUpRight className="w-4 h-4 text-emerald-500" />
+                    <span>Forward</span>
+                  </button>
               )}
 
               {/* Edit Message (Sender only, Text message, within 15 minutes) */}
               {actionMenuMessage.senderId === user?._id &&
                 actionMenuMessage.type === 'text' &&
                 !actionMenuMessage.isDeletedForEveryone &&
+                !actionMenuMessage._id.startsWith('temp_') &&
                 Date.now() - new Date(actionMenuMessage.createdAt).getTime() <= 15 * 60 * 1000 && (
                   <button
                     onClick={() => {
@@ -1160,28 +1258,44 @@ export const ChatRoomPage: React.FC = () => {
                 </button>
               )}
 
-              <button
-                onClick={() => {
-                  handleDelete(actionMenuMessage._id, false);
-                  setActionMenuMessage(null);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-red-500 rounded-lg transition-colors text-left"
-              >
-                <Trash2 className="w-4 h-4 text-chat-textMuted" />
-                <span>Delete for me</span>
-              </button>
-
-              {actionMenuMessage.senderId === user?._id && (
+              {/* Delete Options */}
+              {actionMenuMessage._id.startsWith('temp_') || actionMenuMessage.status === 'failed' || actionMenuMessage.status === 'sending' ? (
                 <button
                   onClick={() => {
-                    handleDelete(actionMenuMessage._id, true);
+                    handleDelete(actionMenuMessage._id, false);
                     setActionMenuMessage(null);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors text-left font-medium"
                 >
                   <Trash2 className="w-4 h-4 text-red-500" />
-                  <span>Delete for everyone</span>
+                  <span>Delete Message</span>
                 </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      handleDelete(actionMenuMessage._id, false);
+                      setActionMenuMessage(null);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textMuted hover:text-red-500 rounded-lg transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 text-chat-textMuted" />
+                    <span>Delete for me</span>
+                  </button>
+
+                  {actionMenuMessage.senderId === user?._id && (
+                    <button
+                      onClick={() => {
+                        handleDelete(actionMenuMessage._id, true);
+                        setActionMenuMessage(null);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors text-left"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <span>Delete for everyone</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

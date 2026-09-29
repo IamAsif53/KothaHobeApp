@@ -304,6 +304,277 @@ export const sendDirectReply = async (
   }
 };
 
+export const createMessage = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const {
+      conversationId,
+      receiverId,
+      text = '',
+      type = 'text',
+      attachment,
+      replyTo,
+      customEmojiId,
+      clientMessageId,
+    } = req.body;
+
+    if (!conversationId) {
+      res.status(400).json({ success: false, message: 'Missing conversationId' });
+      return;
+    }
+
+    const userId = req.user._id;
+    const userIdStr = userId.toString();
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      $or: [
+        { participants: userId },
+        { 'groupMeta.members.user': userId },
+        { 'groupMeta.creator': userId },
+      ],
+    });
+
+    if (!conversation) {
+      res.status(403).json({ success: false, message: 'Access denied or conversation not found' });
+      return;
+    }
+
+    const cMsgId = clientMessageId || `c_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    // Idempotency check
+    const existing = await Message.findOne({ clientMessageId: cMsgId });
+    if (existing) {
+      res.status(200).json({ success: true, message: existing });
+      return;
+    }
+
+    const count = await Message.countDocuments({ conversationId });
+    const serverSequence = count + 1;
+
+    const senderUser = await User.findById(userId).select('displayName username avatarUrl');
+    let senderNickname = senderUser?.displayName || senderUser?.username || '';
+    if (conversation.isGroup && conversation.groupMeta?.nicknames) {
+      const nicks = conversation.groupMeta.nicknames;
+      const customNick = nicks instanceof Map ? nicks.get(userIdStr) : (nicks as any)[userIdStr];
+      if (customNick) senderNickname = customNick;
+    }
+
+    const io = getGlobalIO();
+
+    let previewText = text.trim();
+    if (type === 'image') previewText = '📷 Photo';
+    else if (type === 'audio') previewText = '🎙 Voice message';
+    else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
+    else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
+
+    if (conversation.isGroup) {
+      if (conversation.groupMeta?.permissions?.sendMessages === 'admins') {
+        const isCreator = conversation.groupMeta.creator?.toString() === userIdStr;
+        const isAdmin = conversation.groupMeta.admins?.some((a: any) => a?.toString() === userIdStr);
+        const isMod = conversation.groupMeta.moderators?.some((m: any) => m?.toString() === userIdStr);
+        if (!isCreator && !isAdmin && !isMod) {
+          res.status(403).json({ success: false, message: 'Only admins can send messages in this group.' });
+          return;
+        }
+      }
+
+      let expiresAt: Date | undefined = undefined;
+      if (conversation.groupMeta?.disappearingMode && conversation.groupMeta.disappearingMode > 0) {
+        expiresAt = new Date(Date.now() + conversation.groupMeta.disappearingMode * 1000);
+      }
+
+      const message = await Message.create({
+        conversationId,
+        senderId: userId,
+        senderNickname,
+        text: text.trim(),
+        type,
+        customEmojiId,
+        status: 'delivered',
+        readBy: [{ user: userId as any, readAt: new Date() }],
+        clientMessageId: cMsgId,
+        attachment: attachment || undefined,
+        replyTo: replyTo || undefined,
+        serverSequence,
+        expiresAt,
+        deliveredAt: new Date(),
+      });
+
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: {
+          text: `${senderNickname}: ${previewText}`,
+          senderId: userId,
+          createdAt: message.createdAt,
+          status: 'delivered',
+        },
+        lastMessageAt: message.createdAt,
+      });
+
+      if (io) {
+        io.to(`conv:${conversationId}`).emit('message:new', message);
+        io.to(`user:${userIdStr}`).emit('message:sent', message);
+      }
+
+      const allMemberIds = new Set<string>();
+      (conversation.participants || []).forEach((p: any) => allMemberIds.add(p.toString()));
+      (conversation.groupMeta?.members || []).forEach((m: any) => {
+        const mId = m.user?._id?.toString() || m.user?.toString();
+        if (mId && m.status === 'accepted') allMemberIds.add(mId);
+      });
+      allMemberIds.delete(userIdStr);
+
+      allMemberIds.forEach((pIdStr) => {
+        if (io) {
+          io.to(`user:${pIdStr}`).emit('message:new', message);
+        }
+        sendPushNotification({
+          recipientId: pIdStr,
+          senderId: userIdStr,
+          messageId: message._id.toString(),
+          senderName: senderNickname,
+          senderNickname: senderNickname,
+          senderAvatar: senderUser?.avatarUrl || '',
+          isGroup: true,
+          groupName: conversation.groupMeta?.name || 'Group Chat',
+          groupAvatar: conversation.groupMeta?.avatarUrl || '',
+          messageText: text.trim(),
+          messageType: type,
+          attachmentFileName: attachment?.fileName,
+          customEmojiId,
+          conversationId: conversationId.toString(),
+        }).catch(() => {});
+      });
+
+      res.status(200).json({ success: true, message });
+      return;
+    } else {
+      // 1-on-1 direct chat
+      const targetReceiverId = receiverId || conversation.participants.find((p) => p.toString() !== userIdStr)?.toString();
+      if (!targetReceiverId) {
+        res.status(400).json({ success: false, message: 'Recipient not found' });
+        return;
+      }
+
+      const message = await Message.create({
+        conversationId,
+        senderId: userId,
+        receiverId: targetReceiverId,
+        text: text.trim(),
+        type,
+        customEmojiId,
+        status: 'sent',
+        clientMessageId: cMsgId,
+        attachment: attachment || undefined,
+        replyTo: replyTo || undefined,
+        serverSequence,
+      });
+
+      await Conversation.findByIdAndUpdate(conversationId, {
+        lastMessage: {
+          text: previewText,
+          senderId: userId,
+          createdAt: message.createdAt,
+          status: 'sent',
+        },
+        lastMessageAt: message.createdAt,
+      });
+
+      if (io) {
+        io.to(`conv:${conversationId}`).emit('message:new', message);
+        io.to(`user:${targetReceiverId}`).emit('message:new', message);
+        io.to(`user:${userIdStr}`).emit('message:sent', message);
+      }
+
+      sendPushNotification({
+        recipientId: targetReceiverId,
+        senderId: userIdStr,
+        messageId: message._id.toString(),
+        senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+        senderNickname: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+        senderAvatar: senderUser?.avatarUrl || '',
+        isGroup: false,
+        messageText: text.trim(),
+        messageType: type,
+        attachmentFileName: attachment?.fileName,
+        customEmojiId,
+        conversationId: conversationId.toString(),
+      }).catch(() => {});
+
+      res.status(200).json({ success: true, message });
+      return;
+    }
+  } catch (error) {
+    console.error('[MessageController] createMessage error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create message' });
+  }
+};
+
+export const deleteMessage = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messageId } = req.params;
+    const conversationId = (req.query.conversationId as string) || req.body?.conversationId;
+    const deleteForEveryone = req.query.deleteForEveryone === 'true' || req.body?.deleteForEveryone === true;
+
+    const userId = req.user._id.toString();
+
+    const msg = await Message.findById(messageId);
+    if (!msg) {
+      res.status(200).json({ success: true, message: 'Message already removed' });
+      return;
+    }
+
+    const io = getGlobalIO();
+
+    if (deleteForEveryone && msg.senderId.toString() === userId) {
+      msg.isDeletedForEveryone = true;
+      msg.text = 'This message was deleted';
+      msg.attachment = undefined;
+      await msg.save();
+
+      if (io && conversationId) {
+        io.to(`conv:${conversationId}`).emit('message:deleted', {
+          messageId,
+          conversationId,
+          deleteForEveryone: true,
+        });
+      }
+    } else {
+      await Message.findByIdAndUpdate(messageId, {
+        $addToSet: { deletedFor: req.user._id },
+      });
+
+      if (io && conversationId) {
+        io.to(`user:${userId}`).emit('message:deleted', {
+          messageId,
+          conversationId,
+          deleteForEveryone: false,
+        });
+      }
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[MessageController] deleteMessage error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete message' });
+  }
+};
+
 export const markConversationAsRead = async (
   req: AuthenticatedRequest,
   res: Response
@@ -314,7 +585,7 @@ export const markConversationAsRead = async (
       return;
     }
 
-    const { conversationId } = req.body;
+    const conversationId = req.body?.conversationId || req.params?.conversationId;
     if (!conversationId) {
       res.status(400).json({ success: false, message: 'Missing conversationId' });
       return;

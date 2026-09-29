@@ -115,7 +115,19 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
       case 'read':
         return <CheckCheck className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />;
       case 'failed':
-        return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRetry && onRetry(message);
+            }}
+            title="Retry sending message"
+            className="hover:scale-110 active:scale-95 transition-transform"
+          >
+            <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+          </button>
+        );
       default:
         return <Check className="w-3.5 h-3.5 text-chat-bubbleOutText/70" />;
     }

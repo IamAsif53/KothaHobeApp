@@ -7,6 +7,8 @@ import {
   editMessage,
   forwardMessage,
   getLinkPreview,
+  createMessage,
+  deleteMessage,
 } from '../controllers/messageController';
 import { uploadMedia, uploadMiddleware, streamMedia } from '../controllers/mediaController';
 import { authenticateToken } from '../middleware/authMiddleware';
@@ -21,6 +23,8 @@ router.use(authenticateToken);
 
 router.get('/:conversationId/messages', getMessages);
 router.post('/upload', uploadMiddleware.single('file'), uploadMedia);
+router.post('/send', createMessage);
+router.delete('/:messageId', deleteMessage);
 router.post('/delivered', markMessageDelivered);
 router.post('/reply-direct', sendDirectReply);
 router.post('/mark-read', markConversationAsRead);

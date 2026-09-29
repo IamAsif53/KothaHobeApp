@@ -331,9 +331,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (config.isLight) {
       root.classList.add('light-theme');
-      root.classList.remove('dark-theme');
+      root.classList.remove('dark-theme', 'dark');
     } else {
-      root.classList.add('dark-theme');
+      root.classList.add('dark-theme', 'dark');
       root.classList.remove('light-theme');
     }
 

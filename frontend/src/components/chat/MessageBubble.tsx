@@ -494,10 +494,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                     openExternalUrl(targetUrl);
                   }}
                   onTouchStart={(e) => e.stopPropagation()}
-                  className={`underline break-all transition-opacity font-medium ${
+                  className={`underline break-all transition-opacity font-semibold ${
                     isMe
-                      ? 'text-brand-700 dark:text-white underline decoration-brand-700/60 dark:decoration-white/70 hover:opacity-80'
-                      : 'text-brand-600 dark:text-brand-400 underline decoration-brand-500/50 hover:opacity-80'
+                      ? 'text-inherit underline decoration-current/60 hover:opacity-85'
+                      : 'text-brand-700 dark:text-brand-400 underline decoration-brand-600/50 dark:decoration-brand-400/50 hover:opacity-85'
                   }`}
                   target="_blank"
                   rel="noopener noreferrer"

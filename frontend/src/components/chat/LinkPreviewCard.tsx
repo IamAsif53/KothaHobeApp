@@ -141,23 +141,31 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       <div className="p-2.5 space-y-1">
         {/* Domain Badge */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className="text-[10.5px] font-bold text-emerald-700 dark:text-brand-400 flex items-center gap-1 truncate">
+          <span className={`text-[10.5px] font-bold flex items-center gap-1 truncate ${
+            isMe ? 'text-chat-bubbleOutText/90' : 'text-emerald-700 dark:text-brand-400'
+          }`}>
             <Globe className="w-3 h-3 shrink-0" />
             <span className="truncate">{preview.domain || new URL(url).hostname}</span>
           </span>
-          <ExternalLink className="w-3 h-3 text-chat-textMuted shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <ExternalLink className={`w-3 h-3 shrink-0 transition-opacity ${
+            isMe ? 'text-chat-bubbleOutText/70 group-hover:opacity-100' : 'text-chat-textMuted opacity-70 group-hover:opacity-100'
+          }`} />
         </div>
 
         {/* Title */}
         {displayTitle && (
-          <h4 className="text-xs font-bold text-chat-textPrimary line-clamp-2 leading-snug">
+          <h4 className={`text-xs font-bold line-clamp-2 leading-snug ${
+            isMe ? 'text-chat-bubbleOutText' : 'text-chat-textPrimary'
+          }`}>
             {displayTitle}
           </h4>
         )}
 
         {/* Description snippet */}
         {preview.description && (
-          <p className="text-[11px] text-chat-textSecondary line-clamp-2 leading-normal">
+          <p className={`text-[11px] line-clamp-2 leading-normal ${
+            isMe ? 'text-chat-bubbleOutText/80' : 'text-chat-textSecondary'
+          }`}>
             {preview.description}
           </p>
         )}

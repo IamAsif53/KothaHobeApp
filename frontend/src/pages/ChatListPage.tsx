@@ -243,6 +243,8 @@ export const ChatListPage: React.FC = () => {
       const gName = c.groupMeta?.name || 'Group Chat';
       return gName.toLowerCase().includes(searchQuery.toLowerCase());
     }
+    const rName = c.recipient?.displayName || c.recipient?.username || '';
+    return rName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const archivedCount = conversations.filter((c) => c.isArchived).length;

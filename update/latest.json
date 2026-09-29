@@ -1,10 +1,10 @@
 {
-  "versionCode": 92,
-  "versionName": "1.1.47",
+  "versionCode": 93,
+  "versionName": "1.1.48",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a4c8a7a2f71dac362cbbd6b9258957c9254c3f8e0182f5a48536690e4d38e9fa",
+  "sha256": "59c27aca766171199243794eee791b7a9547a7c2d5cfbed0411cff8a74ba3ea0",
   "releaseNotes": [
-    "Release v1.1.47 (Build 92)",
+    "Release v1.1.48 (Build 93)",
     "✏️ Message Edit: In-place message editing for sender within 15 minutes with real-time socket synchronization and '(Edited)' indicators",
     "↪️ Message Forwarding: Multi-target message forwarding to individual chats and groups with 'Forwarded' attribution banner",
     "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section, unread state preservation, and search support",

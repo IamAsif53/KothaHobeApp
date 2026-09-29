@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme, AppTheme, AppFontSize } from '../context/ThemeContext';
+import { useTheme, AppTheme, AppFontSize, AppFontWeight } from '../context/ThemeContext';
 import { Avatar } from '../components/common/Avatar';
 import {
   LogOut,
@@ -38,7 +38,7 @@ import { modalStack } from '../utils/modalStack';
 
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { theme, fontSize, setTheme, setFontSize, themeConfig } = useTheme();
+  const { theme, fontSize, fontWeight, setTheme, setFontSize, setFontWeight, themeConfig } = useTheme();
   const navigate = useNavigate();
 
   // App version & Update states
@@ -146,6 +146,11 @@ export const SettingsPage: React.FC = () => {
   const handleSelectFontSize = (size: AppFontSize) => {
     setFontSize(size);
     showToast(`Font size set to ${size.toUpperCase()}`);
+  };
+
+  const handleSelectFontWeight = (weight: AppFontWeight) => {
+    setFontWeight(weight);
+    showToast(`Chat font weight set to ${weight.toUpperCase()}`);
   };
 
   const handleClearCache = () => {
@@ -719,6 +724,32 @@ export const SettingsPage: React.FC = () => {
                     }`}
                   >
                     {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase text-chat-textMuted mb-2">
+                Chat Message Font Weight
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { id: 'regular' as AppFontWeight, label: 'Regular', weightClass: 'font-normal' },
+                  { id: 'medium' as AppFontWeight, label: 'Medium', weightClass: 'font-medium' },
+                  { id: 'semibold' as AppFontWeight, label: 'Semi Bold', weightClass: 'font-semibold' },
+                  { id: 'bold' as AppFontWeight, label: 'Bold', weightClass: 'font-bold' },
+                ].map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => handleSelectFontWeight(w.id)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs ${w.weightClass} border transition-all ${
+                      fontWeight === w.id
+                        ? 'bg-brand-500 border-brand-500 text-white shadow-sm'
+                        : 'bg-chat-surfaceSecondary border-chat-border text-chat-textSecondary hover:text-chat-textPrimary'
+                    }`}
+                  >
+                    {w.label}
                   </button>
                 ))}
               </div>

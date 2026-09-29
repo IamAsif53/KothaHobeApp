@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type AppTheme = 'light' | 'dark' | 'midnight' | 'emerald' | 'navy' | 'charcoal';
 export type AppFontSize = 'compact' | 'normal' | 'large';
+export type AppFontWeight = 'regular' | 'medium' | 'semibold' | 'bold';
 
 export interface ThemeConfig {
   bg: string;
@@ -43,8 +44,10 @@ export interface ThemeConfig {
 interface ThemeContextType {
   theme: AppTheme;
   fontSize: AppFontSize;
+  fontWeight: AppFontWeight;
   setTheme: (theme: AppTheme) => void;
   setFontSize: (size: AppFontSize) => void;
+  setFontWeight: (weight: AppFontWeight) => void;
   themeConfig: ThemeConfig;
 }
 
@@ -280,6 +283,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved && ['compact', 'normal', 'large'].includes(saved) ? saved : 'normal';
   });
 
+  const [fontWeight, setFontWeightState] = useState<AppFontWeight>(() => {
+    const saved = localStorage.getItem('kotha_hobe_font_weight') as AppFontWeight;
+    return saved && ['regular', 'medium', 'semibold', 'bold'].includes(saved) ? saved : 'regular';
+  });
+
   const setTheme = (newTheme: AppTheme) => {
     setThemeState(newTheme);
     localStorage.setItem('kotha_hobe_chat_theme', newTheme);
@@ -288,6 +296,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const setFontSize = (newSize: AppFontSize) => {
     setFontSizeState(newSize);
     localStorage.setItem('kotha_hobe_font_size', newSize);
+  };
+
+  const setFontWeight = (newWeight: AppFontWeight) => {
+    setFontWeightState(newWeight);
+    localStorage.setItem('kotha_hobe_font_weight', newWeight);
   };
 
   // Sync active CSS variables to root
@@ -345,15 +358,26 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.style.fontSize = '15px';
     }
-  }, [theme, fontSize]);
+
+    // Chat Message font weight scaling (only affects chat messages)
+    const weightMap: Record<AppFontWeight, string> = {
+      regular: '400',
+      medium: '500',
+      semibold: '600',
+      bold: '700',
+    };
+    root.style.setProperty('--chat-message-font-weight', weightMap[fontWeight] || '400');
+  }, [theme, fontSize, fontWeight]);
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
         fontSize,
+        fontWeight,
         setTheme,
         setFontSize,
+        setFontWeight,
         themeConfig: THEME_CONFIGS[theme] || THEME_CONFIGS.dark,
       }}
     >

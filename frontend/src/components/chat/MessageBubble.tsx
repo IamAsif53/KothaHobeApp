@@ -713,7 +713,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
         {/* Text Message Content + Inline/Tucked Timestamp */}
         {message.text && message.type !== 'custom_emoji' && message.type !== 'call' && (
-          <div className={`${isImageWithTextOrQuote ? 'px-1 pt-1' : ''} text-[15.5px] leading-[1.45] tracking-[-0.01em] break-words whitespace-pre-wrap select-text`}>
+          <div
+            style={{ fontWeight: 'var(--chat-message-font-weight, 400)' }}
+            className={`${isImageWithTextOrQuote ? 'px-1 pt-1' : ''} text-[15.5px] leading-[1.45] tracking-[-0.01em] break-words whitespace-pre-wrap select-text`}
+          >
             {renderTextWithInlineEmojis(message.text)}
             
             {/* Inline Timestamp & Status Flow */}

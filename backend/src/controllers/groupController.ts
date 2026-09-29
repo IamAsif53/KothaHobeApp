@@ -672,8 +672,9 @@ export const joinGroupByInviteCode = async (req: AuthenticatedRequest, res: Resp
         const io = getGlobalIO();
         if (io) {
           group.groupMeta.admins.forEach((adminId) => {
-            io.to(`user:${adminId}`).emit('group:join_requested', {
+            io.to(`user:${adminId.toString()}`).emit('group:join_requested', {
               conversationId: group._id,
+              groupName: group.groupMeta!.name,
               user: {
                 _id: req.user!._id,
                 displayName: req.user!.displayName,
@@ -683,6 +684,19 @@ export const joinGroupByInviteCode = async (req: AuthenticatedRequest, res: Resp
             });
           });
         }
+
+        group.groupMeta.admins.forEach((adminId) => {
+          const aId = adminId.toString();
+          if (aId !== req.user!._id.toString()) {
+            sendPushNotification({
+              recipientId: aId,
+              senderName: group.groupMeta!.name,
+              messageText: `${req.user!.displayName || req.user!.username} requested to join "${group.groupMeta!.name}"`,
+              conversationId: group._id.toString(),
+              senderId: req.user!._id.toString(),
+            }).catch(() => {});
+          }
+        });
       }
 
       res.status(200).json({
@@ -1304,6 +1318,10 @@ export const updateGroupPermissions = async (req: AuthenticatedRequest, res: Res
       createEvents: permissions?.createEvents === 'admins' ? 'admins' : 'all',
     };
 
+    if (typeof req.body.requiresApproval === 'boolean') {
+      group.groupMeta.requiresApproval = req.body.requiresApproval;
+    }
+
     await group.save();
 
     await logGroupActivity(id, 'Updated group permissions', req.user._id);
@@ -1313,6 +1331,11 @@ export const updateGroupPermissions = async (req: AuthenticatedRequest, res: Res
       io.to(`conv:${id}`).emit('group:permissions_updated', {
         conversationId: id,
         permissions: group.groupMeta.permissions,
+        requiresApproval: group.groupMeta.requiresApproval,
+      });
+      io.to(`conv:${id}`).emit('group:privacy_updated', {
+        conversationId: id,
+        requiresApproval: group.groupMeta.requiresApproval,
       });
     }
 
@@ -1320,6 +1343,7 @@ export const updateGroupPermissions = async (req: AuthenticatedRequest, res: Res
       success: true,
       message: 'Group permissions updated',
       permissions: group.groupMeta.permissions,
+      requiresApproval: group.groupMeta.requiresApproval,
     });
   } catch (error: any) {
     console.error('[Group] updateGroupPermissions error:', error);
@@ -1884,6 +1908,58 @@ export const inviteMembers = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const newUsers = await User.find({ _id: { $in: newMemberIds } }).select('_id displayName username');
+
+    const isInviterAdmin = role === 'creator' || role === 'admin';
+    if (group.groupMeta.requiresApproval && !isInviterAdmin) {
+      if (!group.groupMeta.joinRequests) group.groupMeta.joinRequests = [];
+      newUsers.forEach((u) => {
+        const alreadyInReq = group.groupMeta!.joinRequests!.some(
+          (r) => r.user.toString() === u._id.toString()
+        );
+        if (!alreadyInReq) {
+          group.groupMeta!.joinRequests!.push({
+            user: u._id,
+            requestedAt: new Date(),
+          });
+        }
+      });
+
+      await group.save();
+
+      const invitedNames = newUsers.map((u) => u.displayName || u.username).join(', ');
+      await logGroupActivity(id, 'Invite requests pending approval', req.user._id, invitedNames);
+
+      const io = getGlobalIO();
+      if (io) {
+        group.groupMeta.admins.forEach((adminId) => {
+          io.to(`user:${adminId.toString()}`).emit('group:join_requested', {
+            conversationId: id,
+            groupName: group.groupMeta!.name,
+            inviterName: req.user!.displayName || req.user!.username,
+          });
+        });
+      }
+
+      group.groupMeta.admins.forEach((adminId) => {
+        const aId = adminId.toString();
+        if (aId !== req.user!._id.toString()) {
+          sendPushNotification({
+            recipientId: aId,
+            senderName: group.groupMeta!.name,
+            messageText: `${req.user!.displayName || req.user!.username} invited ${invitedNames} (approval required)`,
+            conversationId: id,
+            senderId: req.user!._id.toString(),
+          }).catch(() => {});
+        }
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Invitations submitted to admins for approval',
+        requiresApproval: true,
+      });
+      return;
+    }
 
     newUsers.forEach((u) => {
       group.participants.push(u._id as any);

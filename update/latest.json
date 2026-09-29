@@ -1,13 +1,15 @@
 {
-  "versionCode": 89,
-  "versionName": "1.1.44",
+  "versionCode": 90,
+  "versionName": "1.1.45",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "6d7dc0027a5fb734735ed6b3b7ca400d047d192d75dcfb1e698c7ff0c5e9888f",
+  "sha256": "f7ee3f568e8e773b169b1e2d8d1a06756440c4901bee29c4c2ccdd1a6ef428a0",
   "releaseNotes": [
-    "Release v1.1.44 (Build 89)",
-    "⚡ Instant Notification Quick Reply: Reply directly from Android system notification shade or floating in-app banner with zero screen interruption for 1-on-1 and Group chats",
-    "📏 Word-Count Constraint & Live Counter: Enforced 50-word maximum limit with live counter badge to keep quick replies lightweight and fast",
-    "💬 Effortless Quick Chips & Cancel Draft: 1-tap quick response chips (👍, ❤️, 😂, Sure!, On my way) and cancel option that preserves notification while resetting typed draft"
+    "Release v1.1.45 (Build 90)",
+    "🔗 Canonical Group Invite Links & Deep Linking: Share valid cloud URLs (kotha-hobe-api.onrender.com/join/* and kothahobe://join/*) that launch the app directly into group preview/join",
+    "📱 Instant Share Link Contact Picker: Select any existing contact or chat to send the invite link directly",
+    "📷 High-Resolution QR Code Scanning: Scan QR code with any camera or scanner to instantly open and join the group",
+    "🛡️ Admin Approval Relocated to Permissions: Moved Admin Approval Required toggle to Group Permissions & Settings",
+    "✅ Dedicated Inline Approval Requests: Admins can review, accept (✓), and reject (✕) pending member requests directly in the Group Info Members list with real-time push & socket notifications"
   ],
   "mandatory": false
 }

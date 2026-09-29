@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { X, Shield, MessageSquare, UserPlus, Edit3, Pin, BarChart2, Check, Loader2 } from 'lucide-react';
+import { X, Shield, MessageSquare, UserPlus, Edit3, Pin, BarChart2, Check, Loader2, UserCheck, ShieldAlert } from 'lucide-react';
 import { IGroupPermissions } from '../../types';
-import { updateGroupPermissionsApi } from '../../api/groupApi';
+import { updateGroupPermissionsApi, updateGroupPrivacyApi } from '../../api/groupApi';
 
 interface GroupPermissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
   groupId: string;
   initialPermissions?: IGroupPermissions;
+  requiresApproval?: boolean;
   onPermissionsUpdated: (permissions: IGroupPermissions) => void;
+  onPrivacyChanged?: (requiresApproval: boolean) => void;
 }
 
 export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
@@ -16,7 +18,9 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
   onClose,
   groupId,
   initialPermissions,
+  requiresApproval: initialRequiresApproval = false,
   onPermissionsUpdated,
+  onPrivacyChanged,
 }) => {
   const [permissions, setPermissions] = useState<IGroupPermissions>({
     sendMessages: initialPermissions?.sendMessages ?? 'all',
@@ -27,6 +31,7 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
     createEvents: initialPermissions?.createEvents ?? 'all',
   });
 
+  const [requiresApproval, setRequiresApproval] = useState<boolean>(initialRequiresApproval);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,13 +48,19 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
     setSaving(true);
     setError(null);
     try {
-      const res = await updateGroupPermissionsApi(groupId, permissions);
-      if (res.success && res.permissions) {
-        onPermissionsUpdated(res.permissions);
-        onClose();
-      } else {
-        setError(res.message || 'Failed to save permissions');
+      const [permRes, privRes] = await Promise.all([
+        updateGroupPermissionsApi(groupId, permissions),
+        updateGroupPrivacyApi(groupId, requiresApproval),
+      ]);
+
+      if (permRes.success && permRes.permissions) {
+        onPermissionsUpdated(permRes.permissions);
       }
+      if (privRes.success && onPrivacyChanged) {
+        onPrivacyChanged(requiresApproval);
+      }
+
+      onClose();
     } catch (err: any) {
       setError(err?.message || 'Error updating permissions');
     } finally {
@@ -107,7 +118,7 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-chat-textPrimary">Group Permissions</h3>
-              <p className="text-xs text-chat-textMuted">Control what regular members can do</p>
+              <p className="text-xs text-chat-textMuted">Control member permissions & join approval</p>
             </div>
           </div>
           <button
@@ -118,13 +129,55 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
           </button>
         </div>
 
-        {/* Permission Toggles */}
+        {/* Content */}
         <div className="p-5 space-y-3.5 overflow-y-auto flex-1">
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-xs font-medium">
               {error}
             </div>
           )}
+
+          {/* Admin Approval to Join Toggle */}
+          <div
+            onClick={() => setRequiresApproval(!requiresApproval)}
+            className="flex items-center justify-between p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl cursor-pointer hover:bg-amber-500/15 transition-all select-none mb-4"
+          >
+            <div className="flex items-start gap-3 min-w-0 pr-3">
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-500 mt-0.5 shrink-0">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-bold text-chat-textPrimary">Admin Approval Required</h4>
+                <p className="text-xs text-chat-textMuted mt-0.5 leading-snug">
+                  When enabled, users who join via link, QR code, or are invited by members must wait for an admin to approve their request.
+                </p>
+                <span className={`inline-block mt-1.5 text-[11px] font-bold ${requiresApproval ? 'text-amber-500' : 'text-chat-textMuted'}`}>
+                  {requiresApproval ? 'Approval Required' : 'Instant Direct Join'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRequiresApproval(!requiresApproval);
+              }}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                requiresApproval ? 'bg-amber-500' : 'bg-chat-border'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  requiresApproval ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="text-[11px] font-semibold text-chat-textMuted uppercase tracking-wider px-1">
+            Member Feature Permissions
+          </div>
 
           {permissionItems.map((item) => {
             const Icon = item.icon;
@@ -149,7 +202,6 @@ export const GroupPermissionsModal: React.FC<GroupPermissionsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Toggle switch */}
                 <button
                   type="button"
                   onClick={(e) => {

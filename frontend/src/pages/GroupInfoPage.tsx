@@ -30,6 +30,8 @@ import {
   BookOpen,
   UserCheck,
   Share2,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   fetchGroupDetailsApi,
@@ -38,6 +40,9 @@ import {
   inviteGroupMembersApi,
   leaveGroupApi,
   deleteGroupApi,
+  acceptJoinRequestApi,
+  declineJoinRequestApi,
+  updateGroupPrivacyApi,
 } from '../api/groupApi';
 import { fetchSharedMediaApi, getMediaUrl } from '../api/messageApi';
 import { useAuth } from '../context/AuthContext';
@@ -243,6 +248,50 @@ export const GroupInfoPage: React.FC = () => {
       }
     };
 
+    const handleJoinRequested = (data: any) => {
+      if (data.conversationId === conversationId) {
+        loadGroupDetails(true);
+      }
+    };
+
+    const handleJoinRequestResolved = (data: any) => {
+      if (data.conversationId === conversationId) {
+        loadGroupDetails(true);
+      }
+    };
+
+    const handlePrivacyUpdated = (data: { conversationId: string; requiresApproval: boolean }) => {
+      if (data.conversationId === conversationId) {
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = {
+            ...prev,
+            groupMeta: { ...prev.groupMeta, requiresApproval: data.requiresApproval },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
+    const handlePermissionsUpdated = (data: { conversationId: string; permissions: any; requiresApproval?: boolean }) => {
+      if (data.conversationId === conversationId) {
+        setGroup((prev) => {
+          if (!prev || !prev.groupMeta) return prev;
+          const updated = {
+            ...prev,
+            groupMeta: {
+              ...prev.groupMeta,
+              permissions: data.permissions || prev.groupMeta.permissions,
+              requiresApproval: typeof data.requiresApproval === 'boolean' ? data.requiresApproval : prev.groupMeta.requiresApproval,
+            },
+          };
+          localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
     socket.on('group:deleted', handleGroupDeleted);
     socket.on('conversation:deleted', handleGroupDeleted);
     socket.on('group:avatar_updated', handleAvatarUpdated);
@@ -250,6 +299,10 @@ export const GroupInfoPage: React.FC = () => {
     socket.on('group:member_removed', handleMemberRemoved);
     socket.on('group:updated', handleGroupUpdated);
     socket.on('group:nickname_updated', handleNicknameUpdated);
+    socket.on('group:join_requested', handleJoinRequested);
+    socket.on('group:join_request_resolved', handleJoinRequestResolved);
+    socket.on('group:privacy_updated', handlePrivacyUpdated);
+    socket.on('group:permissions_updated', handlePermissionsUpdated);
 
     return () => {
       socket.off('group:deleted', handleGroupDeleted);
@@ -259,6 +312,10 @@ export const GroupInfoPage: React.FC = () => {
       socket.off('group:member_removed', handleMemberRemoved);
       socket.off('group:updated', handleGroupUpdated);
       socket.off('group:nickname_updated', handleNicknameUpdated);
+      socket.off('group:join_requested', handleJoinRequested);
+      socket.off('group:join_request_resolved', handleJoinRequestResolved);
+      socket.off('group:privacy_updated', handlePrivacyUpdated);
+      socket.off('group:permissions_updated', handlePermissionsUpdated);
     };
   }, [socket, conversationId, currentUser, navigate]);
 
@@ -466,6 +523,97 @@ export const GroupInfoPage: React.FC = () => {
       console.error('Failed to invite member:', err);
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleAcceptJoinRequest = async (userId: string) => {
+    if (!conversationId) return;
+    try {
+      // Optimistic update
+      setGroup((prev) => {
+        if (!prev || !prev.groupMeta) return prev;
+        const targetReq = prev.groupMeta.joinRequests?.find(
+          (r) => (typeof r.user === 'object' ? (r.user as any)._id : r.user)?.toString() === userId
+        );
+        const updatedRequests = (prev.groupMeta.joinRequests || []).filter(
+          (r) => (typeof r.user === 'object' ? (r.user as any)._id : r.user)?.toString() !== userId
+        );
+        let updatedMembers = [...(prev.groupMeta.members || [])];
+        if (targetReq && targetReq.user) {
+          const userObj = typeof targetReq.user === 'object' ? targetReq.user : { _id: userId };
+          if (!updatedMembers.some((m) => ((m.user as any)?._id || m.user)?.toString() === userId)) {
+            updatedMembers.push({
+              user: userObj as any,
+              role: 'member',
+              status: 'accepted',
+              joinedAt: new Date().toISOString(),
+            });
+          }
+        }
+        const updated = {
+          ...prev,
+          groupMeta: {
+            ...prev.groupMeta,
+            joinRequests: updatedRequests,
+            members: updatedMembers,
+          },
+        };
+        localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+        return updated;
+      });
+
+      await acceptJoinRequestApi(conversationId, userId);
+      loadGroupDetails(true);
+    } catch (err: any) {
+      console.error('[GroupInfo] Error accepting request:', err);
+      loadGroupDetails(true);
+    }
+  };
+
+  const handleDeclineJoinRequest = async (userId: string) => {
+    if (!conversationId) return;
+    try {
+      // Optimistic update
+      setGroup((prev) => {
+        if (!prev || !prev.groupMeta) return prev;
+        const updatedRequests = (prev.groupMeta.joinRequests || []).filter(
+          (r) => (typeof r.user === 'object' ? (r.user as any)._id : r.user)?.toString() !== userId
+        );
+        const updated = {
+          ...prev,
+          groupMeta: {
+            ...prev.groupMeta,
+            joinRequests: updatedRequests,
+          },
+        };
+        localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+        return updated;
+      });
+
+      await declineJoinRequestApi(conversationId, userId);
+    } catch (err: any) {
+      console.error('[GroupInfo] Error declining request:', err);
+      loadGroupDetails(true);
+    }
+  };
+
+  const handleToggleApproval = async () => {
+    if (!conversationId || !isAdmin) return;
+    const nextVal = !meta.requiresApproval;
+    try {
+      setGroup((prev) => {
+        if (!prev || !prev.groupMeta) return prev;
+        const updated = {
+          ...prev,
+          groupMeta: { ...prev.groupMeta, requiresApproval: nextVal },
+        };
+        localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+        return updated;
+      });
+      await updateGroupPrivacyApi(conversationId, nextVal);
+    } catch (err) {
+      console.error('[GroupInfo] Error toggling privacy:', err);
+      loadGroupDetails(true);
     }
   };
 
@@ -762,25 +910,79 @@ export const GroupInfoPage: React.FC = () => {
 
         {/* TAB 1: MEMBERS */}
         {activeTab === 'members' && (
-          <div className="p-4 space-y-3">
-            {/* Join Requests Banner for Admins */}
-            {isAdmin && pendingRequestsCount > 0 && (
-              <div
-                onClick={() => setIsJoinRequestsModalOpen(true)}
-                className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between cursor-pointer hover:bg-amber-500/20 transition-all animate-pulse"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-amber-500 text-black">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-amber-500">
-                      {pendingRequestsCount} Pending Join {pendingRequestsCount === 1 ? 'Request' : 'Requests'}
+          <div className="p-4 space-y-4">
+            {/* Dedicated Inline Approval Requests Section for Admins */}
+            {isAdmin && meta.joinRequests && meta.joinRequests.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 shadow-md animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-amber-500" />
+                    <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">
+                      Pending Approval Requests ({meta.joinRequests.length})
                     </h4>
-                    <p className="text-[11px] text-amber-400/80">Tap to review and approve members</p>
                   </div>
+                  <span className="text-[10px] text-amber-500 font-semibold px-2 py-0.5 rounded-full bg-amber-500/20">
+                    Admin Review
+                  </span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-amber-500" />
+
+                <div className="space-y-2">
+                  {meta.joinRequests.map((req) => {
+                    const u: IUser | undefined = typeof req.user === 'object' ? req.user : undefined;
+                    if (!u) return null;
+                    const formattedTime = req.requestedAt
+                      ? new Date(req.requestedAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'Recently';
+
+                    return (
+                      <div
+                        key={u._id}
+                        className="flex items-center justify-between p-3 rounded-xl bg-chat-card border border-chat-border gap-3 hover:border-amber-500/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar
+                            src={u.avatarUrl || ''}
+                            name={u.displayName || u.username || 'User'}
+                            size="md"
+                          />
+                          <div className="min-w-0">
+                            <h5 className="text-sm font-bold text-chat-textPrimary truncate">
+                              {u.displayName || u.username}
+                            </h5>
+                            <p className="text-xs text-chat-textMuted truncate">@{u.username}</p>
+                            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-chat-textMuted">
+                              <Clock className="w-3 h-3 text-chat-textMuted" />
+                              <span>{formattedTime}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Accept / Reject actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleAcceptJoinRequest(u._id)}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                            title="Accept request"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Accept</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeclineJoinRequest(u._id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-500 border border-red-500/30 text-xs font-bold rounded-lg transition-all"
+                            title="Decline request"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1029,6 +1231,45 @@ export const GroupInfoPage: React.FC = () => {
                   Admin Administration
                 </p>
 
+                {/* Require Admin Approval Setting */}
+                <div
+                  onClick={handleToggleApproval}
+                  style={{ backgroundColor: themeConfig.card }}
+                  className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] select-none"
+                >
+                  <div className="flex items-center gap-3 min-w-0 pr-3">
+                    <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${meta.requiresApproval ? 'bg-amber-500/20 text-amber-500' : 'bg-chat-panel text-chat-textMuted'}`}>
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-chat-textPrimary">Require Admin Approval</h4>
+                      <p className="text-[11px] text-chat-textMuted">
+                        {meta.requiresApproval
+                          ? 'New members must be approved by an admin'
+                          : 'Anyone with invite link joins immediately'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleApproval();
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      meta.requiresApproval ? 'bg-amber-500' : 'bg-chat-border'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        meta.requiresApproval ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {/* Group Permissions */}
                 <div
                   onClick={() => setIsPermissionsModalOpen(true)}
@@ -1139,7 +1380,6 @@ export const GroupInfoPage: React.FC = () => {
         groupId={conversationId!}
         groupName={meta.name}
         inviteCode={meta.inviteCode}
-        requiresApproval={meta.requiresApproval}
         isAdmin={isAdmin}
         onInviteCodeChanged={(newCode) => {
           setGroup((prev) => {
@@ -1147,17 +1387,6 @@ export const GroupInfoPage: React.FC = () => {
             const updated = {
               ...prev,
               groupMeta: { ...prev.groupMeta, inviteCode: newCode },
-            };
-            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
-            return updated;
-          });
-        }}
-        onPrivacyChanged={(reqApproval) => {
-          setGroup((prev) => {
-            if (!prev || !prev.groupMeta) return prev;
-            const updated = {
-              ...prev,
-              groupMeta: { ...prev.groupMeta, requiresApproval: reqApproval },
             };
             localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
             return updated;
@@ -1232,12 +1461,24 @@ export const GroupInfoPage: React.FC = () => {
         onClose={() => setIsPermissionsModalOpen(false)}
         groupId={conversationId!}
         initialPermissions={meta.permissions}
+        requiresApproval={meta.requiresApproval}
         onPermissionsUpdated={(newPermissions) => {
           setGroup((prev) => {
             if (!prev || !prev.groupMeta) return prev;
             const updated = {
               ...prev,
               groupMeta: { ...prev.groupMeta, permissions: newPermissions },
+            };
+            localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
+            return updated;
+          });
+        }}
+        onPrivacyChanged={(reqApproval) => {
+          setGroup((prev) => {
+            if (!prev || !prev.groupMeta) return prev;
+            const updated = {
+              ...prev,
+              groupMeta: { ...prev.groupMeta, requiresApproval: reqApproval },
             };
             localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
             return updated;

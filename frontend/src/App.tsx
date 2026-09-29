@@ -38,6 +38,7 @@ import { GroupInfoPage } from './pages/GroupInfoPage';
 import { SharedMediaPage } from './pages/SharedMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { BlockedUsersPage } from './pages/BlockedUsersPage';
+import { JoinGroupPage } from './pages/JoinGroupPage';
 
 // Protected Route wrapper requiring user authentication
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -177,11 +178,32 @@ export const AppContent: React.FC = () => {
       }
     };
 
+    let appUrlHandle: any = null;
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener('appUrlOpen', (data: { url: string }) => {
+        console.log('[App] App opened via Deep Link URL:', data.url);
+        try {
+          const urlStr = data.url;
+          // Match kothahobe://join/:code or https://kotha-hobe-api.onrender.com/join/:code
+          const match = urlStr.match(/(?:join\/|join=)([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+            const inviteCode = match[1];
+            navigate(`/join/${inviteCode}`, { replace: false });
+          }
+        } catch (e) {
+          console.error('[App] Error parsing appUrlOpen event:', e);
+        }
+      }).then((handle) => {
+        appUrlHandle = handle;
+      });
+    }
+
     setupNotifAction();
 
     return () => {
       if (localHandle) localHandle.remove();
       if (pushHandle) pushHandle.remove();
+      if (appUrlHandle) appUrlHandle.remove();
     };
   }, [navigate]);
 
@@ -369,6 +391,14 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <BlockedUsersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/join/:inviteCode"
+            element={
+              <ProtectedRoute>
+                <JoinGroupPage />
               </ProtectedRoute>
             }
           />

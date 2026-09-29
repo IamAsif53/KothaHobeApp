@@ -77,9 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "⚡ Instant Notification Quick Reply: Reply directly from Android system notification shade or floating in-app banner with zero screen interruption for 1-on-1 and Group chats",
-      "📏 Word-Count Constraint & Live Counter: Enforced 50-word maximum limit with live counter badge to keep quick replies lightweight and fast",
-      "💬 Effortless Quick Chips & Cancel Draft: 1-tap quick response chips (👍, ❤️, 😂, Sure!, On my way) and cancel option that preserves notification while resetting typed draft"
+      "🔗 Canonical Group Invite Links & Deep Linking: Share valid cloud URLs (kotha-hobe-api.onrender.com/join/* and kothahobe://join/*) that launch the app directly into group preview/join",
+      "📱 Instant Share Link Contact Picker: Select any existing contact or chat to send the invite link directly",
+      "📷 High-Resolution QR Code Scanning: Scan QR code with any camera or scanner to instantly open and join the group",
+      "🛡️ Admin Approval Relocated to Permissions: Moved Admin Approval Required toggle to Group Permissions & Settings",
+      "✅ Dedicated Inline Approval Requests: Admins can review, accept (✓), and reject (✕) pending member requests directly in the Group Info Members list with real-time push & socket notifications"
     ],
     mandatory: false
   };

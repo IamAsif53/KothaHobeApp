@@ -47,6 +47,32 @@ import {
 const QUICK_REACTIONS = ['❤️', '😂', '🔥', '👍', '😮', '😢', '👏'];
 const QUICK_ANIMATED_REACTIONS = ['cat_laugh', 'dog_love', 'love_heart', 'party_popper', 'funny_lol', 'panda_cry'];
 
+const normalizeMsg = (m: IMessage): IMessage => {
+  const createdAtStr = m.createdAt
+    ? typeof m.createdAt === 'string'
+      ? m.createdAt
+      : new Date(m.createdAt).toISOString()
+    : new Date().toISOString();
+  const createdAtMs = new Date(createdAtStr).getTime() || Date.now();
+  return {
+    ...m,
+    createdAt: createdAtStr,
+    _createdAtMs: createdAtMs,
+  } as any;
+};
+
+const sortMsgList = (a: any, b: any) => {
+  const timeA = a._createdAtMs || (a.createdAt ? new Date(a.createdAt).getTime() : 0) || 0;
+  const timeB = b._createdAtMs || (b.createdAt ? new Date(b.createdAt).getTime() : 0) || 0;
+  if (timeA !== timeB) return timeA - timeB;
+  const seqA = a.serverSequence || 0;
+  const seqB = b.serverSequence || 0;
+  if (seqA !== seqB) return seqA - seqB;
+  const idA = String(a._id || a.clientMessageId || '');
+  const idB = String(b._id || b.clientMessageId || '');
+  return idA.localeCompare(idB);
+};
+
 export const ChatRoomPage: React.FC = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
@@ -312,21 +338,21 @@ export const ChatRoomPage: React.FC = () => {
             const map = new Map<string, IMessage>();
             // 1. Add current local/optimistic messages
             prev.forEach((m) => {
-              const key = m._id || m.clientMessageId;
-              if (key) map.set(key, m);
+              const norm = normalizeMsg(m);
+              const key = norm._id || norm.clientMessageId;
+              if (key) map.set(key, norm);
             });
             // 2. Add/overwrite with authoritative server messages
             msgRes.messages.forEach((m) => {
-              if (m.clientMessageId && map.has(m.clientMessageId)) {
-                map.delete(m.clientMessageId);
+              const norm = normalizeMsg(m);
+              if (norm.clientMessageId && map.has(norm.clientMessageId)) {
+                map.delete(norm.clientMessageId);
               }
-              if (m._id) {
-                map.set(m._id, m);
+              if (norm._id) {
+                map.set(norm._id, norm);
               }
             });
-            const merged = Array.from(map.values()).sort(
-              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
+            const merged = Array.from(map.values()).sort(sortMsgList);
             persistMessages(merged);
             return merged;
           });
@@ -355,6 +381,10 @@ export const ChatRoomPage: React.FC = () => {
 
     if (socket) {
       socket.emit('conversation:join', conversationId);
+      // Fast socket delta sync request
+      socket.emit('message:sync_request', {
+        since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      });
     }
 
     return () => {
@@ -368,16 +398,56 @@ export const ChatRoomPage: React.FC = () => {
   useEffect(() => {
     if (!socket || !conversationId) return;
 
+    // Fast delta synchronization event handler
+    const handleMessageSync = (e: Event) => {
+      const customEvent = e as CustomEvent<IMessage[]>;
+      const syncList = customEvent.detail;
+      if (!Array.isArray(syncList) || syncList.length === 0) return;
+
+      const relevant = syncList.filter((m) => m.conversationId === conversationId);
+      if (relevant.length === 0) return;
+
+      console.log(`[ChatRoom] ⚡ Applying ${relevant.length} synchronized message(s) directly to chat store`);
+
+      setMessages((prev) => {
+        const map = new Map<string, IMessage>();
+        prev.forEach((m) => {
+          const norm = normalizeMsg(m);
+          const k = norm._id || norm.clientMessageId;
+          if (k) map.set(k, norm);
+        });
+
+        relevant.forEach((m) => {
+          const norm = normalizeMsg(m);
+          if (norm.clientMessageId && map.has(norm.clientMessageId)) {
+            map.delete(norm.clientMessageId);
+          }
+          if (norm._id) map.set(norm._id, norm);
+        });
+
+        const merged = Array.from(map.values()).sort(sortMsgList);
+        persistMessages(merged);
+        return merged;
+      });
+
+      markAsRead(conversationId);
+      if (isNearBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom(false));
+      }
+    };
+    window.addEventListener('kothahobe:message_sync', handleMessageSync);
+
     // Window event for immediate optimistic rendering (e.g. from Forward modal)
     const handleSavedEvent = (e: Event) => {
       const customEvent = e as CustomEvent<IMessage>;
       const msg = customEvent.detail;
       if (msg && msg.conversationId === conversationId) {
+        const norm = normalizeMsg(msg);
         setMessages((prev) => {
-          if (prev.some((m) => m._id === msg._id || m.clientMessageId === msg.clientMessageId)) {
+          if (prev.some((m) => m._id === norm._id || (m.clientMessageId && norm.clientMessageId && m.clientMessageId === norm.clientMessageId))) {
             return prev;
           }
-          const updated = [...prev, msg];
+          const updated = [...prev, norm].sort(sortMsgList);
           persistMessages(updated);
           return updated;
         });
@@ -391,10 +461,11 @@ export const ChatRoomPage: React.FC = () => {
     const handleWindowMessageSent = (e: any) => {
       const sentMsg = e.detail;
       if (sentMsg && sentMsg.conversationId === conversationId) {
+        const norm = normalizeMsg(sentMsg);
         setMessages((prev) => {
           const updated = prev.map((m) =>
-            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id
-              ? { ...m, ...sentMsg, status: sentMsg.status || 'sent' }
+            m.clientMessageId === norm.clientMessageId || m._id === norm._id
+              ? { ...m, ...norm, status: norm.status || 'sent' }
               : m
           );
           persistMessages(updated);
@@ -420,14 +491,27 @@ export const ChatRoomPage: React.FC = () => {
     };
     window.addEventListener('kothahobe:message_failed', handleWindowMessageFailed);
 
-    // 1. Incoming Message
+    // 1. Incoming Message (0ms immediate delivery)
     const handleNewMessage = (newMsg: IMessage) => {
       if (newMsg.conversationId === conversationId) {
+        const norm = normalizeMsg(newMsg);
+        const recvTime = Date.now();
+        const sendTime = norm.createdAt ? new Date(norm.createdAt).getTime() : recvTime;
+        const latencyMs = Math.max(0, recvTime - sendTime);
+        console.log(`[REALTIME_LATENCY] ⚡ Message received in 0ms delay: ${latencyMs}ms from server creation. ID: ${norm._id || norm.clientMessageId}`);
+
         setMessages((prev) => {
-          if (prev.some((m) => m._id === newMsg._id || m.clientMessageId === newMsg.clientMessageId)) {
-            return prev;
+          const map = new Map<string, IMessage>();
+          prev.forEach((m) => {
+            const k = m._id || m.clientMessageId;
+            if (k) map.set(k, m);
+          });
+          if (norm.clientMessageId && map.has(norm.clientMessageId)) {
+            map.delete(norm.clientMessageId);
           }
-          const updated = [...prev, newMsg];
+          if (norm._id) map.set(norm._id, norm);
+
+          const updated = Array.from(map.values()).sort(sortMsgList);
           persistMessages(updated);
           return updated;
         });
@@ -445,10 +529,11 @@ export const ChatRoomPage: React.FC = () => {
     // 2. Sent Acknowledgement
     const handleMessageSent = (sentMsg: IMessage) => {
       if (sentMsg.conversationId === conversationId) {
+        const norm = normalizeMsg(sentMsg);
         setMessages((prev) => {
           const updated = prev.map((m) =>
-            m.clientMessageId === sentMsg.clientMessageId || m._id === sentMsg._id
-              ? { ...m, ...sentMsg, status: sentMsg.status || 'sent' }
+            m.clientMessageId === norm.clientMessageId || m._id === norm._id
+              ? { ...m, ...norm, status: norm.status || 'sent' }
               : m
           );
           persistMessages(updated);
@@ -662,6 +747,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('user:online', handleUserOnline);
       socket.off('user:offline', handleUserOffline);
       socket.off('group:nickname_updated', handleNicknameUpdated);
+      window.removeEventListener('kothahobe:message_sync', handleMessageSync);
       window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
       window.removeEventListener('kothahobe:message_sent', handleWindowMessageSent);
       window.removeEventListener('kothahobe:message_failed', handleWindowMessageFailed);

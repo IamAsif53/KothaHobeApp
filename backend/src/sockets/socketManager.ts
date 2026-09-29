@@ -70,7 +70,84 @@ export function setupSocketIO(io: SocketIOServer): void {
     // Join personal user room for private messages
     socket.join(`user:${userId}`);
 
-    // Update user online status & mark all pending messages sent to this user as DELIVERED
+    // Synchronize missed / undelivered messages immediately on socket connect
+    const syncMissedMessages = async (sinceTimestamp?: string) => {
+      try {
+        const sinceDate = sinceTimestamp
+          ? new Date(sinceTimestamp)
+          : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+        // 1. Direct messages where user is recipient
+        const directMessages = await Message.find({
+          receiverId: userId,
+          createdAt: { $gte: sinceDate },
+          deletedFor: { $ne: userId },
+        })
+          .sort({ createdAt: 1 })
+          .limit(100);
+
+        // Mark any 'sent' direct messages as 'delivered'
+        const undeliveredDirect = directMessages.filter((m) => m.status === 'sent');
+        if (undeliveredDirect.length > 0) {
+          const now = new Date();
+          const undeliveredIds = undeliveredDirect.map((m) => m._id);
+          await Message.updateMany(
+            { _id: { $in: undeliveredIds } },
+            { $set: { status: 'delivered', deliveredAt: now } }
+          );
+
+          undeliveredDirect.forEach((m) => {
+            m.status = 'delivered';
+            m.deliveredAt = now;
+            io.to(`user:${m.senderId}`).emit('message:delivered', {
+              _id: m._id,
+              clientMessageId: m.clientMessageId,
+              conversationId: m.conversationId,
+              deliveredAt: now,
+            });
+          });
+        }
+
+        // 2. Group messages where user is a member
+        const userGroupConvs = await Conversation.find({
+          isGroup: true,
+          $or: [
+            { participants: userId },
+            { 'groupMeta.members.user': userId },
+            { 'groupMeta.creator': userId },
+          ],
+        }).select('_id');
+
+        let groupMessages: any[] = [];
+        if (userGroupConvs.length > 0) {
+          const groupConvIds = userGroupConvs.map((c) => c._id);
+          groupMessages = await Message.find({
+            conversationId: { $in: groupConvIds },
+            senderId: { $ne: userId },
+            createdAt: { $gte: sinceDate },
+            deletedFor: { $ne: userId },
+          })
+            .sort({ createdAt: 1 })
+            .limit(100);
+        }
+
+        const combined = [...directMessages, ...groupMessages].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        if (combined.length > 0) {
+          console.log(`[SocketSync] ⚡ Emitting ${combined.length} missed message(s) to user ${userId}`);
+          socket.emit('message:sync', {
+            messages: combined,
+            serverTime: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error('[Socket] Failed to sync missed messages:', err);
+      }
+    };
+
+    // Update user online status
     try {
       const currentUserDoc = await User.findById(userId).select('privacySettings');
       const allowPresence = currentUserDoc?.privacySettings?.onlinePresence !== false;
@@ -84,31 +161,16 @@ export function setupSocketIO(io: SocketIOServer): void {
         socket.broadcast.emit('user:online', { userId, isOnline: true });
       }
 
-      // Find all pending 'sent' messages where this connected user is the recipient
-      const pendingMessages = await Message.find({
-        receiverId: userId,
-        status: 'sent',
-      }).select('_id senderId conversationId clientMessageId');
-
-      if (pendingMessages.length > 0) {
-        const now = new Date();
-        await Message.updateMany(
-          { receiverId: userId, status: 'sent' },
-          { $set: { status: 'delivered', deliveredAt: now } }
-        );
-
-        pendingMessages.forEach((m) => {
-          io.to(`user:${m.senderId}`).emit('message:delivered', {
-            _id: m._id,
-            clientMessageId: m.clientMessageId,
-            conversationId: m.conversationId,
-            deliveredAt: now,
-          });
-        });
-      }
+      // Proactively sync all pending & missed messages immediately
+      await syncMissedMessages();
     } catch (err) {
-      console.error('[Socket] Failed to update online/delivery status on connect:', err);
+      console.error('[Socket] Failed to update online/sync status on connect:', err);
     }
+
+    // Client requests explicit fast delta sync
+    socket.on('message:sync_request', async (data?: { since?: string }) => {
+      await syncMissedMessages(data?.since);
+    });
 
     // Recipient Client Acknowledges Message Delivery
     socket.on('message:delivered', async (data: { messageId?: string; clientMessageId?: string; conversationId?: string }) => {
@@ -360,8 +422,9 @@ export function setupSocketIO(io: SocketIOServer): void {
               // 1. Confirm to sender
               socket.emit('message:sent', message);
 
-              // 2. Emit to recipient in real time
+              // 2. Emit to recipient and conversation room in real time (0ms direct delivery)
               io.to(`user:${targetReceiverId}`).emit('message:new', message);
+              io.to(`conv:${conversationId}`).emit('message:new', message);
 
               // 3. Dispatch FCM Push Notification
               sendPushNotification({

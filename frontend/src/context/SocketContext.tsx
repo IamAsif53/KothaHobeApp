@@ -76,33 +76,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Fast Reconnect Trigger (Lifecycle, Network change, Watchdog, Manual)
   const reconnectNow = useCallback(() => {
     const currentSocket = socketRef.current;
-    console.log('[Socket] ⚡ Fast Reconnect triggered. Socket state:', currentSocket?.connected ? 'connected' : 'disconnected');
+    console.log('[Socket] ⚡ Fast Reconnect triggered (0ms direct). Socket state:', currentSocket?.connected ? 'connected' : 'disconnected');
 
-    // 1. Proactively hit /api/health to immediately spin up / wake cloud backend if cold
+    // 1. Immediately connect socket if disconnected or request sync if connected
+    if (currentSocket) {
+      if (!currentSocket.connected) {
+        setIsReconnecting(true);
+        currentSocket.connect();
+      } else {
+        currentSocket.emit('message:sync_request', {
+          since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        });
+      }
+    }
+
+    // 2. Proactively ping health check in background without blocking socket
     const baseUrl =
       import.meta.env.VITE_SOCKET_URL ||
       (window.location.origin.includes('localhost') || window.location.origin.includes('file')
         ? 'https://kotha-hobe-api.onrender.com'
         : window.location.origin);
 
-    fetch(`${baseUrl}/api/health`, { cache: 'no-store' })
-      .then((res) => {
-        if (res.ok && socketRef.current && !socketRef.current.connected) {
-          console.log('[Socket] 💓 Health check OK. Re-triggering socket.connect()...');
-          socketRef.current.connect();
-        }
-      })
-      .catch((err) => {
-        console.warn('[Socket] Health check ping during reconnect note:', err?.message || err);
-      });
-
-    // 2. Connect socket immediately if disconnected
-    if (currentSocket) {
-      if (!currentSocket.connected) {
-        setIsReconnecting(true);
-        currentSocket.connect();
-      }
-    }
+    fetch(`${baseUrl}/api/health`, { cache: 'no-store' }).catch(() => {});
   }, []);
 
   // Complete FCM Push Notification Lifecycle on Native Android
@@ -311,10 +306,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity, // Never stop reconnecting
-      reconnectionDelay: 500,        // Start reconnecting immediately in 500ms
-      reconnectionDelayMax: 3000,     // Cap max delay at 3s
-      randomizationFactor: 0.2,
-      timeout: 10000,
+      reconnectionDelay: 200,        // Start reconnecting in 200ms
+      reconnectionDelayMax: 1500,     // Cap max delay at 1.5s
+      randomizationFactor: 0.1,
+      timeout: 8000,
       autoConnect: true,
     });
 
@@ -328,6 +323,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       // Automatically flush any messages queued while offline!
       flushOutbox(newSocket);
+
+      // Request fast delta sync of any missed messages
+      newSocket.emit('message:sync_request', {
+        since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      });
     });
 
     newSocket.on('disconnect', (reason) => {
@@ -354,6 +354,91 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsConnected(true);
       setIsReconnecting(false);
       flushOutbox(newSocket);
+
+      newSocket.emit('message:sync_request', {
+        since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      });
+    });
+
+    // Handle incoming batch delta message sync
+    newSocket.on('message:sync', (data: { messages: IMessage[]; serverTime?: string }) => {
+      const syncMessages = data?.messages || [];
+      if (syncMessages.length === 0) return;
+
+      console.log(`[Socket] ⚡ Processing ${syncMessages.length} synchronized message(s)...`);
+
+      // 1. Group by conversationId and update localStorage caches immediately
+      const byConv = new Map<string, IMessage[]>();
+      syncMessages.forEach((m) => {
+        if (!m.conversationId) return;
+        const list = byConv.get(m.conversationId) || [];
+        list.push(m);
+        byConv.set(m.conversationId, list);
+      });
+
+      byConv.forEach((newMsgs, convId) => {
+        try {
+          const cacheKey = `kotha_hobe_msgs_${convId}`;
+          const cached = localStorage.getItem(cacheKey);
+          const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
+          const map = new Map<string, IMessage>();
+          currentList.forEach((m) => {
+            const k = m._id || m.clientMessageId;
+            if (k) map.set(k, m);
+          });
+          newMsgs.forEach((m) => {
+            if (m.clientMessageId && map.has(m.clientMessageId)) {
+              map.delete(m.clientMessageId);
+            }
+            if (m._id) map.set(m._id, m);
+          });
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          localStorage.setItem(cacheKey, JSON.stringify(merged));
+        } catch {}
+      });
+
+      // 2. Update conversation list preview & unread counts
+      try {
+        const convsCached = localStorage.getItem('kotha_hobe_cached_conversations');
+        if (convsCached) {
+          const list = JSON.parse(convsCached);
+          let changed = false;
+
+          byConv.forEach((msgs, convId) => {
+            const idx = list.findIndex((c: any) => c._id === convId);
+            const latestMsg = msgs[msgs.length - 1];
+            if (idx > -1 && latestMsg) {
+              const isActive = activeChatRef.current === convId;
+              list[idx] = {
+                ...list[idx],
+                lastMessage: {
+                  text: latestMsg.text,
+                  senderId: latestMsg.senderId,
+                  createdAt: latestMsg.createdAt,
+                  status: isActive ? 'read' : latestMsg.status || 'sent',
+                },
+                lastMessageAt: latestMsg.createdAt,
+                unreadCount: isActive ? 0 : Math.max(list[idx].unreadCount || 0, msgs.length),
+              };
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            list.sort(
+              (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+            );
+            localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
+          }
+        }
+      } catch {}
+
+      // 3. Dispatch global window event for live active components
+      window.dispatchEvent(
+        new CustomEvent('kothahobe:message_sync', { detail: syncMessages })
+      );
     });
 
     // Remove from Outbox when message is confirmed sent by server and update cache
@@ -387,6 +472,45 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Handle incoming new message & sync to cache
     newSocket.on('message:new', async (newMsg: IMessage) => {
+      if (newMsg.conversationId) {
+        try {
+          const cacheKey = `kotha_hobe_msgs_${newMsg.conversationId}`;
+          const cached = localStorage.getItem(cacheKey);
+          const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
+          if (!currentList.some((m) => m._id === newMsg._id || (m.clientMessageId && newMsg.clientMessageId && m.clientMessageId === newMsg.clientMessageId))) {
+            currentList.push(newMsg);
+            currentList.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            localStorage.setItem(cacheKey, JSON.stringify(currentList));
+          }
+
+          // Immediately update conversation preview in local storage
+          const convsCached = localStorage.getItem('kotha_hobe_cached_conversations');
+          if (convsCached) {
+            const list = JSON.parse(convsCached);
+            const idx = list.findIndex((c: any) => c._id === newMsg.conversationId);
+            if (idx > -1) {
+              const isActive = activeChatRef.current === newMsg.conversationId;
+              list[idx] = {
+                ...list[idx],
+                lastMessage: {
+                  text: newMsg.text,
+                  senderId: newMsg.senderId,
+                  createdAt: newMsg.createdAt,
+                  status: isActive ? 'read' : newMsg.status || 'sent',
+                },
+                lastMessageAt: newMsg.createdAt,
+                unreadCount: isActive ? 0 : (list[idx].unreadCount || 0) + 1,
+              };
+              list.sort(
+                (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+              );
+              localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
+            }
+          }
+        } catch {}
+      }
+
+      window.dispatchEvent(new CustomEvent('kothahobe:message_new', { detail: newMsg }));
       if (newMsg.conversationId) {
         try {
           const cacheKey = `kotha_hobe_msgs_${newMsg.conversationId}`;

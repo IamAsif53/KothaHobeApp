@@ -133,37 +133,70 @@ export const ChatListPage: React.FC = () => {
     };
   }, []);
 
-  // Listen for real-time conversation updates
+  // Listen for real-time conversation updates & sync events
   useEffect(() => {
-    if (!socket) return;
+    const handleNewMessageData = (data: any) => {
+      if (!data?.conversationId) return;
 
-    const handleNewMessage = (data: any) => {
       setConversations((prev) => {
         const index = prev.findIndex((c) => c._id === data.conversationId);
+        let previewText = data.text;
+        if (data.type === 'image') previewText = '📷 Photo';
+        else if (data.type === 'audio') previewText = '🎤 Voice message';
+        else if (data.type === 'document') previewText = `📄 ${data.attachment?.fileName || 'Document'}`;
+        else if (data.type === 'custom_emoji') previewText = '✨ Animated Emoji';
+
         if (index > -1) {
           const updated = [...prev];
+          const isMe = currentUser?._id && data.senderId === currentUser._id;
           updated[index] = {
             ...updated[index],
             lastMessage: {
-              text: data.text,
+              text: previewText || data.text,
               senderId: data.senderId,
               createdAt: data.createdAt,
-              status: data.status,
+              status: data.status || 'sent',
             },
             lastMessageAt: data.createdAt,
-            unreadCount: (updated[index].unreadCount || 0) + 1,
+            unreadCount: isMe ? updated[index].unreadCount : (updated[index].unreadCount || 0) + 1,
           };
           const sorted = updated.sort(
-            (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+            (a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()
           );
           localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(sorted));
           return sorted;
         } else {
+          // Dynamic new conversation item if not in list yet
           loadConversations(true);
           return prev;
         }
       });
     };
+
+    const handleWindowNewMessage = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      if (customEvent.detail) {
+        handleNewMessageData(customEvent.detail);
+      }
+    };
+
+    const handleWindowSync = (e: Event) => {
+      const customEvent = e as CustomEvent<any[]>;
+      const syncMessages = customEvent.detail;
+      if (Array.isArray(syncMessages) && syncMessages.length > 0) {
+        syncMessages.forEach((msg) => handleNewMessageData(msg));
+      }
+    };
+
+    window.addEventListener('kothahobe:message_new', handleWindowNewMessage);
+    window.addEventListener('kothahobe:message_sync', handleWindowSync);
+
+    if (!socket) {
+      return () => {
+        window.removeEventListener('kothahobe:message_new', handleWindowNewMessage);
+        window.removeEventListener('kothahobe:message_sync', handleWindowSync);
+      };
+    }
 
     const handleMessageRead = (data: { conversationId: string; readBy: string; readAt?: string }) => {
       setConversations((prev) => {
@@ -221,7 +254,7 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
-    socket.on('message:new', handleNewMessage);
+    socket.on('message:new', handleNewMessageData);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('conversation:update', () => loadConversations(true));
@@ -229,7 +262,9 @@ export const ChatListPage: React.FC = () => {
     socket.on('conversation:deleted', handleGroupDeleted);
 
     return () => {
-      socket.off('message:new', handleNewMessage);
+      window.removeEventListener('kothahobe:message_new', handleWindowNewMessage);
+      window.removeEventListener('kothahobe:message_sync', handleWindowSync);
+      socket.off('message:new', handleNewMessageData);
       socket.off('message:read', handleMessageRead);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('conversation:update');

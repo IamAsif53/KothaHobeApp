@@ -9,6 +9,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { setNativeActiveConversation, clearNativeActiveConversation } from '../services/callNotificationService';
+import { soundService } from '../services/soundService';
 
 interface OutboxItem {
   conversationId: string;
@@ -557,17 +558,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         const soundPref = localStorage.getItem('kotha_hobe_sound_enabled') !== 'false';
+        const vibratePref = localStorage.getItem('kotha_hobe_vibrate_enabled') !== 'false';
         const previewPref = localStorage.getItem('kotha_hobe_preview_enabled') !== 'false';
+        const messagesPref = localStorage.getItem('kotha_hobe_notif_messages') !== 'false';
+        const groupsPref = localStorage.getItem('kotha_hobe_notif_groups') !== 'false';
 
         let senderName = newMsg.senderNickname || 'New Message';
         let senderAvatar: string | undefined = undefined;
         let isGroup = false;
         let groupName: string | undefined = undefined;
+        let totalUnread = 0;
 
         try {
           const cachedConvs = localStorage.getItem('kotha_hobe_cached_conversations');
           if (cachedConvs) {
             const parsed = JSON.parse(cachedConvs);
+            totalUnread = parsed.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
             const conv = parsed.find((c: any) => c._id === newMsg.conversationId || c.recipient?._id === newMsg.senderId);
             if (conv) {
               if (conv.isGroup) {
@@ -583,25 +589,44 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         } catch {}
 
+        // Check if user disabled notifications for this conversation type
+        if (isGroup && !groupsPref) return;
+        if (!isGroup && !messagesPref) return;
+
+        // 1. Play synthesized incoming message notification tone
+        if (soundPref) {
+          soundService.playMessageReceivedTone();
+        }
+
+        // 2. Trigger gentle haptic vibration
+        if (vibratePref) {
+          soundService.triggerVibration([70, 40, 70]);
+        }
+
+        // 3. Update PWA / App icon badge
+        soundService.updateAppBadge(totalUnread);
+
         let previewText = newMsg.text;
         if (newMsg.type === 'image') previewText = '📷 Photo';
         else if (newMsg.type === 'audio') previewText = '🎤 Voice message';
         else if (newMsg.type === 'document') previewText = `📄 ${newMsg.attachment?.fileName || 'Document'}`;
         else if (newMsg.type === 'custom_emoji') previewText = '✨ Animated Emoji';
 
-        const bodyText = previewPref ? (previewText || 'Sent a message') : 'Sent you a new message';
+        const maskedText = previewPref
+          ? (previewText || 'Sent a message')
+          : (isGroup ? 'New group message' : 'New message');
 
-        // 1. Dispatch In-App Interactive Notification Banner Event (when inside the app)
+        // 4. Dispatch In-App Interactive Notification Banner Event (when inside the app)
         window.dispatchEvent(
           new CustomEvent('kothahobe:inapp_notification', {
             detail: {
               conversationId: newMsg.conversationId,
               senderId: newMsg.senderId,
-              senderName,
-              senderAvatar,
-              messageText: previewText || 'Sent a message',
+              senderName: previewPref ? senderName : 'Kotha Hobe',
+              senderAvatar: previewPref ? senderAvatar : undefined,
+              messageText: maskedText,
               isGroup,
-              groupName,
+              groupName: previewPref ? groupName : undefined,
               messageType: newMsg.type,
               createdAt: newMsg.createdAt,
             },
@@ -893,10 +918,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 3. Emit over socket if connected
     if (socket && isConnected) {
       socket.emit('message:read', { conversationId });
-    } else {
-      // 4. Fallback to background REST API
-      markConversationReadApi(conversationId).catch(() => {});
     }
+    
+    // 4. Always trigger background REST API to guarantee database unread state is cleared
+    markConversationReadApi(conversationId).catch(() => {});
+
+    // 5. Update App Badge counter
+    try {
+      const cached = localStorage.getItem('kotha_hobe_cached_conversations');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const total = list.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
+        soundService.updateAppBadge(total);
+      }
+    } catch {}
   };
 
   const startTyping = (conversationId: string, receiverId?: string) => {

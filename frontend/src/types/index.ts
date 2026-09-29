@@ -314,3 +314,15 @@ export interface IBlockedUser {
   username?: string;
   avatarUrl?: string;
 }
+
+export interface INotificationSettings {
+  messages: boolean;
+  groups: boolean;
+  calls: boolean;
+  missedCalls: boolean;
+  stories: boolean;
+  previewEnabled: boolean;
+  sound: boolean;
+  vibrate: boolean;
+}
+

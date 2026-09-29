@@ -13,6 +13,8 @@ import {
   revokeSession,
   revokeOtherSessions,
   getConnectionSecurity,
+  getNotificationSettings,
+  updateNotificationSettings,
 } from '../controllers/userController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { searchRateLimiter } from '../middleware/rateLimiter';
@@ -38,5 +40,9 @@ router.get('/sessions', getUserSessions);
 router.delete('/sessions/:sessionId', revokeSession);
 router.post('/sessions/revoke-others', revokeOtherSessions);
 router.get('/security/status', getConnectionSecurity);
+
+// Notifications & Alerts endpoints
+router.get('/notifications', getNotificationSettings);
+router.put('/notifications', updateNotificationSettings);
 
 export default router;

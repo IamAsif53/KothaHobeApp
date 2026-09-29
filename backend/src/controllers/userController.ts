@@ -582,3 +582,73 @@ export const getConnectionSecurity = async (req: AuthenticatedRequest, res: Resp
   }
 };
 
+// ============================================================
+// NOTIFICATIONS & ALERTS API HANDLERS
+// ============================================================
+
+export const getNotificationSettings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const user = await User.findById(req.user._id).select('notificationSettings');
+    const defaults = {
+      messages: true,
+      groups: true,
+      calls: true,
+      missedCalls: true,
+      stories: true,
+      previewEnabled: true,
+      sound: true,
+      vibrate: true,
+    };
+
+    res.status(200).json({
+      success: true,
+      notificationSettings: user?.notificationSettings ? { ...defaults, ...(user.toObject().notificationSettings || {}) } : defaults,
+    });
+  } catch (error) {
+    console.error('[Notifications] getNotificationSettings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load notification settings' });
+  }
+};
+
+export const updateNotificationSettings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messages, groups, calls, missedCalls, stories, previewEnabled, sound, vibrate } = req.body;
+
+    const updateFields: any = {};
+    if (typeof messages === 'boolean') updateFields['notificationSettings.messages'] = messages;
+    if (typeof groups === 'boolean') updateFields['notificationSettings.groups'] = groups;
+    if (typeof calls === 'boolean') updateFields['notificationSettings.calls'] = calls;
+    if (typeof missedCalls === 'boolean') updateFields['notificationSettings.missedCalls'] = missedCalls;
+    if (typeof stories === 'boolean') updateFields['notificationSettings.stories'] = stories;
+    if (typeof previewEnabled === 'boolean') updateFields['notificationSettings.previewEnabled'] = previewEnabled;
+    if (typeof sound === 'boolean') updateFields['notificationSettings.sound'] = sound;
+    if (typeof vibrate === 'boolean') updateFields['notificationSettings.vibrate'] = vibrate;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updateFields },
+      { new: true }
+    ).select('notificationSettings');
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification settings updated successfully',
+      notificationSettings: updatedUser?.notificationSettings,
+    });
+  } catch (error) {
+    console.error('[Notifications] updateNotificationSettings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update notification settings' });
+  }
+};
+
+

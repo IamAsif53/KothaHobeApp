@@ -178,7 +178,7 @@ export const listConversations = async (
         } else {
           unreadCount = await Message.countDocuments({
             conversationId: conv._id,
-            receiverId: userId,
+            senderId: { $ne: userId },
             status: { $in: ['sending', 'sent', 'delivered'] },
           });
 

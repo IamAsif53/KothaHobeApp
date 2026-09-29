@@ -36,6 +36,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { modalStack } from '../utils/modalStack';
 import { PrivacySecurityModal } from '../components/settings/PrivacySecurityModal';
+import { NotificationsAlertsModal } from '../components/settings/NotificationsAlertsModal';
 
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -298,7 +299,7 @@ export const SettingsPage: React.FC = () => {
             <div className="flex-1">
               <div className="text-sm font-semibold text-chat-textPrimary">Notifications & Device Alerts</div>
               <div className="text-xs text-chat-textSecondary">
-                {soundEnabled ? 'Device alerts ON' : 'Muted'} • {vibrateEnabled ? 'Vibrate ON' : 'Vibrate OFF'}
+                Messages, calls, previews, sound & device alerts
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
@@ -471,102 +472,9 @@ export const SettingsPage: React.FC = () => {
 
       {/* ================= MODALS ================= */}
 
-      {/* 1. Notifications Modal */}
+      {/* 1. Notifications & Alerts Center */}
       {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div
-            style={{ backgroundColor: themeConfig.panel }}
-            className="border border-chat-border w-full max-w-sm rounded-3xl p-5 shadow-2xl animate-scale-up space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-chat-divider pb-3">
-              <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-sky-500" />
-                <h3 className="text-base font-bold text-chat-textPrimary">Notifications & Alerts</h3>
-              </div>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="p-1 rounded-full text-chat-textMuted hover:text-chat-textPrimary"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-chat-surfaceSecondary border border-chat-border">
-                <div className="flex items-center gap-3">
-                  <Volume2 className="w-4 h-4 text-chat-textMuted" />
-                  <div>
-                    <div className="text-sm font-medium text-chat-textPrimary">Device Sound Alerts</div>
-                    <div className="text-[11px] text-chat-textSecondary">Play tone on incoming message</div>
-                  </div>
-                </div>
-                <button
-                  onClick={handleToggleSound}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    soundEnabled ? 'bg-brand-500' : 'bg-chat-surfaceTertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      soundEnabled ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-chat-surfaceSecondary border border-chat-border">
-                <div className="flex items-center gap-3">
-                  <Vibrate className="w-4 h-4 text-chat-textMuted" />
-                  <div>
-                    <div className="text-sm font-medium text-chat-textPrimary">Device Vibration</div>
-                    <div className="text-[11px] text-chat-textSecondary">Vibrate on message received</div>
-                  </div>
-                </div>
-                <button
-                  onClick={handleToggleVibrate}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    vibrateEnabled ? 'bg-brand-500' : 'bg-chat-surfaceTertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      vibrateEnabled ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-chat-surfaceSecondary border border-chat-border">
-                <div className="flex items-center gap-3">
-                  <Eye className="w-4 h-4 text-chat-textMuted" />
-                  <div>
-                    <div className="text-sm font-medium text-chat-textPrimary">Message Preview</div>
-                    <div className="text-[11px] text-chat-textSecondary">Show sender and message text in banner</div>
-                  </div>
-                </div>
-                <button
-                  onClick={handleTogglePreview}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    previewEnabled ? 'bg-brand-500' : 'bg-chat-surfaceTertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      previewEnabled ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setActiveModal(null)}
-              className="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-2.5 rounded-xl transition-all"
-            >
-              Done
-            </button>
-          </div>
-        </div>
+        <NotificationsAlertsModal onClose={() => setActiveModal(null)} />
       )}
 
       {/* 2. Privacy & Security Modal */}

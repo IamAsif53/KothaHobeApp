@@ -74,11 +74,32 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
       };
     }
 
-    // Find recipient's registered FCM device tokens
-    const recipient = await User.findById(recipientId).select('fcmTokens displayName');
+    // Find recipient's registered FCM device tokens and notification preferences
+    const recipient = await User.findById(recipientId).select('fcmTokens displayName notificationSettings');
     if (!recipient || !recipient.fcmTokens || recipient.fcmTokens.length === 0) {
       console.log(`[FCM] User ${recipientId} has no registered FCM tokens.`);
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No registered device tokens' };
+    }
+
+    const notifSettings = recipient.notificationSettings || {
+      messages: true,
+      groups: true,
+      calls: true,
+      missedCalls: true,
+      stories: true,
+      previewEnabled: true,
+      sound: true,
+      vibrate: true,
+    };
+
+    // Check if recipient has muted this type of message notification
+    if (isGroup && notifSettings.groups === false) {
+      console.log(`[FCM] Push skipped: User ${recipientId} has muted group notifications.`);
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'Group notifications muted by user' };
+    }
+    if (!isGroup && notifSettings.messages === false) {
+      console.log(`[FCM] Push skipped: User ${recipientId} has muted direct message notifications.`);
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'Direct message notifications muted by user' };
     }
 
     const tokens = recipient.fcmTokens.filter((t) => typeof t === 'string' && t.trim().length > 10);
@@ -86,7 +107,20 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No valid device tokens' };
     }
 
-    const safeBody = (messageText || 'Sent you a message').slice(0, 500);
+    const previewAllowed = notifSettings.previewEnabled !== false;
+
+    // Mask preview content if preview is disabled
+    let resolvedBody = messageText || 'Sent you a message';
+    if (!previewAllowed) {
+      if (messageType === 'image') resolvedBody = 'New photo';
+      else if (messageType === 'video') resolvedBody = 'New video';
+      else if (messageType === 'audio') resolvedBody = 'New voice message';
+      else if (messageType === 'document') resolvedBody = 'New document';
+      else if (messageType === 'custom_emoji') resolvedBody = 'New emoji';
+      else resolvedBody = isGroup ? 'New group message' : 'New message';
+    }
+
+    const safeBody = resolvedBody.slice(0, 500);
     const safeTitle = (senderName || 'Kotha Hobe').slice(0, 100);
 
     const safeSenderAvatar = normalizeAvatarUrl(senderAvatar);
@@ -108,11 +142,12 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
         groupAvatar: safeGroupAvatar,
         messageText: safeBody,
         messageType: String(messageType || 'text'),
-        attachmentFileName: String(attachmentFileName || ''),
+        attachmentFileName: previewAllowed ? String(attachmentFileName || '') : '',
         audioDuration: String(audioDuration || ''),
         customEmojiId: String(customEmojiId || ''),
         storyContext: String(storyContext || ''),
         reactionEmoji: String(reactionEmoji || ''),
+        previewEnabled: previewAllowed ? 'true' : 'false',
         title: safeTitle,
         body: safeBody,
       },
@@ -193,10 +228,15 @@ export const sendCallPushNotification = async (payload: CallPushNotificationPayl
 
     console.log(`[CALL PUSH] Initiating call push. callId=${callId}, recipient=${recipientId}, caller=${callerName} (${callerId})`);
 
-    const recipient = await User.findById(recipientId).select('fcmTokens displayName');
+    const recipient = await User.findById(recipientId).select('fcmTokens displayName notificationSettings');
     if (!recipient || !recipient.fcmTokens || recipient.fcmTokens.length === 0) {
       console.warn(`[CALL PUSH] Token found=NO for recipient ${recipientId}`);
       return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'No registered tokens' };
+    }
+
+    if (recipient.notificationSettings?.calls === false) {
+      console.log(`[CALL PUSH] Push skipped: User ${recipientId} has muted call notifications.`);
+      return { success: true, attempted: 0, successCount: 0, failureCount: 0, message: 'Call notifications muted by user' };
     }
 
     const tokens = recipient.fcmTokens.filter((t) => typeof t === 'string' && t.trim().length > 10);

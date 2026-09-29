@@ -141,6 +141,103 @@ class SoundService {
     }
   }
 
+  /**
+   * Play Incoming Message Notification Tone (Pleasant dual harmonic chime)
+   */
+  public playMessageReceivedTone(): void {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+
+      // Primary tone: C6 (1046.5Hz) -> E6 (1318.5Hz)
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now); // A5
+      osc1.frequency.exponentialRampToValueAtTime(1318.5, now + 0.12); // E6
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1760, now);
+      osc2.frequency.exponentialRampToValueAtTime(2637, now + 0.12);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.38);
+      osc2.stop(now + 0.38);
+    } catch (err) {
+      console.warn('[SoundService] Message received tone error:', err);
+    }
+  }
+
+  /**
+   * Play Outgoing Message Sent Tone (Subtle soft pop)
+   */
+  public playMessageSentTone(): void {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.08);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.14);
+    } catch (err) {
+      console.warn('[SoundService] Message sent tone error:', err);
+    }
+  }
+
+  /**
+   * Trigger Haptic Vibration (Web Vibration API with fallback)
+   */
+  public triggerVibration(pattern: number | number[] = [80, 40, 80]): void {
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator && navigator.vibrate) {
+        navigator.vibrate(pattern);
+      }
+    } catch (err) {
+      console.warn('[SoundService] Vibration error:', err);
+    }
+  }
+
+  /**
+   * Update PWA / Web App Icon Badge
+   */
+  public updateAppBadge(count: number): void {
+    try {
+      if (typeof navigator !== 'undefined' && 'setAppBadge' in navigator) {
+        if (count > 0) {
+          (navigator as any).setAppBadge(count).catch(() => {});
+        } else {
+          (navigator as any).clearAppBadge().catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('[SoundService] App badge update error:', err);
+    }
+  }
+
   public stopAll(): void {
     this.stopRingbackTone();
     this.stopRingtone();
@@ -148,3 +245,4 @@ class SoundService {
 }
 
 export const soundService = new SoundService();
+

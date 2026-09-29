@@ -637,11 +637,12 @@ export const markConversationAsRead = async (
       await Message.updateMany(
         {
           conversationId,
-          receiverId: req.user._id,
-          status: { $in: ['sent', 'delivered'] },
+          senderId: { $ne: req.user._id },
+          status: { $in: ['sending', 'sent', 'delivered'] },
         },
         {
           $set: { status: 'read', readAt: now },
+          $addToSet: { readBy: { user: req.user._id, readAt: now } },
         }
       );
 

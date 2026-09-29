@@ -10,6 +10,17 @@ export interface IPrivacySettings {
   groupInvites: 'everyone' | 'connections';
 }
 
+export interface INotificationSettings {
+  messages: boolean;
+  groups: boolean;
+  calls: boolean;
+  missedCalls: boolean;
+  stories: boolean;
+  previewEnabled: boolean;
+  sound: boolean;
+  vibrate: boolean;
+}
+
 export interface IUserSession {
   sessionId: string;
   deviceName: string;
@@ -35,6 +46,7 @@ export interface IUser extends Document {
   fcmTokens: string[];
   blockedUsers: mongoose.Types.ObjectId[];
   privacySettings: IPrivacySettings;
+  notificationSettings: INotificationSettings;
   sessions: IUserSession[];
   createdAt: Date;
   updatedAt: Date;
@@ -82,6 +94,20 @@ const PrivacySettingsSchema = new Schema(
       enum: ['everyone', 'connections'],
       default: 'everyone',
     },
+  },
+  { _id: false }
+);
+
+const NotificationSettingsSchema = new Schema(
+  {
+    messages: { type: Boolean, default: true },
+    groups: { type: Boolean, default: true },
+    calls: { type: Boolean, default: true },
+    missedCalls: { type: Boolean, default: true },
+    stories: { type: Boolean, default: true },
+    previewEnabled: { type: Boolean, default: true },
+    sound: { type: Boolean, default: true },
+    vibrate: { type: Boolean, default: true },
   },
   { _id: false }
 );
@@ -162,6 +188,19 @@ const UserSchema: Schema = new Schema(
         storyVisibility: 'connections',
         messageRequests: 'everyone',
         groupInvites: 'everyone',
+      }),
+    },
+    notificationSettings: {
+      type: NotificationSettingsSchema,
+      default: () => ({
+        messages: true,
+        groups: true,
+        calls: true,
+        missedCalls: true,
+        stories: true,
+        previewEnabled: true,
+        sound: true,
+        vibrate: true,
       }),
     },
     sessions: {

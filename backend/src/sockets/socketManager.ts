@@ -634,35 +634,35 @@ export function setupSocketIO(io: SocketIOServer): void {
             readAt: now,
           });
         } else {
-          // In 1-to-1 Chat: update status to 'read' if read receipts enabled
-          if (sendReceipts) {
-            await Message.updateMany(
-              {
-                conversationId,
-                receiverId: userId,
-                status: { $in: ['sent', 'delivered'] },
-              },
-              {
-                $set: { status: 'read', readAt: now },
-              }
-            );
-
-            await Conversation.updateOne(
-              { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
-              { $set: { 'lastMessage.status': 'read' } }
-            );
-
-            const otherParticipantId = conv.participants.find(
-              (p) => p.toString() !== userId
-            );
-
-            if (otherParticipantId) {
-              io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
-                conversationId,
-                readBy: userId,
-                readAt: now,
-              });
+          // In 1-to-1 Chat: ALWAYS update database status to 'read' so recipient unread count clears
+          await Message.updateMany(
+            {
+              conversationId,
+              senderId: { $ne: userId },
+              status: { $in: ['sending', 'sent', 'delivered'] },
+            },
+            {
+              $set: { status: 'read', readAt: now },
+              $addToSet: { readBy: { user: userId, readAt: now } },
             }
+          );
+
+          await Conversation.updateOne(
+            { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
+            { $set: { 'lastMessage.status': 'read' } }
+          );
+
+          const otherParticipantId = conv.participants.find(
+            (p) => p.toString() !== userId
+          );
+
+          // Only send blue tick receipt to sender if current user allows read receipts
+          if (sendReceipts && otherParticipantId) {
+            io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+              conversationId,
+              readBy: userId,
+              readAt: now,
+            });
           }
           io.to(`user:${userId}`).emit('message:read', {
             conversationId,

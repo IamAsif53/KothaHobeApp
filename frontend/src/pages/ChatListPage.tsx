@@ -59,7 +59,23 @@ export const ChatListPage: React.FC = () => {
 
   const { socket } = useSocket();
   const navigate = useNavigate();
-  const locallyReadConversationsRef = useRef<Record<string, number>>({});
+
+  const getLocallyReadTimestamps = (): Record<string, number> => {
+    try {
+      const stored = sessionStorage.getItem('kotha_hobe_read_timestamps');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const setLocallyReadTimestamp = (conversationId: string) => {
+    try {
+      const map = getLocallyReadTimestamps();
+      map[conversationId] = Date.now();
+      sessionStorage.setItem('kotha_hobe_read_timestamps', JSON.stringify(map));
+    } catch {}
+  };
 
   const loadConversations = async (silent = false) => {
     if (!silent && !localStorage.getItem('kotha_hobe_cached_conversations')) {
@@ -68,9 +84,10 @@ export const ChatListPage: React.FC = () => {
     try {
       const res = await fetchConversations();
       if (res.success && res.conversations) {
+        const localReadMap = getLocallyReadTimestamps();
         // Protect against stale server unread state overwriting newer local read state
         const sanitized: IConversation[] = res.conversations.map((c: IConversation) => {
-          const localReadTimestamp = locallyReadConversationsRef.current[c._id];
+          const localReadTimestamp = localReadMap[c._id];
           if (localReadTimestamp) {
             const msgTime = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
             if (localReadTimestamp >= msgTime) {
@@ -107,7 +124,7 @@ export const ChatListPage: React.FC = () => {
       const { conversationId } = customEvent.detail || {};
       if (!conversationId) return;
 
-      locallyReadConversationsRef.current[conversationId] = Date.now();
+      setLocallyReadTimestamp(conversationId);
 
       setConversations((prev) => {
         const index = prev.findIndex((c) => c._id === conversationId);

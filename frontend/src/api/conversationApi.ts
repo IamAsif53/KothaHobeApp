@@ -37,3 +37,20 @@ export async function deleteConversationApi(conversationId: string): Promise<{ s
     method: 'DELETE',
   });
 }
+
+export async function archiveConversationApi(
+  conversationId: string
+): Promise<{ success: boolean; isArchived: boolean; conversationId: string; message?: string }> {
+  return apiFetch(`/conversations/${conversationId}/archive`, {
+    method: 'PUT',
+  });
+}
+
+export async function unarchiveConversationApi(
+  conversationId: string
+): Promise<{ success: boolean; isArchived: boolean; conversationId: string; message?: string }> {
+  return apiFetch(`/conversations/${conversationId}/unarchive`, {
+    method: 'PUT',
+  });
+}
+

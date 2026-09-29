@@ -12,10 +12,12 @@ import {
   Trash2,
   StopCircle,
   Settings as SettingsIcon,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import { EmojiSuggestionBar } from './EmojiSuggestionBar';
-import { IReplyTo, IAttachment } from '../../types';
+import { IReplyTo, IAttachment, IMessage } from '../../types';
 import { ICustomEmoji } from '../../types/customEmoji';
 import { getContextualEmojiSuggestions } from '../../data/customEmojiCatalog';
 import { ensureAudioPermission, openSystemAppSettings } from '../../services/nativeMediaService';
@@ -32,6 +34,9 @@ interface MessageComposerProps {
   onTyping: () => void;
   replyingTo?: IReplyTo | null;
   onCancelReply?: () => void;
+  editingMessage?: IMessage | null;
+  onSaveEdit?: (messageId: string, newText: string) => void;
+  onCancelEdit?: () => void;
   disabled?: boolean;
 }
 
@@ -40,6 +45,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onTyping,
   replyingTo,
   onCancelReply,
+  editingMessage,
+  onSaveEdit,
+  onCancelEdit,
   disabled = false,
 }) => {
   const [text, setText] = useState('');
@@ -85,6 +93,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
   }, [text]);
+
+  // Sync editingMessage content
+  useEffect(() => {
+    if (editingMessage) {
+      setText(editingMessage.text || '');
+      setPendingFile(null);
+      setShowAttachMenu(false);
+      setShowEmoji(false);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  }, [editingMessage]);
 
   // Clean up recording tracks & timers on unmount
   useEffect(() => {
@@ -185,6 +206,22 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     setTimeout(() => {
       sendLockRef.current = false;
     }, 250);
+
+    // If editing an existing message
+    if (editingMessage) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      if (onSaveEdit) {
+        onSaveEdit(editingMessage._id, trimmed);
+      }
+      setText('');
+      setSuggestions([]);
+      if (onCancelEdit) onCancelEdit();
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      return;
+    }
 
     if (pendingFile) {
       const originalFile = pendingFile.file;
@@ -476,6 +513,45 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         </div>
       )}
 
+      {/* Editing Message Banner */}
+      <AnimatePresence>
+        {editingMessage && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="overflow-hidden bg-brand-500/10 border-b border-brand-500/30"
+          >
+            <div className="flex items-center justify-between px-4 py-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-brand-500/20 text-brand-500 flex items-center justify-center shrink-0">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-brand-600 dark:text-brand-400 truncate block">
+                    Editing message
+                  </span>
+                  <span className="text-xs text-chat-textSecondary truncate block opacity-90">
+                    {editingMessage.text}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setText('');
+                  if (onCancelEdit) onCancelEdit();
+                }}
+                className="p-1.5 rounded-full text-chat-textMuted hover:text-chat-textPrimary hover:bg-chat-surfaceTertiary transition-colors cursor-pointer"
+                title="Cancel Edit"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Replying Banner */}
       <AnimatePresence>
         {replyingTo && (
@@ -683,7 +759,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               value={text}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              placeholder={pendingFile ? 'Add a caption...' : 'Type a message...'}
+              placeholder={editingMessage ? 'Edit message...' : pendingFile ? 'Add a caption...' : 'Type a message...'}
               disabled={disabled}
               rows={1}
               className="w-full bg-transparent text-chat-textPrimary placeholder:text-chat-textTertiary resize-none outline-none text-[15px] leading-[1.4] max-h-[120px] py-1"

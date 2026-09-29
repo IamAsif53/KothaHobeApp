@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🔗 Canonical Group Invite Links & Deep Linking: Share valid cloud URLs (kotha-hobe-api.onrender.com/join/* and kothahobe://join/*) that launch the app directly into group preview/join",
-      "📱 Instant Share Link Contact Picker: Select any existing contact or chat to send the invite link directly",
-      "📷 High-Resolution QR Code Scanning: Scan QR code with any camera or scanner to instantly open and join the group",
-      "🛡️ Admin Approval Relocated to Permissions: Moved Admin Approval Required toggle to Group Permissions & Settings",
-      "✅ Dedicated Inline Approval Requests: Admins can review, accept (✓), and reject (✕) pending member requests directly in the Group Info Members list with real-time push & socket notifications"
+      "✏️ Message Edit: In-place message editing for sender within 15 minutes with real-time socket synchronization and '(Edited)' indicators",
+      "↪️ Message Forwarding: Multi-target message forwarding to individual chats and groups with 'Forwarded' attribution banner",
+      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section, unread state preservation, and search support",
+      "🔗 Rich Link Previews: Automatic, non-blocking URL detection with SSRF-protected backend OpenGraph scrapers and embedded interactive preview cards",
+      "👥 Group-Only Typing Indicators: Aggregated real-time typing indicator strictly for group conversations with formatted participant names and pulsing animation dots"
     ],
     mandatory: false
   };

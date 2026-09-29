@@ -1,12 +1,14 @@
 import { Response } from 'express';
+import dns from 'dns';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { Conversation } from '../models/Conversation';
-import { Message } from '../models/Message';
+import { Message, ILinkPreview } from '../models/Message';
 import { User } from '../models/User';
 import { getGlobalIO } from '../sockets/socketManager';
 import { sendPushNotification } from '../services/notificationService';
 
 export const MAX_REPLY_WORDS = 50;
+export const EDIT_WINDOW_MINUTES = 15;
 
 export const getMessages = async (
   req: AuthenticatedRequest,
@@ -393,4 +395,508 @@ export const markConversationAsRead = async (
     res.status(500).json({ success: false, message: 'Failed to mark conversation as read' });
   }
 };
+
+// ==========================================
+// FEATURE 1: MESSAGE EDIT (15 min window)
+// ==========================================
+export const editMessage = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messageId } = req.params;
+    const { text } = req.body;
+
+    if (!messageId) {
+      res.status(400).json({ success: false, message: 'Missing messageId' });
+      return;
+    }
+
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      res.status(400).json({ success: false, message: 'Text cannot be empty' });
+      return;
+    }
+
+    const trimmedText = text.trim();
+    if (trimmedText.length > 5000) {
+      res.status(400).json({ success: false, message: 'Text exceeds maximum limit of 5000 characters' });
+      return;
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      res.status(404).json({ success: false, message: 'Message not found' });
+      return;
+    }
+
+    // Sender-only validation
+    if (message.senderId.toString() !== req.user._id.toString()) {
+      res.status(403).json({ success: false, message: 'You can only edit your own messages' });
+      return;
+    }
+
+    if (message.isDeletedForEveryone) {
+      res.status(400).json({ success: false, message: 'Cannot edit a deleted message' });
+      return;
+    }
+
+    // Editable type check
+    if (message.type !== 'text' && message.type !== 'story_reply' && message.type !== 'custom_emoji') {
+      res.status(400).json({ success: false, message: 'Only text messages can be edited' });
+      return;
+    }
+
+    // 15-minute time window check
+    const messageAgeMs = Date.now() - new Date(message.createdAt).getTime();
+    const maxAgeMs = EDIT_WINDOW_MINUTES * 60 * 1000;
+    if (messageAgeMs > maxAgeMs) {
+      res.status(400).json({
+        success: false,
+        message: `Message can only be edited within ${EDIT_WINDOW_MINUTES} minutes of sending.`,
+      });
+      return;
+    }
+
+    const now = new Date();
+    message.text = trimmedText;
+    message.editedAt = now;
+    await message.save();
+
+    // If this was the lastMessage of the conversation, update the preview
+    const conversation = await Conversation.findById(message.conversationId);
+    if (conversation && conversation.lastMessage) {
+      const isLatest =
+        Math.abs(new Date(conversation.lastMessage.createdAt).getTime() - new Date(message.createdAt).getTime()) < 3000;
+      if (isLatest) {
+        let updatedPreview = trimmedText;
+        if (conversation.isGroup) {
+          const nick = message.senderNickname || 'Member';
+          updatedPreview = `${nick}: ${trimmedText}`;
+        }
+        await Conversation.findByIdAndUpdate(conversation._id, {
+          'lastMessage.text': updatedPreview,
+        });
+      }
+    }
+
+    // Emit real-time update to active conversation room & user rooms
+    const io = getGlobalIO();
+    if (io) {
+      const payload = {
+        messageId: message._id,
+        conversationId: message.conversationId,
+        text: message.text,
+        editedAt: message.editedAt,
+      };
+
+      io.to(`conv:${message.conversationId}`).emit('message:edited', payload);
+
+      if (conversation) {
+        conversation.participants.forEach((p) => {
+          io.to(`user:${p.toString()}`).emit('message:edited', payload);
+        });
+      }
+    }
+
+    res.status(200).json({ success: true, message });
+  } catch (error) {
+    console.error('[MessageController] editMessage error:', error);
+    res.status(500).json({ success: false, message: 'Failed to edit message' });
+  }
+};
+
+// ==========================================
+// FEATURE 2: MESSAGE FORWARDING (Multi-target)
+// ==========================================
+export const forwardMessage = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messageId, destinationConversationIds } = req.body;
+
+    if (!messageId || !Array.isArray(destinationConversationIds) || destinationConversationIds.length === 0) {
+      res.status(400).json({ success: false, message: 'Missing messageId or destinationConversationIds' });
+      return;
+    }
+
+    if (destinationConversationIds.length > 20) {
+      res.status(400).json({ success: false, message: 'Cannot forward to more than 20 conversations at once' });
+      return;
+    }
+
+    // Retrieve original source message
+    const sourceMsg = await Message.findById(messageId);
+    if (!sourceMsg || sourceMsg.isDeletedForEveryone) {
+      res.status(404).json({ success: false, message: 'Original message not found or deleted' });
+      return;
+    }
+
+    const currentUserId = req.user._id;
+    const currentUserIdStr = currentUserId.toString();
+
+    // Ensure requester has access to source conversation
+    const sourceConv = await Conversation.findOne({
+      _id: sourceMsg.conversationId,
+      $or: [
+        { participants: currentUserId },
+        { 'groupMeta.members.user': currentUserId },
+        { 'groupMeta.creator': currentUserId },
+      ],
+    });
+
+    if (!sourceConv) {
+      res.status(403).json({ success: false, message: 'Access denied to original message' });
+      return;
+    }
+
+    // Determine original sender name for attribution
+    let originalSenderName = sourceMsg.senderNickname || '';
+    if (!originalSenderName) {
+      const originalUser = await User.findById(sourceMsg.senderId).select('displayName username');
+      originalSenderName = originalUser?.displayName || originalUser?.username || 'User';
+    }
+
+    const senderUser = await User.findById(currentUserId).select('displayName username avatarUrl');
+    const senderDisplayName = senderUser?.displayName || senderUser?.username || 'User';
+
+    const io = getGlobalIO();
+    const forwardedMessages: any[] = [];
+
+    // Process each target conversation
+    for (const destConvId of destinationConversationIds) {
+      const destConv = await Conversation.findOne({
+        _id: destConvId,
+        $or: [
+          { participants: currentUserId },
+          { 'groupMeta.members.user': currentUserId },
+          { 'groupMeta.creator': currentUserId },
+        ],
+      });
+
+      if (!destConv) continue;
+
+      let myNickname = senderDisplayName;
+      if (destConv.isGroup && destConv.groupMeta?.nicknames) {
+        const nicks = destConv.groupMeta.nicknames;
+        const customNick = nicks instanceof Map ? nicks.get(currentUserIdStr) : (nicks as any)[currentUserIdStr];
+        if (customNick) myNickname = customNick;
+      }
+
+      const clientMessageId = `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const count = await Message.countDocuments({ conversationId: destConv._id });
+      const serverSequence = count + 1;
+
+      let targetReceiverId: string | undefined = undefined;
+      if (!destConv.isGroup) {
+        targetReceiverId = destConv.participants.find((p) => p.toString() !== currentUserIdStr)?.toString();
+      }
+
+      const createdMsg = await Message.create({
+        conversationId: destConv._id,
+        senderId: currentUserId,
+        receiverId: targetReceiverId ? (targetReceiverId as any) : undefined,
+        senderNickname: destConv.isGroup ? myNickname : undefined,
+        text: sourceMsg.text || '',
+        type: sourceMsg.type,
+        customEmojiId: sourceMsg.customEmojiId,
+        attachment: sourceMsg.attachment || undefined,
+        forwardedFrom: {
+          messageId: sourceMsg._id,
+          senderName: originalSenderName,
+          originalType: sourceMsg.type,
+        },
+        status: destConv.isGroup ? 'delivered' : 'sent',
+        readBy: destConv.isGroup ? [{ user: currentUserId as any, readAt: new Date() }] : [],
+        deliveredAt: destConv.isGroup ? new Date() : undefined,
+        clientMessageId,
+        serverSequence,
+      });
+
+      let previewText = sourceMsg.text || '';
+      if (sourceMsg.type === 'image') previewText = '📷 Photo';
+      else if (sourceMsg.type === 'audio') previewText = '🎤 Voice message';
+      else if (sourceMsg.type === 'document') previewText = `📄 ${sourceMsg.attachment?.fileName || 'Document'}`;
+      else if (sourceMsg.type === 'custom_emoji') previewText = '✨ Animated Emoji';
+
+      await Conversation.findByIdAndUpdate(destConv._id, {
+        lastMessage: {
+          text: destConv.isGroup ? `${myNickname}: ${previewText}` : previewText,
+          senderId: currentUserId,
+          createdAt: createdMsg.createdAt,
+          status: destConv.isGroup ? 'delivered' : 'sent',
+        },
+        lastMessageAt: createdMsg.createdAt,
+      });
+
+      forwardedMessages.push(createdMsg);
+
+      // Realtime notification & socket delivery
+      if (io) {
+        io.to(`conv:${destConv._id}`).emit('message:new', createdMsg);
+        if (targetReceiverId) {
+          io.to(`user:${targetReceiverId}`).emit('message:new', createdMsg);
+        } else if (destConv.isGroup) {
+          (destConv.participants || []).forEach((pId) => {
+            if (pId.toString() !== currentUserIdStr) {
+              io.to(`user:${pId.toString()}`).emit('message:new', createdMsg);
+            }
+          });
+        }
+      }
+
+      // Push notification
+      if (targetReceiverId) {
+        sendPushNotification({
+          recipientId: targetReceiverId,
+          senderId: currentUserIdStr,
+          messageId: createdMsg._id.toString(),
+          senderName: senderDisplayName,
+          messageText: previewText || 'Forwarded a message',
+          conversationId: destConv._id.toString(),
+        }).catch(() => {});
+      } else if (destConv.isGroup) {
+        (destConv.participants || []).forEach((pId) => {
+          if (pId.toString() !== currentUserIdStr) {
+            sendPushNotification({
+              recipientId: pId.toString(),
+              senderId: currentUserIdStr,
+              messageId: createdMsg._id.toString(),
+              senderName: destConv.groupMeta?.name || 'Group Chat',
+              messageText: `${myNickname}: ${previewText || 'Forwarded a message'}`,
+              conversationId: destConv._id.toString(),
+            }).catch(() => {});
+          }
+        });
+      }
+    }
+
+    res.status(200).json({ success: true, forwardedMessages });
+  } catch (error) {
+    console.error('[MessageController] forwardMessage error:', error);
+    res.status(500).json({ success: false, message: 'Failed to forward message' });
+  }
+};
+
+// ==========================================
+// FEATURE 4: LINK PREVIEW (SSRF-Hardened)
+// ==========================================
+const linkPreviewCache = new Map<string, { data: ILinkPreview; expiresAt: number }>();
+
+function isPrivateIp(ip: string): boolean {
+  if (!ip) return true;
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0' || ip === '::') return true;
+
+  // IPv4 checks
+  const parts = ip.split('.').map((p) => parseInt(p, 10));
+  if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+    // 10.0.0.0/8
+    if (parts[0] === 10) return true;
+    // 127.0.0.0/8
+    if (parts[0] === 127) return true;
+    // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.168.0.0/16
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    // 169.254.0.0/16 (Link Local / Cloud Metadata)
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    // 0.0.0.0/8
+    if (parts[0] === 0) return true;
+    // Broadcast / Multicast
+    if (parts[0] >= 224) return true;
+  }
+
+  // IPv6 checks
+  const lower = ip.toLowerCase();
+  if (lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80') || lower.startsWith('::ffff:127.')) {
+    return true;
+  }
+
+  return false;
+}
+
+export const getLinkPreview = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ success: false, message: 'Valid URL is required' });
+      return;
+    }
+
+    const trimmedUrl = url.trim();
+
+    // Check memory cache
+    const cached = linkPreviewCache.get(trimmedUrl);
+    if (cached && cached.expiresAt > Date.now()) {
+      res.status(200).json({ success: true, preview: cached.data });
+      return;
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(trimmedUrl);
+    } catch {
+      res.status(400).json({ success: false, message: 'Invalid URL format' });
+      return;
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      res.status(400).json({ success: false, message: 'Only http and https protocols are supported' });
+      return;
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
+      res.status(400).json({ success: false, message: 'Access to internal hostnames is prohibited' });
+      return;
+    }
+
+    // SSRF DNS Resolution Check
+    try {
+      const addresses = await dns.promises.lookup(hostname, { all: true });
+      for (const addr of addresses) {
+        if (isPrivateIp(addr.address)) {
+          res.status(400).json({ success: false, message: 'Access to private network IP is prohibited' });
+          return;
+        }
+      }
+    } catch (dnsErr) {
+      res.status(400).json({ success: false, message: 'Could not resolve domain name' });
+      return;
+    }
+
+    // Safe External Fetch (5 second timeout, max 2MB)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    let htmlText = '';
+    try {
+      const fetchRes = await fetch(trimmedUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (KothaHobeBot)',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      const contentType = fetchRes.headers.get('content-type') || '';
+      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+        // Fallback simple domain preview if not an HTML page
+        const preview: ILinkPreview = {
+          url: trimmedUrl,
+          domain: hostname.replace(/^www\./, ''),
+        };
+        linkPreviewCache.set(trimmedUrl, { data: preview, expiresAt: Date.now() + 2 * 3600 * 1000 });
+        res.status(200).json({ success: true, preview });
+        return;
+      }
+
+      // Stream max 1.5MB of HTML
+      const reader = fetchRes.body?.getReader();
+      if (reader) {
+        let receivedBytes = 0;
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            receivedBytes += value.length;
+            if (receivedBytes > 1500000) {
+              reader.cancel();
+              break;
+            }
+          }
+        }
+        const totalBuffer = Buffer.concat(chunks);
+        htmlText = totalBuffer.toString('utf-8');
+      } else {
+        htmlText = await fetchRes.text();
+      }
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      // Fallback domain-only preview on fetch timeout or blocks
+      const preview: ILinkPreview = {
+        url: trimmedUrl,
+        domain: hostname.replace(/^www\./, ''),
+      };
+      res.status(200).json({ success: true, preview });
+      return;
+    }
+
+    // Extract OpenGraph / Meta tags
+    const getMetaContent = (nameOrProp: string): string => {
+      const regex1 = new RegExp(`<meta[^>]+(?:property|name)=["'](?:og:)?${nameOrProp}["'][^>]+content=["']([^"']*)["']`, 'i');
+      const match1 = htmlText.match(regex1);
+      if (match1 && match1[1]) return match1[1].trim();
+
+      const regex2 = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["'](?:og:)?${nameOrProp}["']`, 'i');
+      const match2 = htmlText.match(regex2);
+      if (match2 && match2[1]) return match2[1].trim();
+
+      return '';
+    };
+
+    let title = getMetaContent('title');
+    if (!title) {
+      const titleMatch = htmlText.match(/<title[^>]*>([^<]*)<\/title>/i);
+      if (titleMatch && titleMatch[1]) title = titleMatch[1].trim();
+    }
+
+    let description = getMetaContent('description');
+    let image = getMetaContent('image');
+
+    // Resolve relative image URLs
+    if (image && !image.startsWith('http://') && !image.startsWith('https://')) {
+      try {
+        image = new URL(image, parsedUrl.origin).toString();
+      } catch {
+        image = '';
+      }
+    }
+
+    const domain = hostname.replace(/^www\./, '');
+
+    const preview: ILinkPreview = {
+      url: trimmedUrl,
+      title: title ? title.slice(0, 150) : domain,
+      description: description ? description.slice(0, 250) : '',
+      image: image || undefined,
+      domain,
+    };
+
+    // Cache for 2 hours
+    linkPreviewCache.set(trimmedUrl, {
+      data: preview,
+      expiresAt: Date.now() + 2 * 3600 * 1000,
+    });
+
+    res.status(200).json({ success: true, preview });
+  } catch (error) {
+    console.error('[MessageController] getLinkPreview error:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate link preview' });
+  }
+};
+
 

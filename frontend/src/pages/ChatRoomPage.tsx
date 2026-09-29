@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchMessagesApi, uploadMediaApi, searchInConversationApi } from '../api/messageApi';
+import { fetchMessagesApi, uploadMediaApi, searchInConversationApi, editMessageApi } from '../api/messageApi';
 import { fetchConversations, fetchConversationDetailsApi } from '../api/conversationApi';
 import { IMessage, IUser, IReplyTo, IAttachment, IConversation } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,7 @@ import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
 import { MediaViewerModal } from '../components/chat/MediaViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
+import { ForwardMessageModal } from '../components/chat/ForwardMessageModal';
 import { GroupCallBanner } from '../components/call/GroupCallBanner';
 import { MessageSkeleton } from '../components/common/Skeleton';
 import { formatLastSeen, formatChatListDate } from '../utils/dateUtils';
@@ -33,6 +34,8 @@ import {
   ChevronDown,
   Users,
   CornerUpLeft,
+  CornerUpRight,
+  Pencil,
   Copy,
   ExternalLink,
   Download,
@@ -123,12 +126,17 @@ export const ChatRoomPage: React.FC = () => {
 
   // Replying & Modals
   const [replyingTo, setReplyingTo] = useState<IReplyTo | null>(null);
+  const [editingMessage, setEditingMessage] = useState<IMessage | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<IMessage | null>(null);
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
   const [actionMenuMessage, setActionMenuMessage] = useState<IMessage | null>(null);
   const [reactionListMessage, setReactionListMessage] = useState<IMessage | null>(null);
   const [reactionListInitialEmoji, setReactionListInitialEmoji] = useState<string>('all');
   const [showAnimatedReactionTray, setShowAnimatedReactionTray] = useState<boolean>(false);
+
+  // Group-Only Typing Indicator state: Map<userId, { displayName: string, timer: NodeJS.Timeout }>
+  const [groupTypingUsers, setGroupTypingUsers] = useState<Map<string, { displayName: string; timer: NodeJS.Timeout }>>(new Map());
 
   // Toast / Status Message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -520,14 +528,64 @@ export const ChatRoomPage: React.FC = () => {
       }
     };
 
+    // 10. Message Edited
+    const handleMessageEdited = (editedMsg: IMessage) => {
+      if (editedMsg.conversationId === conversationId) {
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m._id === editedMsg._id ? { ...m, ...editedMsg } : m
+          );
+          persistMessages(updated);
+          return updated;
+        });
+      }
+    };
+
+    // 11. Group-Only Typing Indicator Aggregate
+    const handleGroupTypingUpdate = ({
+      conversationId: typingConvId,
+      userId: typingUserId,
+      displayName,
+      isTyping: userIsTyping,
+    }: {
+      conversationId: string;
+      userId: string;
+      displayName: string;
+      isTyping: boolean;
+    }) => {
+      if (typingConvId !== conversationId || typingUserId === user?._id) return;
+
+      setGroupTypingUsers((prev) => {
+        const nextMap = new Map(prev);
+        const existing = nextMap.get(typingUserId);
+        if (existing?.timer) clearTimeout(existing.timer);
+
+        if (!userIsTyping) {
+          nextMap.delete(typingUserId);
+        } else {
+          const timer = setTimeout(() => {
+            setGroupTypingUsers((current) => {
+              const map = new Map(current);
+              map.delete(typingUserId);
+              return map;
+            });
+          }, 4000);
+          nextMap.set(typingUserId, { displayName: displayName || 'Someone', timer });
+        }
+        return nextMap;
+      });
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:sent', handleMessageSent);
+    socket.on('message:edited', handleMessageEdited);
     socket.on('message:reaction_updated', handleReactionUpdated);
     socket.on('message:deleted', handleMessageDeleted);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
+    socket.on('group:typing:update', handleGroupTypingUpdate);
     socket.on('user:online', handleUserOnline);
     socket.on('user:offline', handleUserOffline);
     socket.on('group:nickname_updated', handleNicknameUpdated);
@@ -535,12 +593,14 @@ export const ChatRoomPage: React.FC = () => {
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:sent', handleMessageSent);
+      socket.off('message:edited', handleMessageEdited);
       socket.off('message:reaction_updated', handleReactionUpdated);
       socket.off('message:deleted', handleMessageDeleted);
       socket.off('message:read', handleMessageRead);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
+      socket.off('group:typing:update', handleGroupTypingUpdate);
       socket.off('user:online', handleUserOnline);
       socket.off('user:offline', handleUserOffline);
       socket.off('group:nickname_updated', handleNicknameUpdated);
@@ -806,12 +866,47 @@ export const ChatRoomPage: React.FC = () => {
 
   const handleTyping = useCallback(() => {
     if (!conversationId) return;
-    startTyping(conversationId, isGroup ? undefined : recipient?._id);
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = setTimeout(() => {
-      stopTyping(conversationId, isGroup ? undefined : recipient?._id);
-    }, 2500);
-  }, [conversationId, isGroup, recipient, startTyping, stopTyping]);
+    if (isGroup) {
+      socket?.emit('group:typing:start', { conversationId });
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        socket?.emit('group:typing:stop', { conversationId });
+      }, 2500);
+    } else {
+      startTyping(conversationId, recipient?._id);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        stopTyping(conversationId, recipient?._id);
+      }, 2500);
+    }
+  }, [conversationId, isGroup, recipient, socket, startTyping, stopTyping]);
+
+  const handleSaveEdit = useCallback(async (messageId: string, newText: string) => {
+    try {
+      // Optimistic update
+      setMessages((prev) => {
+        const updated = prev.map((m) =>
+          m._id === messageId ? { ...m, text: newText, editedAt: new Date().toISOString() } : m
+        );
+        persistMessages(updated);
+        return updated;
+      });
+      setEditingMessage(null);
+
+      const res = await editMessageApi(messageId, newText);
+      if (res.success && res.message) {
+        setMessages((prev) => {
+          const updated = prev.map((m) =>
+            m._id === messageId ? { ...m, ...res.message } : m
+          );
+          persistMessages(updated);
+          return updated;
+        });
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to edit message');
+    }
+  }, [persistMessages]);
 
   const handleRetryMessage = useCallback((msg: IMessage) => {
     if (!conversationId) return;
@@ -849,6 +944,16 @@ export const ChatRoomPage: React.FC = () => {
     : recipient?.displayName || recipient?.username || 'Chat';
 
   const headerAvatarUrl = isGroup ? groupMeta?.avatarUrl : recipient?.avatarUrl;
+
+  const groupTypingNames = Array.from(groupTypingUsers.values()).map((u) => u.displayName);
+  const groupTypingText =
+    groupTypingNames.length === 1
+      ? `${groupTypingNames[0]} is typing...`
+      : groupTypingNames.length === 2
+      ? `${groupTypingNames[0]} and ${groupTypingNames[1]} are typing...`
+      : groupTypingNames.length > 2
+      ? `${groupTypingNames[0]} and ${groupTypingNames.length - 1} others are typing...`
+      : null;
 
   return (
     <div
@@ -968,6 +1073,8 @@ export const ChatRoomPage: React.FC = () => {
                   <span>View All Reactions ({actionMenuMessage.reactions.length})</span>
                 </button>
               )}
+              
+              {/* Reply */}
               <button
                 onClick={() => {
                   handleReply(actionMenuMessage);
@@ -978,6 +1085,39 @@ export const ChatRoomPage: React.FC = () => {
                 <CornerUpLeft className="w-4 h-4 text-brand-500" />
                 <span>Reply</span>
               </button>
+
+              {/* Forward Message */}
+              {actionMenuMessage.type !== 'system' && !actionMenuMessage.isDeletedForEveryone && (
+                <button
+                  onClick={() => {
+                    const msg = actionMenuMessage;
+                    setActionMenuMessage(null);
+                    setForwardingMessage(msg);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-chat-textPrimary rounded-lg transition-colors text-left"
+                >
+                  <CornerUpRight className="w-4 h-4 text-emerald-500" />
+                  <span>Forward</span>
+                </button>
+              )}
+
+              {/* Edit Message (Sender only, Text message, within 15 minutes) */}
+              {actionMenuMessage.senderId === user?._id &&
+                actionMenuMessage.type === 'text' &&
+                !actionMenuMessage.isDeletedForEveryone &&
+                Date.now() - new Date(actionMenuMessage.createdAt).getTime() <= 15 * 60 * 1000 && (
+                  <button
+                    onClick={() => {
+                      const msg = actionMenuMessage;
+                      setActionMenuMessage(null);
+                      setEditingMessage(msg);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-brand-600 dark:text-brand-400 font-semibold rounded-lg transition-colors text-left"
+                  >
+                    <Pencil className="w-4 h-4 text-brand-500" />
+                    <span>Edit Message</span>
+                  </button>
+              )}
 
               {actionMenuMessage.text && (
                 <button
@@ -1087,12 +1227,16 @@ export const ChatRoomPage: React.FC = () => {
                 {headerTitle}
               </h2>
               <p className="text-[11px] text-chat-textSecondary truncate mt-0.5 leading-none">
-                {isTyping ? (
+                {isGroup ? (
+                  groupTypingText ? (
+                    <span className="text-brand-500 font-medium animate-pulse">{groupTypingText}</span>
+                  ) : (
+                    <span className="text-chat-textSecondary font-medium">
+                      {groupMeta?.members?.length || 1} members
+                    </span>
+                  )
+                ) : isTyping ? (
                   <span className="text-brand-500 font-medium animate-pulse">typing...</span>
-                ) : isGroup ? (
-                  <span className="text-chat-textSecondary font-medium">
-                    {groupMeta?.members?.length || 1} members
-                  </span>
                 ) : recipient?.isOnline ? (
                   <span className="text-emerald-500 font-medium">online</span>
                 ) : recipient?.lastSeen ? (
@@ -1322,12 +1466,26 @@ export const ChatRoomPage: React.FC = () => {
           })
         )}
 
-        {/* Dynamic In-Chat Typing Bubble */}
-        {isTyping && (
+        {/* Dynamic In-Chat Typing Bubble (1-on-1 Chats) */}
+        {!isGroup && isTyping && (
           <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-chat-bubbleIn border border-chat-bubbleInBorder w-fit mb-1 animate-fade-in shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '0ms' }} />
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        )}
+
+        {/* Dynamic In-Chat Typing Bubble (Group Chats) */}
+        {isGroup && groupTypingUsers.size > 0 && (
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-chat-bubbleIn border border-chat-bubbleInBorder w-fit mb-1 animate-fade-in shadow-2xs">
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-xs text-chat-textSecondary font-medium">
+              {groupTypingText}
+            </span>
           </div>
         )}
 
@@ -1351,6 +1509,9 @@ export const ChatRoomPage: React.FC = () => {
         onTyping={handleTyping}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
+        editingMessage={editingMessage}
+        onSaveEdit={handleSaveEdit}
+        onCancelEdit={() => setEditingMessage(null)}
         disabled={!isGroup && !recipient}
       />
 
@@ -1364,6 +1525,17 @@ export const ChatRoomPage: React.FC = () => {
           initialEmoji={reactionListInitialEmoji}
           onRemoveReaction={handleReact}
           onClose={() => setReactionListMessage(null)}
+        />
+      )}
+
+      {/* Forward Message Modal */}
+      {forwardingMessage && (
+        <ForwardMessageModal
+          message={forwardingMessage}
+          onClose={() => setForwardingMessage(null)}
+          onForwardSuccess={() => {
+            showToast('Message forwarded successfully');
+          }}
         />
       )}
     </div>

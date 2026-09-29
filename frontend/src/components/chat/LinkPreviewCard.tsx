@@ -1,0 +1,134 @@
+import React, { useState, useEffect } from 'react';
+import { ILinkPreview } from '../../types';
+import { fetchLinkPreviewApi } from '../../api/messageApi';
+import { Globe, ExternalLink } from 'lucide-react';
+
+interface LinkPreviewCardProps {
+  url: string;
+  initialPreview?: ILinkPreview;
+  isMe?: boolean;
+}
+
+const previewLocalCache = new Map<string, ILinkPreview>();
+
+export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
+  url,
+  initialPreview,
+  isMe = false,
+}) => {
+  const [preview, setPreview] = useState<ILinkPreview | null>(() => {
+    if (initialPreview && (initialPreview.title || initialPreview.image)) {
+      return initialPreview;
+    }
+    return previewLocalCache.get(url) || null;
+  });
+  const [loading, setLoading] = useState<boolean>(!preview);
+
+  useEffect(() => {
+    if (preview) return;
+
+    let isMounted = true;
+    const fetchPreview = async () => {
+      try {
+        const res = await fetchLinkPreviewApi(url);
+        if (isMounted && res.success && res.preview) {
+          previewLocalCache.set(url, res.preview);
+          setPreview(res.preview);
+        }
+      } catch {
+        // Fallback domain preview
+        try {
+          const parsed = new URL(url);
+          const fallback: ILinkPreview = {
+            url,
+            domain: parsed.hostname.replace(/^www\./, ''),
+          };
+          if (isMounted) setPreview(fallback);
+        } catch {}
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchPreview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [url, preview]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      window.location.href = url;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-2 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-chat-border/40 flex items-center gap-2 animate-pulse">
+        <div className="w-8 h-8 rounded-lg bg-chat-surfaceTertiary shrink-0" />
+        <div className="flex-1 space-y-1">
+          <div className="h-3 w-3/4 bg-chat-surfaceTertiary rounded" />
+          <div className="h-2 w-1/2 bg-chat-surfaceTertiary rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!preview) return null;
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`mt-2 rounded-2xl overflow-hidden border transition-all cursor-pointer select-none group shadow-2xs ${
+        isMe
+          ? 'bg-black/10 dark:bg-black/25 border-white/10 hover:bg-black/15'
+          : 'bg-black/5 dark:bg-white/5 border-chat-border/50 hover:bg-black/10 dark:hover:bg-white/10'
+      }`}
+    >
+      {/* Top Banner Image if Available */}
+      {preview.image && (
+        <div className="relative w-full h-32 bg-chat-surfaceSecondary overflow-hidden">
+          <img
+            src={preview.image}
+            alt={preview.title || 'Link Preview'}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
+      {/* Content Area */}
+      <div className="p-2.5 space-y-1">
+        {/* Domain Badge */}
+        <div className="flex items-center justify-between gap-1.5">
+          <span className="text-[10.5px] font-semibold text-brand-600 dark:text-brand-400 flex items-center gap-1 truncate">
+            <Globe className="w-3 h-3 shrink-0" />
+            <span className="truncate">{preview.domain || new URL(url).hostname}</span>
+          </span>
+          <ExternalLink className="w-3 h-3 text-chat-textMuted shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </div>
+
+        {/* Title */}
+        {preview.title && (
+          <h4 className="text-xs font-bold text-chat-textPrimary line-clamp-2 leading-snug">
+            {preview.title}
+          </h4>
+        )}
+
+        {/* Description snippet */}
+        {preview.description && (
+          <p className="text-[11px] text-chat-textSecondary line-clamp-2 leading-normal opacity-85">
+            {preview.description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};

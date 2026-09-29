@@ -11,6 +11,7 @@ import {
   FileText,
   Download,
   CornerUpLeft,
+  CornerUpRight,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
@@ -21,6 +22,7 @@ import {
 import { AnimatedCustomEmoji } from '../emoji/AnimatedCustomEmoji';
 import { EmojiBurstEffect } from '../emoji/EmojiBurstEffect';
 import { getCustomEmojiById, isCustomEmojiId } from '../../data/customEmojiCatalog';
+import { LinkPreviewCard } from './LinkPreviewCard';
 
 export type MessagePositionInGroup = 'single' | 'first' | 'middle' | 'last';
 
@@ -206,6 +208,10 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   const customEmojiData = customEmojiId ? getCustomEmojiById(customEmojiId) : null;
   const burstConfig = customEmojiData?.burst;
 
+  const URL_REGEX = /https?:\/\/[^\s<]+[^<.,:;"')\]\s]/i;
+  const extractedUrl = message.text ? message.text.match(URL_REGEX)?.[0] : null;
+  const previewUrl = message.linkPreview?.url || extractedUrl;
+
   // Compute refined corner radius based on consecutive position and sender side
   const getCornerRadiusClass = () => {
     if (isMe) {
@@ -334,6 +340,14 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </p>
         )}
 
+        {/* Forwarded Header */}
+        {message.forwardedFrom && (
+          <div className="flex items-center gap-1 text-[11px] font-medium text-chat-textSecondary italic mb-1 px-1 select-none">
+            <CornerUpRight className="w-3.5 h-3.5" />
+            <span>Forwarded{message.forwardedFrom.senderName ? ` from ${message.forwardedFrom.senderName}` : ''}</span>
+          </div>
+        )}
+
         {/* Reply Quote Banner */}
         {message.replyTo && (
           <div
@@ -374,6 +388,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           {/* Time and Status Badge */}
           <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/35 backdrop-blur-xs text-white text-[10px] font-medium tracking-tight shadow-xs ${isMe ? 'self-end' : 'self-start'}`}>
             <span>{formatMessageTime(message.createdAt)}</span>
+            {message.editedAt && <span className="text-[9px] italic opacity-80">Edited</span>}
             {renderStatusIcon()}
           </div>
         </div>
@@ -442,6 +457,16 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             : 'bg-chat-bubbleIn text-chat-bubbleInText mr-auto border border-chat-bubbleInBorder'
         }`}
       >
+        {/* Forwarded Header Banner */}
+        {message.forwardedFrom && (
+          <div className={`flex items-center gap-1 text-[11px] font-medium italic mb-1 select-none ${
+            isMe ? 'text-chat-bubbleOutText/80' : 'text-chat-bubbleInText/80'
+          }`}>
+            <CornerUpRight className="w-3.5 h-3.5" />
+            <span>Forwarded{message.forwardedFrom.senderName ? ` from ${message.forwardedFrom.senderName}` : ''}</span>
+          </div>
+        )}
+
         {/* Reply Quote Banner */}
         {message.replyTo && (
           <div
@@ -570,10 +595,20 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 select-none align-baseline">
               <span className={`text-[11px] font-normal tracking-tight ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
                 {formatMessageTime(message.createdAt)}
+                {message.editedAt && <span className="text-[10px] italic opacity-80 ml-1">Edited</span>}
               </span>
               {renderStatusIcon()}
             </span>
           </div>
+        )}
+
+        {/* Link Preview Card */}
+        {message.type === 'text' && (previewUrl || message.linkPreview) && (
+          <LinkPreviewCard
+            url={previewUrl || message.linkPreview?.url || ''}
+            initialPreview={message.linkPreview}
+            isMe={isMe}
+          />
         )}
 
         {/* Voice/Video Call Event Card */}
@@ -611,6 +646,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             <div className="flex items-center gap-1 ml-2 select-none self-end">
               <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
                 {formatMessageTime(message.createdAt)}
+                {message.editedAt && <span className="text-[9.5px] italic opacity-80 ml-1">Edited</span>}
               </span>
               {renderStatusIcon()}
             </div>
@@ -622,6 +658,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           <div className="mt-1 flex items-center justify-end gap-1 select-none">
             <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/70' : 'text-chat-bubbleInText/65'}`}>
               {formatMessageTime(message.createdAt)}
+              {message.editedAt && <span className="text-[9.5px] italic opacity-80 ml-1">Edited</span>}
             </span>
             {renderStatusIcon()}
           </div>
@@ -657,6 +694,12 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.message.clientMessageId === next.message.clientMessageId &&
     prev.message.status === next.message.status &&
     prev.message.text === next.message.text &&
+    prev.message.editedAt === next.message.editedAt &&
+    prev.message.forwardedFrom?.senderName === next.message.forwardedFrom?.senderName &&
+    prev.message.forwardedFrom?.messageId === next.message.forwardedFrom?.messageId &&
+    prev.message.linkPreview?.url === next.message.linkPreview?.url &&
+    prev.message.linkPreview?.title === next.message.linkPreview?.title &&
+    prev.message.linkPreview?.image === next.message.linkPreview?.image &&
     prev.message.senderNickname === next.message.senderNickname &&
     prev.message.type === next.message.type &&
     prev.message.customEmojiId === next.message.customEmojiId &&

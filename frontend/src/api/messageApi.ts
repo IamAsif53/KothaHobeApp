@@ -140,3 +140,33 @@ export async function markConversationReadApi(
   });
 }
 
+export async function editMessageApi(
+  messageId: string,
+  text: string
+): Promise<{ success: boolean; message?: IMessage; messageText?: string }> {
+  return apiFetch(`/messages/${messageId}/edit`, {
+    method: 'PUT',
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function forwardMessageApi(
+  messageId: string,
+  destinationConversationIds: string[]
+): Promise<{ success: boolean; forwardedMessages?: IMessage[]; message?: string }> {
+  return apiFetch(`/messages/forward`, {
+    method: 'POST',
+    body: JSON.stringify({ messageId, destinationConversationIds }),
+  });
+}
+
+export async function fetchLinkPreviewApi(
+  url: string
+): Promise<{ success: boolean; preview?: any; message?: string }> {
+  return apiFetch(`/messages/link-preview`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+

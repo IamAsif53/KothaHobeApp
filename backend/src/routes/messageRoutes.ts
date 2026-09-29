@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { getMessages, markMessageDelivered, sendDirectReply, markConversationAsRead } from '../controllers/messageController';
+import {
+  getMessages,
+  markMessageDelivered,
+  sendDirectReply,
+  markConversationAsRead,
+  editMessage,
+  forwardMessage,
+  getLinkPreview,
+} from '../controllers/messageController';
 import { uploadMedia, uploadMiddleware, streamMedia } from '../controllers/mediaController';
 import { authenticateToken } from '../middleware/authMiddleware';
 
@@ -16,5 +24,8 @@ router.post('/upload', uploadMiddleware.single('file'), uploadMedia);
 router.post('/delivered', markMessageDelivered);
 router.post('/reply-direct', sendDirectReply);
 router.post('/mark-read', markConversationAsRead);
+router.put('/:messageId/edit', editMessage);
+router.post('/forward', forwardMessage);
+router.post('/link-preview', getLinkPreview);
 
 export default router;

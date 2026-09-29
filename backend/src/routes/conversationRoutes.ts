@@ -5,6 +5,8 @@ import {
   getConversationDetails,
   clearChatHistory,
   deleteConversation,
+  archiveConversation,
+  unarchiveConversation,
 } from '../controllers/conversationController';
 import { getSharedMedia, searchInConversation } from '../controllers/mediaController';
 import { authenticateToken } from '../middleware/authMiddleware';
@@ -18,6 +20,8 @@ router.get('/', listConversations);
 router.get('/:conversationId', getConversationDetails);
 router.post('/:conversationId/clear', clearChatHistory);
 router.delete('/:conversationId', deleteConversation);
+router.put('/:conversationId/archive', archiveConversation);
+router.put('/:conversationId/unarchive', unarchiveConversation);
 router.get('/:conversationId/media', getSharedMedia);
 router.get('/:conversationId/search', searchInConversation);
 

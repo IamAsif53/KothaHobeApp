@@ -56,6 +56,20 @@ export interface IReadReceipt {
   readAt: Date;
 }
 
+export interface IForwardedFrom {
+  messageId?: Types.ObjectId | string;
+  senderName?: string;
+  originalType?: string;
+}
+
+export interface ILinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  domain?: string;
+}
+
 export interface IMessage extends Document {
   conversationId: Types.ObjectId;
   senderId: Types.ObjectId;
@@ -70,6 +84,8 @@ export interface IMessage extends Document {
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   storyContext?: IStoryContext;
+  forwardedFrom?: IForwardedFrom;
+  linkPreview?: ILinkPreview;
   reactions: IReaction[];
   readBy: IReadReceipt[];
   mentions: Types.ObjectId[];
@@ -83,6 +99,7 @@ export interface IMessage extends Document {
   createdAt: Date;
   deliveredAt?: Date;
   readAt?: Date;
+  editedAt?: Date;
 }
 
 const ReactionSchema = new Schema(
@@ -160,6 +177,26 @@ const StoryContextSchema = new Schema(
   { _id: false }
 );
 
+const ForwardedFromSchema = new Schema(
+  {
+    messageId: { type: Schema.Types.ObjectId, ref: 'Message' },
+    senderName: { type: String, default: '' },
+    originalType: { type: String, default: 'text' },
+  },
+  { _id: false }
+);
+
+const LinkPreviewSchema = new Schema(
+  {
+    url: { type: String, required: true },
+    title: { type: String, default: '' },
+    description: { type: String, default: '' },
+    image: { type: String, default: '' },
+    domain: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const MessageSchema: Schema = new Schema(
   {
     conversationId: {
@@ -230,6 +267,14 @@ const MessageSchema: Schema = new Schema(
       type: StoryContextSchema,
       default: null,
     },
+    forwardedFrom: {
+      type: ForwardedFromSchema,
+      default: null,
+    },
+    linkPreview: {
+      type: LinkPreviewSchema,
+      default: null,
+    },
     reactions: {
       type: [ReactionSchema],
       default: [],
@@ -283,6 +328,10 @@ const MessageSchema: Schema = new Schema(
     },
     readAt: {
       type: Date,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
     },
   },
   {

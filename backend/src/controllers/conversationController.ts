@@ -145,6 +145,7 @@ export const listConversations = async (
       validConversations.map(async (conv) => {
         let unreadCount = 0;
         let myMembershipStatus: 'accepted' | 'pending' | 'declined' = 'accepted';
+        const isArchived = conv.archivedBy?.some((id: any) => id.toString() === userId.toString()) || false;
 
         if (conv.isGroup) {
           const memberEntry = conv.groupMeta?.members?.find(
@@ -170,6 +171,7 @@ export const listConversations = async (
             lastMessage: conv.lastMessage,
             lastMessageAt: conv.lastMessageAt,
             unreadCount,
+            isArchived,
             createdAt: conv.createdAt,
             updatedAt: conv.updatedAt,
           };
@@ -192,6 +194,7 @@ export const listConversations = async (
             lastMessage: conv.lastMessage,
             lastMessageAt: conv.lastMessageAt,
             unreadCount,
+            isArchived,
             createdAt: conv.createdAt,
             updatedAt: conv.updatedAt,
           };
@@ -379,3 +382,96 @@ export const deleteConversation = async (
     res.status(500).json({ success: false, message: 'Failed to delete conversation' });
   }
 };
+
+export const archiveConversation = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const conversationId = req.params.conversationId as string;
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+      res.status(400).json({ success: false, message: 'Invalid conversationId' });
+      return;
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
+    });
+
+    if (!conversation) {
+      res.status(404).json({ success: false, message: 'Conversation not found or access denied' });
+      return;
+    }
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $addToSet: { archivedBy: req.user._id },
+    });
+
+    res.status(200).json({
+      success: true,
+      isArchived: true,
+      conversationId,
+      message: 'Conversation archived',
+    });
+  } catch (error) {
+    console.error('[Conversation] archive error:', error);
+    res.status(500).json({ success: false, message: 'Failed to archive conversation' });
+  }
+};
+
+export const unarchiveConversation = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const conversationId = req.params.conversationId as string;
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+      res.status(400).json({ success: false, message: 'Invalid conversationId' });
+      return;
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
+    });
+
+    if (!conversation) {
+      res.status(404).json({ success: false, message: 'Conversation not found or access denied' });
+      return;
+    }
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $pull: { archivedBy: req.user._id },
+    });
+
+    res.status(200).json({
+      success: true,
+      isArchived: false,
+      conversationId,
+      message: 'Conversation unarchived',
+    });
+  } catch (error) {
+    console.error('[Conversation] unarchive error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unarchive conversation' });
+  }
+};
+

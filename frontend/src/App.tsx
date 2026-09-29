@@ -39,6 +39,7 @@ import { SharedMediaPage } from './pages/SharedMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { BlockedUsersPage } from './pages/BlockedUsersPage';
 import { JoinGroupPage } from './pages/JoinGroupPage';
+import { ArchivedChatsPage } from './pages/ArchivedChatsPage';
 
 // Protected Route wrapper requiring user authentication
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -327,6 +328,14 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ChatListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chats/archived"
+            element={
+              <ProtectedRoute>
+                <ArchivedChatsPage />
               </ProtectedRoute>
             }
           />

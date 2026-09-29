@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchConversations, deleteConversationApi } from '../api/conversationApi';
+import { fetchConversations, deleteConversationApi, archiveConversationApi, unarchiveConversationApi } from '../api/conversationApi';
 import { leaveGroupApi, deleteGroupApi } from '../api/groupApi';
 import { blockUserApi } from '../api/userApi';
 import { IConversation, MessageStatus } from '../types';
@@ -25,6 +25,8 @@ import {
   X,
   Info,
   LogOut,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 
 export const ChatListPage: React.FC = () => {
@@ -241,16 +243,16 @@ export const ChatListPage: React.FC = () => {
       const gName = c.groupMeta?.name || 'Group Chat';
       return gName.toLowerCase().includes(searchQuery.toLowerCase());
     }
-    const name = c.recipient?.displayName || c.recipient?.username || '';
-    return name.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const archivedCount = conversations.filter((c) => c.isArchived).length;
 
   // Separate pending group invitations from normal conversations
   const pendingInvites = filteredConversations.filter(
     (c) => c.isGroup && c.myMembershipStatus === 'pending'
   );
   const activeConversations = filteredConversations.filter(
-    (c) => !c.isGroup || c.myMembershipStatus !== 'pending'
+    (c) => (!c.isGroup || c.myMembershipStatus !== 'pending') && (!c.isArchived || searchQuery.trim().length > 0)
   );
 
   const renderStatusCheck = (status?: string) => {
@@ -260,6 +262,41 @@ export const ChatListPage: React.FC = () => {
     if (status === 'delivered') return <CheckCheck className="w-3.5 h-3.5 text-chat-textMuted inline mr-1" />;
     if (status === 'read') return <CheckCheck className="w-3.5 h-3.5 text-sky-400 inline mr-1" />;
     return null;
+  };
+
+  // Archive / Unarchive Handler
+  const handleArchiveChat = async (conv: IConversation) => {
+    try {
+      const res = await archiveConversationApi(conv._id);
+      if (res.success) {
+        const updated = conversations.map((c) => (c._id === conv._id ? { ...c, isArchived: true } : c));
+        setConversations(updated);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        setSelectedConvForAction(null);
+        showActionToast('Chat archived');
+      } else {
+        showActionToast(res.message || 'Failed to archive chat');
+      }
+    } catch {
+      showActionToast('Network error archiving chat');
+    }
+  };
+
+  const handleUnarchiveChat = async (conv: IConversation) => {
+    try {
+      const res = await unarchiveConversationApi(conv._id);
+      if (res.success) {
+        const updated = conversations.map((c) => (c._id === conv._id ? { ...c, isArchived: false } : c));
+        setConversations(updated);
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(updated));
+        setSelectedConvForAction(null);
+        showActionToast('Chat unarchived');
+      } else {
+        showActionToast(res.message || 'Failed to unarchive chat');
+      }
+    } catch {
+      showActionToast('Network error unarchiving chat');
+    }
   };
 
   // 1. Handle Delete Chat
@@ -399,6 +436,28 @@ export const ChatListPage: React.FC = () => {
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto divide-y divide-chat-divider">
+        {/* Archived Chats Header Banner */}
+        {archivedCount > 0 && !searchQuery && (
+          <button
+            type="button"
+            onClick={() => navigate('/chats/archived')}
+            className="w-full flex items-center justify-between px-4 py-3 bg-chat-surfaceSecondary/50 hover:bg-chat-surfaceSecondary border-b border-chat-divider transition-colors text-left select-none group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-brand-500/15 text-brand-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Archive className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-chat-textPrimary block">Archived Chats</span>
+                <span className="text-[10.5px] text-chat-textMuted block">Tap to view hidden conversations</span>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-brand-500 bg-brand-500/10 px-2 py-0.5 rounded-full">
+              {archivedCount}
+            </span>
+          </button>
+        )}
+
         {/* Pending Group Invites Section */}
         {pendingInvites.length > 0 && (
           <div className="p-3 bg-emerald-500/10 border-b border-emerald-500/20 space-y-2">
@@ -501,6 +560,11 @@ export const ChatListPage: React.FC = () => {
                         {isGroup && (
                           <span className="text-[10px] text-brand-500 font-medium px-1.5 py-0.2 rounded bg-brand-soft border border-brand-500/20 shrink-0">
                             {conv.groupMeta?.members?.length || 1}
+                          </span>
+                        )}
+                        {conv.isArchived && (
+                          <span className="text-[9.5px] text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/25 shrink-0">
+                            Archived
                           </span>
                         )}
                       </div>
@@ -626,6 +690,35 @@ export const ChatListPage: React.FC = () => {
                   </div>
                 </button>
               )}
+
+              {/* Archive / Unarchive Chat */}
+              <button
+                type="button"
+                onClick={() =>
+                  selectedConvForAction.isArchived
+                    ? handleUnarchiveChat(selectedConvForAction)
+                    : handleArchiveChat(selectedConvForAction)
+                }
+                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary active:scale-[0.98] text-chat-textPrimary text-sm font-semibold transition-all text-left"
+              >
+                <div className="w-8 h-8 rounded-xl bg-brand-soft flex items-center justify-center text-brand-500">
+                  {selectedConvForAction.isArchived ? (
+                    <ArchiveRestore className="w-4 h-4" />
+                  ) : (
+                    <Archive className="w-4 h-4" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-chat-textPrimary">
+                    {selectedConvForAction.isArchived ? 'Unarchive Chat' : 'Archive Chat'}
+                  </div>
+                  <div className="text-[11px] text-chat-textMuted font-normal">
+                    {selectedConvForAction.isArchived
+                      ? 'Move back to main chat list'
+                      : 'Hide from main chat list'}
+                  </div>
+                </div>
+              </button>
 
               {/* Delete Chat History */}
               <button

@@ -104,6 +104,7 @@ export interface IConversation extends Document {
   lastMessage?: ILastMessage;
   lastMessageAt: Date;
   deletedFor: Types.ObjectId[];
+  archivedBy: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -267,6 +268,13 @@ const ConversationSchema: Schema = new Schema(
         default: [],
       },
     ],
+    archivedBy: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: [],
+      },
+    ],
   },
   {
     timestamps: true,
@@ -285,6 +293,7 @@ ConversationSchema.pre<IConversation>('validate', function (next) {
 ConversationSchema.index({ participants: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });
 ConversationSchema.index({ 'groupMeta.members.user': 1 });
+ConversationSchema.index({ archivedBy: 1 });
 
 export function generateParticipantsKey(userAId: string, userBId: string): string {
   const sorted = [userAId.toString(), userBId.toString()].sort();

@@ -579,14 +579,8 @@ export function setupSocketIO(io: SocketIOServer): void {
       }
     });
 
-    // Typing Indicators (Supports Direct and Group Chat Room Broadcast)
+    // Typing Indicators (Direct 1-on-1 Chat Room Broadcast)
     socket.on('typing:start', (data: { conversationId: string; receiverId?: string }) => {
-      if (data?.conversationId) {
-        socket.to(`conv:${data.conversationId}`).emit('typing:start', {
-          conversationId: data.conversationId,
-          userId,
-        });
-      }
       if (data?.receiverId) {
         io.to(`user:${data.receiverId}`).emit('typing:start', {
           conversationId: data.conversationId,
@@ -596,17 +590,54 @@ export function setupSocketIO(io: SocketIOServer): void {
     });
 
     socket.on('typing:stop', (data: { conversationId: string; receiverId?: string }) => {
-      if (data?.conversationId) {
-        socket.to(`conv:${data.conversationId}`).emit('typing:stop', {
-          conversationId: data.conversationId,
-          userId,
-        });
-      }
       if (data?.receiverId) {
         io.to(`user:${data.receiverId}`).emit('typing:stop', {
           conversationId: data.conversationId,
           userId,
         });
+      }
+    });
+
+    // Group-Only Typing Indicators (Aggregated with Name Attribution)
+    socket.on('group:typing:start', async (data: { conversationId: string }) => {
+      try {
+        if (!data?.conversationId) return;
+        const conv = await Conversation.findById(data.conversationId).select('isGroup groupMeta participants');
+        if (!conv || !conv.isGroup) return;
+
+        let displayName = '';
+        if (conv.groupMeta?.nicknames) {
+          const nicks = conv.groupMeta.nicknames;
+          const nick = nicks instanceof Map ? nicks.get(userId) : (nicks as any)[userId];
+          if (nick) displayName = nick;
+        }
+
+        if (!displayName) {
+          const u = await User.findById(userId).select('displayName username');
+          displayName = u?.displayName || u?.username || 'Member';
+        }
+
+        socket.to(`conv:${data.conversationId}`).emit('group:typing:update', {
+          conversationId: data.conversationId,
+          userId,
+          displayName,
+          isTyping: true,
+        });
+      } catch (err) {
+        console.warn('[Socket] group:typing:start error:', err);
+      }
+    });
+
+    socket.on('group:typing:stop', async (data: { conversationId: string }) => {
+      try {
+        if (!data?.conversationId) return;
+        socket.to(`conv:${data.conversationId}`).emit('group:typing:update', {
+          conversationId: data.conversationId,
+          userId,
+          isTyping: false,
+        });
+      } catch (err) {
+        console.warn('[Socket] group:typing:stop error:', err);
       }
     });
 

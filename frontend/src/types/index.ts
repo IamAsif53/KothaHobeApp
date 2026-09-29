@@ -109,6 +109,20 @@ export interface IStoryViewer {
   reaction?: string | null;
 }
 
+export interface IForwardedFrom {
+  messageId?: string;
+  senderName?: string;
+  originalType?: string;
+}
+
+export interface ILinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  domain?: string;
+}
+
 export interface IMessage {
   _id: string;
   conversationId: string;
@@ -124,6 +138,8 @@ export interface IMessage {
   callDetails?: ICallDetails;
   replyTo?: IReplyTo;
   storyContext?: IStoryContext;
+  forwardedFrom?: IForwardedFrom;
+  linkPreview?: ILinkPreview;
   reactions?: IReaction[];
   readBy?: string[];
   mentions?: string[];
@@ -137,6 +153,7 @@ export interface IMessage {
   createdAt: string;
   deliveredAt?: string;
   readAt?: string;
+  editedAt?: string;
 }
 
 export type GroupRole = 'creator' | 'admin' | 'moderator' | 'member';
@@ -245,6 +262,8 @@ export interface IConversation {
   };
   lastMessageAt: string;
   unreadCount?: number;
+  isArchived?: boolean;
+  archivedBy?: string[];
   createdAt?: string;
   updatedAt?: string;
 }

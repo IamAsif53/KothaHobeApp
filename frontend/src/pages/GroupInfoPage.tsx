@@ -597,26 +597,6 @@ export const GroupInfoPage: React.FC = () => {
     }
   };
 
-  const handleToggleApproval = async () => {
-    if (!conversationId || !isAdmin) return;
-    const nextVal = !meta.requiresApproval;
-    try {
-      setGroup((prev) => {
-        if (!prev || !prev.groupMeta) return prev;
-        const updated = {
-          ...prev,
-          groupMeta: { ...prev.groupMeta, requiresApproval: nextVal },
-        };
-        localStorage.setItem(`kotha_hobe_group_cache_${conversationId}`, JSON.stringify(updated));
-        return updated;
-      });
-      await updateGroupPrivacyApi(conversationId, nextVal);
-    } catch (err) {
-      console.error('[GroupInfo] Error toggling privacy:', err);
-      loadGroupDetails(true);
-    }
-  };
-
   const disappearingLabel = useMemo(() => {
     const sec = meta.disappearingMode || 0;
     if (sec === 86400) return '24 Hours';
@@ -784,14 +764,6 @@ export const GroupInfoPage: React.FC = () => {
             >
               <Video className="w-4 h-4" />
               <span>Video</span>
-            </button>
-
-            <button
-              onClick={() => setIsInviteLinkModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs transition-all active:scale-95 shadow-md shadow-brand-500/20"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Invite</span>
             </button>
           </div>
         </div>
@@ -1231,45 +1203,6 @@ export const GroupInfoPage: React.FC = () => {
                   Admin Administration
                 </p>
 
-                {/* Require Admin Approval Setting */}
-                <div
-                  onClick={handleToggleApproval}
-                  style={{ backgroundColor: themeConfig.card }}
-                  className="p-3.5 rounded-2xl border border-chat-border hover:border-brand-500/30 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] select-none"
-                >
-                  <div className="flex items-center gap-3 min-w-0 pr-3">
-                    <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${meta.requiresApproval ? 'bg-amber-500/20 text-amber-500' : 'bg-chat-panel text-chat-textMuted'}`}>
-                      <ShieldAlert className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-chat-textPrimary">Require Admin Approval</h4>
-                      <p className="text-[11px] text-chat-textMuted">
-                        {meta.requiresApproval
-                          ? 'New members must be approved by an admin'
-                          : 'Anyone with invite link joins immediately'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Toggle Switch */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleApproval();
-                    }}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      meta.requiresApproval ? 'bg-amber-500' : 'bg-chat-border'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        meta.requiresApproval ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
                 {/* Group Permissions */}
                 <div
                   onClick={() => setIsPermissionsModalOpen(true)}
@@ -1282,7 +1215,7 @@ export const GroupInfoPage: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-chat-textPrimary">Group Permissions</h4>
-                      <p className="text-[11px] text-chat-textMuted">Posting, invite & editing rules</p>
+                      <p className="text-[11px] text-chat-textMuted">Posting, invite, admin approval & editing rules</p>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-chat-textMuted" />

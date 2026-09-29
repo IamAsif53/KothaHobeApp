@@ -1,10 +1,10 @@
 {
-  "versionCode": 90,
-  "versionName": "1.1.45",
+  "versionCode": 91,
+  "versionName": "1.1.46",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "f7ee3f568e8e773b169b1e2d8d1a06756440c4901bee29c4c2ccdd1a6ef428a0",
+  "sha256": "d92525cf3fe9c502351433e46908c13026c796ed2f008892d575cbc5aefe1946",
   "releaseNotes": [
-    "Release v1.1.45 (Build 90)",
+    "Release v1.1.46 (Build 91)",
     "🔗 Canonical Group Invite Links & Deep Linking: Share valid cloud URLs (kotha-hobe-api.onrender.com/join/* and kothahobe://join/*) that launch the app directly into group preview/join",
     "📱 Instant Share Link Contact Picker: Select any existing contact or chat to send the invite link directly",
     "📷 High-Resolution QR Code Scanning: Scan QR code with any camera or scanner to instantly open and join the group",

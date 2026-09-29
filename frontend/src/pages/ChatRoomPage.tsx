@@ -1330,7 +1330,7 @@ export const ChatRoomPage: React.FC = () => {
                 size="sm"
               />
               {isGroup && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-slate-900 flex items-center justify-center text-white">
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-chat-panel flex items-center justify-center text-white">
                   <Users className="w-2.5 h-2.5" />
                 </div>
               )}

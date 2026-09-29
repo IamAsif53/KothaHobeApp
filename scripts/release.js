@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "⚡ Delivery Watchdog & HTTP Fallback: Automatically catches stuck 'sending' messages with 4.5s HTTP fallback & one-tap Retry CTA",
-      "🗑️ Instant Stuck Message Deletion: Immediate local purge and outbox cancellation for sending, failed, and temporary messages",
-      "📩 Universal 'Mark as read' Sync: Notification & in-app mark-as-read syncs in real-time across laptop/web and Android app unread badges",
-      "📱 Production Conversation Notifications: Android MessagingStyle with inline reply and avatar grouping",
-      "🔗 Production Link Previews: Universal clickable links with native app intent routing (Facebook, YouTube, Browser)"
+      "🎨 Light Theme Redesign (Soft Neutral): Clean #F5F7F6 surface, mint outgoing bubbles, high contrast typography & WCAG AA sender colors",
+      "🖼️ Intrinsic Media Sizing: Tight image bubbles without bloated empty padding, floating frosted timestamp & read receipts",
+      "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA",
+      "📩 Universal Read Receipts & Unread Sync: Seamless sync between Web/Desktop and Android with real-time mark-as-read",
+      "📱 Native Conversation Notifications: MessagingStyle notifications with inline reply & grouped avatars"
     ],
     mandatory: false
   };

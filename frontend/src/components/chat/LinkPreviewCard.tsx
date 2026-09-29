@@ -99,9 +99,9 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
 
   if (loading) {
     return (
-      <div className="mt-2 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-chat-border/40 flex items-center gap-2 animate-pulse">
+      <div className="mt-2 p-2.5 rounded-xl bg-chat-surfaceSecondary border border-chat-border/60 flex items-center gap-2 animate-pulse">
         <div className="w-8 h-8 rounded-lg bg-chat-surfaceTertiary shrink-0" />
-        <div className="flex-1 space-y-1">
+        <div className="flex-1 space-y-1.5">
           <div className="h-3 w-3/4 bg-chat-surfaceTertiary rounded" />
           <div className="h-2 w-1/2 bg-chat-surfaceTertiary rounded" />
         </div>
@@ -118,13 +118,13 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       onClick={handleClick}
       className={`mt-2 rounded-2xl overflow-hidden border transition-all cursor-pointer select-none group shadow-2xs ${
         isMe
-          ? 'bg-black/10 dark:bg-black/25 border-white/10 hover:bg-black/15'
-          : 'bg-black/5 dark:bg-white/5 border-chat-border/50 hover:bg-black/10 dark:hover:bg-white/10'
+          ? 'bg-black/8 dark:bg-black/25 border-black/10 dark:border-white/10 hover:bg-black/12'
+          : 'bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary border-chat-border/70'
       }`}
     >
       {/* Top Banner Image if Available */}
       {preview.image && (
-        <div className="relative w-full h-32 bg-chat-surfaceSecondary overflow-hidden">
+        <div className="relative w-full h-32 bg-chat-surfaceTertiary overflow-hidden">
           <img
             src={preview.image}
             alt={displayTitle || 'Link Preview'}
@@ -141,11 +141,11 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       <div className="p-2.5 space-y-1">
         {/* Domain Badge */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className="text-[10.5px] font-semibold text-brand-600 dark:text-brand-400 flex items-center gap-1 truncate">
+          <span className="text-[10.5px] font-bold text-emerald-700 dark:text-brand-400 flex items-center gap-1 truncate">
             <Globe className="w-3 h-3 shrink-0" />
             <span className="truncate">{preview.domain || new URL(url).hostname}</span>
           </span>
-          <ExternalLink className="w-3 h-3 text-chat-textMuted shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+          <ExternalLink className="w-3 h-3 text-chat-textMuted shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
         </div>
 
         {/* Title */}
@@ -157,7 +157,7 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
 
         {/* Description snippet */}
         {preview.description && (
-          <p className="text-[11px] text-chat-textSecondary line-clamp-2 leading-normal opacity-85">
+          <p className="text-[11px] text-chat-textSecondary line-clamp-2 leading-normal">
             {preview.description}
           </p>
         )}

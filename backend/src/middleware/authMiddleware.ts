@@ -57,6 +57,23 @@ export const authenticateToken = async (
       return;
     }
 
+    // If token has a sessionId, verify that the session has not been revoked
+    if (decoded.sessionId && user.sessions && user.sessions.length > 0) {
+      const activeSession = user.sessions.find((s) => s.sessionId === decoded.sessionId);
+      if (!activeSession) {
+        res.status(401).json({ success: false, message: 'Session has been revoked. Please sign in again.' });
+        return;
+      }
+
+      // Update session lastActiveAt if more than 5 minutes since last update
+      if (Date.now() - new Date(activeSession.lastActiveAt).getTime() > 5 * 60 * 1000) {
+        User.updateOne(
+          { _id: user._id, 'sessions.sessionId': decoded.sessionId },
+          { $set: { 'sessions.$.lastActiveAt': new Date() } }
+        ).catch(() => {});
+      }
+    }
+
     req.user = user;
     req.tokenPayload = decoded;
     next();

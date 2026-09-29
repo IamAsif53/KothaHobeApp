@@ -11,6 +11,7 @@ import { isValidCustomEmojiId } from '../utils/customEmojiCatalog';
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   phoneNumber?: string;
+  sessionId?: string;
 }
 
 let globalIO: SocketIOServer | null = null;
@@ -38,7 +39,19 @@ export function setupSocketIO(io: SocketIOServer): void {
         return next(new Error('Invalid or expired token'));
       }
 
+      // If sessionId is present in token, verify it's still active in DB
+      if (decoded.sessionId) {
+        const user = await User.findById(decoded.userId).select('sessions');
+        if (user && user.sessions && user.sessions.length > 0) {
+          const hasSession = user.sessions.some((s) => s.sessionId === decoded.sessionId);
+          if (!hasSession) {
+            return next(new Error('Session has been revoked'));
+          }
+        }
+      }
+
       socket.userId = decoded.userId;
+      socket.sessionId = decoded.sessionId;
       next();
     } catch (err) {
       next(new Error('Authentication failed'));
@@ -59,12 +72,17 @@ export function setupSocketIO(io: SocketIOServer): void {
 
     // Update user online status & mark all pending messages sent to this user as DELIVERED
     try {
-      await User.findByIdAndUpdate(userId, {
-        isOnline: true,
-        lastSeen: new Date(),
-      });
+      const currentUserDoc = await User.findById(userId).select('privacySettings');
+      const allowPresence = currentUserDoc?.privacySettings?.onlinePresence !== false;
 
-      socket.broadcast.emit('user:online', { userId, isOnline: true });
+      if (allowPresence) {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: true,
+          lastSeen: new Date(),
+        });
+
+        socket.broadcast.emit('user:online', { userId, isOnline: true });
+      }
 
       // Find all pending 'sent' messages where this connected user is the recipient
       const pendingMessages = await Message.find({
@@ -522,6 +540,9 @@ export function setupSocketIO(io: SocketIOServer): void {
         const conv = await Conversation.findById(conversationId);
         if (!conv) return;
 
+        const senderUser = await User.findById(userId).select('privacySettings');
+        const sendReceipts = senderUser?.privacySettings?.readReceipts !== false;
+
         const now = new Date();
 
         if (conv.isGroup) {
@@ -537,44 +558,48 @@ export function setupSocketIO(io: SocketIOServer): void {
             }
           );
 
-          io.to(`conv:${conversationId}`).emit('message:read', {
-            conversationId,
-            readBy: userId,
-            readAt: now,
-          });
+          if (sendReceipts) {
+            io.to(`conv:${conversationId}`).emit('message:read', {
+              conversationId,
+              readBy: userId,
+              readAt: now,
+            });
+          }
           io.to(`user:${userId}`).emit('message:read', {
             conversationId,
             readBy: userId,
             readAt: now,
           });
         } else {
-          // In 1-to-1 Chat: update status to 'read'
-          await Message.updateMany(
-            {
-              conversationId,
-              receiverId: userId,
-              status: { $in: ['sent', 'delivered'] },
-            },
-            {
-              $set: { status: 'read', readAt: now },
+          // In 1-to-1 Chat: update status to 'read' if read receipts enabled
+          if (sendReceipts) {
+            await Message.updateMany(
+              {
+                conversationId,
+                receiverId: userId,
+                status: { $in: ['sent', 'delivered'] },
+              },
+              {
+                $set: { status: 'read', readAt: now },
+              }
+            );
+
+            await Conversation.updateOne(
+              { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
+              { $set: { 'lastMessage.status': 'read' } }
+            );
+
+            const otherParticipantId = conv.participants.find(
+              (p) => p.toString() !== userId
+            );
+
+            if (otherParticipantId) {
+              io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+                conversationId,
+                readBy: userId,
+                readAt: now,
+              });
             }
-          );
-
-          await Conversation.updateOne(
-            { _id: conversationId, 'lastMessage.senderId': { $ne: userId } },
-            { $set: { 'lastMessage.status': 'read' } }
-          );
-
-          const otherParticipantId = conv.participants.find(
-            (p) => p.toString() !== userId
-          );
-
-          if (otherParticipantId) {
-            io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
-              conversationId,
-              readBy: userId,
-              readAt: now,
-            });
           }
           io.to(`user:${userId}`).emit('message:read', {
             conversationId,
@@ -588,12 +613,18 @@ export function setupSocketIO(io: SocketIOServer): void {
     });
 
     // Typing Indicators (Direct 1-on-1 Chat Room Broadcast)
-    socket.on('typing:start', (data: { conversationId: string; receiverId?: string }) => {
-      if (data?.receiverId) {
+    socket.on('typing:start', async (data: { conversationId: string; receiverId?: string }) => {
+      try {
+        if (!data?.receiverId) return;
+        const senderUser = await User.findById(userId).select('privacySettings');
+        if (senderUser?.privacySettings?.typingIndicators === false) return;
+
         io.to(`user:${data.receiverId}`).emit('typing:start', {
           conversationId: data.conversationId,
           userId,
         });
+      } catch (err) {
+        console.warn('[Socket] typing:start error:', err);
       }
     });
 
@@ -610,6 +641,9 @@ export function setupSocketIO(io: SocketIOServer): void {
     socket.on('group:typing:start', async (data: { conversationId: string }) => {
       try {
         if (!data?.conversationId) return;
+        const senderUser = await User.findById(userId).select('privacySettings displayName username');
+        if (senderUser?.privacySettings?.typingIndicators === false) return;
+
         const conv = await Conversation.findById(data.conversationId).select('isGroup groupMeta participants');
         if (!conv || !conv.isGroup) return;
 
@@ -621,8 +655,7 @@ export function setupSocketIO(io: SocketIOServer): void {
         }
 
         if (!displayName) {
-          const u = await User.findById(userId).select('displayName username');
-          displayName = u?.displayName || u?.username || 'Member';
+          displayName = senderUser?.displayName || senderUser?.username || 'Member';
         }
 
         socket.to(`conv:${data.conversationId}`).emit('group:typing:update', {
@@ -667,13 +700,23 @@ export function setupSocketIO(io: SocketIOServer): void {
       try {
         const remainingSockets = await io.in(`user:${userId}`).fetchSockets();
         if (remainingSockets.length === 0) {
+          const userDoc = await User.findById(userId).select('privacySettings');
+          const allowPresence = userDoc?.privacySettings?.onlinePresence !== false;
+          const lastSeenPrivacy = userDoc?.privacySettings?.lastSeen || 'everyone';
+
           const lastSeen = new Date();
           await User.findByIdAndUpdate(userId, {
             isOnline: false,
             lastSeen,
           });
 
-          socket.broadcast.emit('user:offline', { userId, isOnline: false, lastSeen });
+          if (allowPresence) {
+            socket.broadcast.emit('user:offline', {
+              userId,
+              isOnline: false,
+              lastSeen: lastSeenPrivacy !== 'nobody' ? lastSeen : undefined,
+            });
+          }
         }
       } catch (err) {
         // Ignore during teardown

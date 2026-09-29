@@ -7,6 +7,12 @@ import {
   blockUser,
   unblockUser,
   getBlockedUsers,
+  getPrivacySettings,
+  updatePrivacySettings,
+  getUserSessions,
+  revokeSession,
+  revokeOtherSessions,
+  getConnectionSecurity,
 } from '../controllers/userController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { searchRateLimiter } from '../middleware/rateLimiter';
@@ -24,5 +30,13 @@ router.post('/push-token', registerPushToken);
 router.post('/block', blockUser);
 router.post('/unblock', unblockUser);
 router.get('/blocked', getBlockedUsers);
+
+// Privacy & Security endpoints
+router.get('/privacy', getPrivacySettings);
+router.put('/privacy', updatePrivacySettings);
+router.get('/sessions', getUserSessions);
+router.delete('/sessions/:sessionId', revokeSession);
+router.post('/sessions/revoke-others', revokeOtherSessions);
+router.get('/security/status', getConnectionSecurity);
 
 export default router;

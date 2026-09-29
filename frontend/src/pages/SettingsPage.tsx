@@ -35,6 +35,7 @@ import { CURRENT_VERSION } from '../config/version';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { modalStack } from '../utils/modalStack';
+import { PrivacySecurityModal } from '../components/settings/PrivacySecurityModal';
 
 export const SettingsPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -313,7 +314,7 @@ export const SettingsPage: React.FC = () => {
             </div>
             <div className="flex-1">
               <div className="text-sm font-semibold text-chat-textPrimary">Privacy & Security</div>
-              <div className="text-xs text-chat-textSecondary">Read receipts, online presence & encryption</div>
+              <div className="text-xs text-chat-textSecondary">Read receipts, online presence, sessions & security</div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />
           </div>
@@ -570,82 +571,7 @@ export const SettingsPage: React.FC = () => {
 
       {/* 2. Privacy & Security Modal */}
       {activeModal === 'privacy' && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div
-            style={{ backgroundColor: themeConfig.panel }}
-            className="border border-chat-border w-full max-w-sm rounded-3xl p-5 shadow-2xl animate-scale-up space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-chat-divider pb-3">
-              <div className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-base font-bold text-chat-textPrimary">Privacy & Security</h3>
-              </div>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="p-1 rounded-full text-chat-textMuted hover:text-chat-textPrimary"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-chat-surfaceSecondary border border-chat-border">
-                <div>
-                  <div className="text-sm font-medium text-chat-textPrimary">Read Receipts</div>
-                  <div className="text-[11px] text-chat-textSecondary">Show blue double checkmarks</div>
-                </div>
-                <button
-                  onClick={handleToggleReadReceipts}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    readReceipts ? 'bg-brand-500' : 'bg-chat-surfaceTertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      readReceipts ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-chat-surfaceSecondary border border-chat-border">
-                <div>
-                  <div className="text-sm font-medium text-chat-textPrimary">Online Presence</div>
-                  <div className="text-[11px] text-chat-textSecondary">Show online dot & last seen</div>
-                </div>
-                <button
-                  onClick={handleToggleOnlinePresence}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    onlinePresence ? 'bg-brand-500' : 'bg-chat-surfaceTertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      onlinePresence ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="p-3 bg-brand-soft border border-brand-500/20 rounded-2xl">
-                <div className="flex items-center gap-2 text-brand-500 font-semibold text-xs mb-1">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>256-Bit Socket Encryption Active</span>
-                </div>
-                <p className="text-[11px] text-chat-textSecondary leading-relaxed">
-                  Your chat stream is protected with direct WebSocket transport layer security.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setActiveModal(null)}
-              className="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-2.5 rounded-xl transition-all"
-            >
-              Done
-            </button>
-          </div>
-        </div>
+        <PrivacySecurityModal onClose={() => setActiveModal(null)} />
       )}
 
       {/* 3. Chat Theme & Wallpaper Modal */}

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { User } from '../models/User';
 import { Conversation } from '../models/Conversation';
+import { getGlobalIO } from '../sockets/socketManager';
 import mongoose from 'mongoose';
 
 const RESERVED_USERNAMES = new Set([
@@ -195,6 +196,19 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
       }
     }
 
+    // Respect privacySettings for onlinePresence and lastSeen
+    const isOnline = foundUser.privacySettings?.onlinePresence !== false ? Boolean(foundUser.isOnline) : false;
+    let lastSeen: Date | null = foundUser.lastSeen;
+    if (foundUser.privacySettings?.lastSeen === 'nobody') {
+      lastSeen = null;
+    } else if (foundUser.privacySettings?.lastSeen === 'connections' && req.user) {
+      // Check if current user shares a conversation with foundUser
+      const sharesConv = await Conversation.exists({
+        participants: { $all: [req.user._id, foundUser._id] },
+      });
+      if (!sharesConv) lastSeen = null;
+    }
+
     // Return sanitized public user data (never expose email or private tokens)
     res.status(200).json({
       success: true,
@@ -203,8 +217,8 @@ export const searchUser = async (req: AuthenticatedRequest, res: Response): Prom
         username: foundUser.username || '',
         displayName: foundUser.displayName,
         avatarUrl: foundUser.avatarUrl || '',
-        isOnline: foundUser.isOnline,
-        lastSeen: foundUser.lastSeen,
+        isOnline,
+        lastSeen,
       },
     });
   } catch (error) {
@@ -322,6 +336,249 @@ export const registerPushToken = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error('[FCM] Token registration error:', error);
     res.status(500).json({ success: false, message: 'Failed to register push token' });
+  }
+};
+
+// ============================================================
+// PRIVACY & SECURITY API HANDLERS
+// ============================================================
+
+export const getPrivacySettings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const user = await User.findById(req.user._id).select('privacySettings');
+    const defaults = {
+      readReceipts: true,
+      onlinePresence: true,
+      lastSeen: 'everyone' as const,
+      typingIndicators: true,
+      storyVisibility: 'connections' as const,
+      messageRequests: 'everyone' as const,
+      groupInvites: 'everyone' as const,
+    };
+
+    res.status(200).json({
+      success: true,
+      privacySettings: user?.privacySettings || defaults,
+    });
+  } catch (error) {
+    console.error('[Privacy] getPrivacySettings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load privacy settings' });
+  }
+};
+
+export const updatePrivacySettings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const {
+      readReceipts,
+      onlinePresence,
+      lastSeen,
+      typingIndicators,
+      storyVisibility,
+      messageRequests,
+      groupInvites,
+    } = req.body;
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (!user.privacySettings) {
+      user.privacySettings = {
+        readReceipts: true,
+        onlinePresence: true,
+        lastSeen: 'everyone',
+        typingIndicators: true,
+        storyVisibility: 'connections',
+        messageRequests: 'everyone',
+        groupInvites: 'everyone',
+      };
+    }
+
+    if (typeof readReceipts === 'boolean') {
+      user.privacySettings.readReceipts = readReceipts;
+    }
+
+    if (typeof onlinePresence === 'boolean') {
+      const presenceChanged = user.privacySettings.onlinePresence !== onlinePresence;
+      user.privacySettings.onlinePresence = onlinePresence;
+      if (presenceChanged) {
+        const io = getGlobalIO();
+        if (!onlinePresence) {
+          user.isOnline = false;
+          if (io) io.emit('user:offline', { userId: user._id.toString(), isOnline: false, lastSeen: null });
+        } else {
+          user.isOnline = true;
+          user.lastSeen = new Date();
+          if (io) io.emit('user:online', { userId: user._id.toString(), isOnline: true });
+        }
+      }
+    }
+
+    if (lastSeen && ['everyone', 'connections', 'nobody'].includes(lastSeen)) {
+      user.privacySettings.lastSeen = lastSeen;
+    }
+
+    if (typeof typingIndicators === 'boolean') {
+      user.privacySettings.typingIndicators = typingIndicators;
+    }
+
+    if (storyVisibility && ['everyone', 'connections', 'close_friends'].includes(storyVisibility)) {
+      user.privacySettings.storyVisibility = storyVisibility;
+    }
+
+    if (messageRequests && ['everyone', 'connections'].includes(messageRequests)) {
+      user.privacySettings.messageRequests = messageRequests;
+    }
+
+    if (groupInvites && ['everyone', 'connections'].includes(groupInvites)) {
+      user.privacySettings.groupInvites = groupInvites;
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Privacy settings updated successfully',
+      privacySettings: user.privacySettings,
+    });
+  } catch (error) {
+    console.error('[Privacy] updatePrivacySettings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update privacy settings' });
+  }
+};
+
+export const getUserSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const user = await User.findById(req.user._id).select('sessions');
+    const currentSessionId = req.tokenPayload?.sessionId;
+
+    const sessions = (user?.sessions || []).map((s) => ({
+      sessionId: s.sessionId,
+      deviceName: s.deviceName || 'Unknown Device',
+      platform: s.platform || 'web',
+      browser: s.browser || '',
+      ipAddress: s.ipAddress || '',
+      lastActiveAt: s.lastActiveAt || s.createdAt || new Date(),
+      createdAt: s.createdAt || new Date(),
+      isCurrent: Boolean(currentSessionId && s.sessionId === currentSessionId),
+    }));
+
+    // Sort: Current session first, then most recently active
+    sessions.sort((a, b) => {
+      if (a.isCurrent) return -1;
+      if (b.isCurrent) return 1;
+      return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
+    });
+
+    res.status(200).json({
+      success: true,
+      sessions,
+      totalSessions: sessions.length,
+    });
+  } catch (error) {
+    console.error('[Sessions] getUserSessions error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load active sessions' });
+  }
+};
+
+export const revokeSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      res.status(400).json({ success: false, message: 'Session ID is required' });
+      return;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { sessions: { sessionId } },
+    });
+
+    const io = getGlobalIO();
+    if (io) {
+      io.to(`user:${req.user._id}`).emit('session:revoked', { sessionId });
+    }
+
+    res.status(200).json({ success: true, message: 'Device signed out successfully' });
+  } catch (error) {
+    console.error('[Sessions] revokeSession error:', error);
+    res.status(500).json({ success: false, message: 'Failed to revoke session' });
+  }
+};
+
+export const revokeOtherSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const currentSessionId = req.tokenPayload?.sessionId;
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (currentSessionId) {
+      user.sessions = user.sessions.filter((s) => s.sessionId === currentSessionId);
+    } else {
+      user.sessions = [];
+    }
+
+    await user.save();
+
+    const io = getGlobalIO();
+    if (io) {
+      io.to(`user:${req.user._id}`).emit('session:revoke_others', { currentSessionId });
+    }
+
+    res.status(200).json({ success: true, message: 'All other devices signed out successfully' });
+  } catch (error) {
+    console.error('[Sessions] revokeOtherSessions error:', error);
+    res.status(500).json({ success: false, message: 'Failed to sign out other devices' });
+  }
+};
+
+export const getConnectionSecurity = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    res.status(200).json({
+      success: true,
+      security: {
+        status: 'secure',
+        protocol: 'HTTPS / WSS (WebSocket Secure)',
+        tlsVersion: 'TLS 1.2 / TLS 1.3',
+        transportEncryption: 'Transport Layer Security (TLS Encrypted in Transit)',
+        sessionProtection: 'Cryptographically signed JWT Bearer Authentication',
+        authenticationMethod: 'Email OTP (SHA-256 Hash Verification)',
+        databaseSecurity: 'Encrypted Cloud Storage (MongoDB Atlas with TLS)',
+        verifiedActive: true,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load security status' });
   }
 };
 

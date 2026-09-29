@@ -276,3 +276,41 @@ export interface IActiveGroupCallState {
   participantCount?: number;
   startedAt?: string;
 }
+
+export interface IPrivacySettings {
+  readReceipts: boolean;
+  onlinePresence: boolean;
+  lastSeen: 'everyone' | 'connections' | 'nobody';
+  typingIndicators: boolean;
+  storyVisibility: 'everyone' | 'connections' | 'close_friends';
+  messageRequests: 'everyone' | 'connections';
+  groupInvites: 'everyone' | 'connections';
+}
+
+export interface IUserSession {
+  sessionId: string;
+  deviceName: string;
+  platform: 'android' | 'ios' | 'web' | 'windows' | 'macos' | 'linux';
+  browser?: string;
+  ipAddress?: string;
+  lastActiveAt: string;
+  createdAt: string;
+  isCurrent?: boolean;
+}
+
+export interface IConnectionSecurity {
+  protocol: string;
+  encryption: string;
+  transportSecurity: string;
+  socketTransport: string;
+  authMethod: string;
+  verifiedAt: string;
+  status: 'active' | 'secure';
+}
+
+export interface IBlockedUser {
+  _id: string;
+  displayName: string;
+  username?: string;
+  avatarUrl?: string;
+}

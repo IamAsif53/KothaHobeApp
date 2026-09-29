@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { User } from '../models/User';
 import { EmailOtp } from '../models/EmailOtp';
 import { sendOtpEmail } from '../services/emailService';
-import { generateToken } from '../utils/jwt';
+import { generateToken, parseUserAgent } from '../utils/jwt';
 
 // Helper to hash OTP using SHA-256
 function hashOtp(otp: string): string {
@@ -153,6 +153,21 @@ export const verifyEmailOtp = async (req: Request, res: Response): Promise<void>
     let user = await User.findOne({ email: normalizedEmail });
     let isNewUser = false;
 
+    // Generate Unique Session ID & parse device info
+    const sessionId = `sess_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const deviceInfo = parseUserAgent(req.headers['user-agent'] as string);
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+
+    const newSession = {
+      sessionId,
+      deviceName: deviceInfo.deviceName,
+      platform: deviceInfo.platform,
+      browser: deviceInfo.browser,
+      ipAddress: clientIp,
+      lastActiveAt: new Date(),
+      createdAt: new Date(),
+    };
+
     if (!user) {
       isNewUser = true;
       const defaultName = normalizedEmail.split('@')[0];
@@ -162,18 +177,23 @@ export const verifyEmailOtp = async (req: Request, res: Response): Promise<void>
         displayName: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
         isOnline: true,
         lastSeen: new Date(),
+        sessions: [newSession],
       });
     } else {
       user.emailVerified = true;
       user.isOnline = true;
       user.lastSeen = new Date();
+      if (!user.sessions) user.sessions = [];
+      user.sessions = user.sessions.slice(-9); // Keep latest 10 sessions max
+      user.sessions.push(newSession as any);
       await user.save();
     }
 
-    // Generate JWT Session Token
+    // Generate JWT Session Token with sessionId
     const token = generateToken({
       userId: user._id.toString(),
       email: user.email,
+      sessionId,
     });
 
     const hasProfile = Boolean(user.username && user.username.trim().length >= 3);

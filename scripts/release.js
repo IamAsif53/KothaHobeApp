@@ -77,6 +77,7 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
+      "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground (where live typing and messages are already visible), while preserving notifications in all other cases (other chats, chat list, or background/closed)",
       "💬 Notification Instant Reply: Pure data-only FCM push payloads and custom background RemoteInput action for direct reply straight from notification shade",
       "✏️ Message Edit: In-place message editing within 15 minutes with real-time socket synchronization",
       "↪️ Message Forwarding: Multi-target message forwarding with 'Forwarded' attribution banner",

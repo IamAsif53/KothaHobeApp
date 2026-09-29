@@ -17,6 +17,27 @@ public class CallNotificationPlugin extends Plugin {
     private static JSObject pendingCallAction = null;
     private static CallNotificationPlugin instance = null;
 
+    private static volatile boolean isAppForeground = false;
+    private static volatile String currentActiveConversationId = null;
+
+    public static void setAppForeground(boolean foreground) {
+        isAppForeground = foreground;
+        Log.d(TAG, "isAppForeground set to: " + foreground);
+    }
+
+    public static boolean isAppInForeground() {
+        return isAppForeground;
+    }
+
+    public static String getActiveConversationId() {
+        return currentActiveConversationId;
+    }
+
+    public static void setActiveConversationId(String conversationId) {
+        currentActiveConversationId = conversationId;
+        Log.d(TAG, "Active conversation set to: " + conversationId);
+    }
+
     @Override
     public void load() {
         super.load();
@@ -185,6 +206,21 @@ public class CallNotificationPlugin extends Plugin {
             prefs.edit().clear().apply();
             Log.d(TAG, "Auth credentials cleared from native SharedPreferences");
         }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setActiveConversation(PluginCall call) {
+        String convId = call.getString("conversationId");
+        currentActiveConversationId = convId;
+        Log.d(TAG, "Native active conversation updated via plugin: " + convId);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearActiveConversation(PluginCall call) {
+        currentActiveConversationId = null;
+        Log.d(TAG, "Native active conversation cleared via plugin");
         call.resolve();
     }
 }

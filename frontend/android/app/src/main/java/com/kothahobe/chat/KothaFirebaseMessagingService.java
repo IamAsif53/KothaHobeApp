@@ -319,6 +319,17 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         String senderId = data.get("senderId");
         String messageId = data.get("messageId");
 
+        // RESTRICTION: If user is actively viewing THIS specific conversation in foreground, suppress notification
+        // (the user already sees the live typing indicator and message appearing in real-time).
+        // For all other cases (app in background, another chat, chat list, or app killed), show notification!
+        if (CallNotificationPlugin.isAppInForeground() &&
+            conversationId != null &&
+            !conversationId.isEmpty() &&
+            conversationId.equals(CallNotificationPlugin.getActiveConversationId())) {
+            Log.d(TAG, "User is actively inside conversation " + conversationId + " in foreground. Suppressing notification.");
+            return;
+        }
+
         // Deduplicate: If notification for this messageId was already posted within last 15 seconds, ignore
         long now = System.currentTimeMillis();
         String dedupKey = (messageId != null && !messageId.isEmpty()) ? messageId : (conversationId + ":" + body);

@@ -19,6 +19,8 @@ export interface CallNotificationPluginInterface {
   showLocalTestCallNotification(options: { callerName: string; callId: string }): Promise<any>;
   setAuthCredentials(options: { token: string; userId?: string }): Promise<void>;
   clearAuthCredentials(): Promise<void>;
+  setActiveConversation(options: { conversationId: string }): Promise<void>;
+  clearActiveConversation(): Promise<void>;
   addListener(
     eventName: 'callActionReceived' | 'chatNotificationOpened' | 'messageSentFromNotification',
     listenerFunc: (data: any) => void
@@ -50,6 +52,32 @@ export async function clearNativeAuthCredentials(): Promise<void> {
     }
   } catch (err) {
     console.warn('[CallNotificationService] clearNativeAuthCredentials error:', err);
+  }
+}
+
+/**
+ * Inform native Android layer of currently active chat room to suppress push notifications when looking at this chat
+ */
+export async function setNativeActiveConversation(conversationId: string): Promise<void> {
+  try {
+    if (Capacitor.isNativePlatform() && conversationId) {
+      await NativeCallNotification.setActiveConversation({ conversationId });
+    }
+  } catch (err) {
+    console.warn('[CallNotificationService] setNativeActiveConversation error:', err);
+  }
+}
+
+/**
+ * Clear active chat room in native Android layer so notifications resume normally
+ */
+export async function clearNativeActiveConversation(): Promise<void> {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      await NativeCallNotification.clearActiveConversation();
+    }
+  } catch (err) {
+    console.warn('[CallNotificationService] clearNativeActiveConversation error:', err);
   }
 }
 

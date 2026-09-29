@@ -8,6 +8,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { setNativeActiveConversation, clearNativeActiveConversation } from '../services/callNotificationService';
 
 interface OutboxItem {
   conversationId: string;
@@ -63,6 +64,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     activeChatRef.current = activeConversationId;
+    if (activeConversationId) {
+      setNativeActiveConversation(activeConversationId);
+    } else {
+      clearNativeActiveConversation();
+    }
   }, [activeConversationId]);
 
   // Fast Reconnect Trigger (Lifecycle, Network change, Watchdog, Manual)

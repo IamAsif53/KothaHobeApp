@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CallNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
+        CallNotificationPlugin.setAppForeground(true);
         unlockAndTurnScreenOn();
 
         // Enable instant WebRTC audio/media streaming without requiring manual touch unlock
@@ -35,6 +36,7 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        CallNotificationPlugin.setAppForeground(true);
         unlockAndTurnScreenOn();
         CallNotificationPlugin.handleIncomingIntent(this, intent);
     }
@@ -42,7 +44,20 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        CallNotificationPlugin.setAppForeground(true);
         unlockAndTurnScreenOn();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        CallNotificationPlugin.setAppForeground(false);
+    }
+
+    @Override
+    public void onDestroy() {
+        CallNotificationPlugin.setAppForeground(false);
+        super.onDestroy();
     }
 
     private void unlockAndTurnScreenOn() {

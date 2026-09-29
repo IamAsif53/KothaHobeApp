@@ -32,11 +32,26 @@ import {
 export const ChatListPage: React.FC = () => {
   const { themeConfig } = useTheme();
   const { user: currentUser } = useAuth();
-  // ⚡ Instant Render: Initialize immediately from cached conversations
+  // ⚡ Instant Render: Initialize immediately from cached conversations, sanitizing any stale unread counts
   const [conversations, setConversations] = useState<IConversation[]>(() => {
     try {
       const cached = localStorage.getItem('kotha_hobe_cached_conversations');
-      return cached ? JSON.parse(cached) : [];
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const userStr = localStorage.getItem('kotha_hobe_user');
+        const storedUser = userStr ? JSON.parse(userStr) : null;
+        const currentUserId = storedUser?._id?.toString();
+        if (Array.isArray(parsed)) {
+          return parsed.map((c: IConversation) => {
+            const senderId = c.lastMessage?.senderId?.toString() || (c.lastMessage?.senderId as any)?._id?.toString();
+            if (currentUserId && senderId && senderId === currentUserId) {
+              return { ...c, unreadCount: 0 };
+            }
+            return c;
+          });
+        }
+      }
+      return [];
     } catch {
       return [];
     }
@@ -85,8 +100,18 @@ export const ChatListPage: React.FC = () => {
       const res = await fetchConversations();
       if (res.success && res.conversations) {
         const localReadMap = getLocallyReadTimestamps();
+        const currentUserId = currentUser?._id?.toString();
+
         // Protect against stale server unread state overwriting newer local read state
         const sanitized: IConversation[] = res.conversations.map((c: IConversation) => {
+          const senderId = c.lastMessage?.senderId?.toString() || (c.lastMessage?.senderId as any)?._id?.toString();
+          if (currentUserId && senderId && senderId === currentUserId) {
+            return {
+              ...c,
+              unreadCount: 0,
+            };
+          }
+
           const localReadTimestamp = localReadMap[c._id];
           if (localReadTimestamp) {
             const msgTime = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
@@ -165,17 +190,20 @@ export const ChatListPage: React.FC = () => {
 
         if (index > -1) {
           const updated = [...prev];
-          const isMe = currentUser?._id && data.senderId === currentUser._id;
+          const isMe = currentUser?._id && (
+            data.senderId === currentUser._id ||
+            data.senderId?.toString() === currentUser._id.toString()
+          );
           updated[index] = {
             ...updated[index],
             lastMessage: {
               text: previewText || data.text,
               senderId: data.senderId,
               createdAt: data.createdAt,
-              status: data.status || 'sent',
+              status: isMe ? 'sent' : (data.status || 'sent'),
             },
             lastMessageAt: data.createdAt,
-            unreadCount: isMe ? updated[index].unreadCount : (updated[index].unreadCount || 0) + 1,
+            unreadCount: isMe ? 0 : (updated[index].unreadCount || 0) + 1,
           };
           const sorted = updated.sort(
             (a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()
@@ -197,12 +225,9 @@ export const ChatListPage: React.FC = () => {
       }
     };
 
-    const handleWindowSync = (e: Event) => {
-      const customEvent = e as CustomEvent<any[]>;
-      const syncMessages = customEvent.detail;
-      if (Array.isArray(syncMessages) && syncMessages.length > 0) {
-        syncMessages.forEach((msg) => handleNewMessageData(msg));
-      }
+    const handleWindowSync = () => {
+      // Reload conversations directly from server to obtain authoritative counts
+      loadConversations(true);
     };
 
     window.addEventListener('kothahobe:message_new', handleWindowNewMessage);
@@ -220,7 +245,10 @@ export const ChatListPage: React.FC = () => {
         const index = prev.findIndex((c) => c._id === data.conversationId);
         if (index > -1) {
           const updated = [...prev];
-          const isCurrentUserReader = currentUser?._id && data.readBy === currentUser._id;
+          const isCurrentUserReader = currentUser?._id && (
+            data.readBy === currentUser._id ||
+            data.readBy?.toString() === currentUser._id.toString()
+          );
           updated[index] = {
             ...updated[index],
             unreadCount: isCurrentUserReader ? 0 : updated[index].unreadCount,

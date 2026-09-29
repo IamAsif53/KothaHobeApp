@@ -77,9 +77,10 @@ export function setupSocketIO(io: SocketIOServer): void {
           ? new Date(sinceTimestamp)
           : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-        // 1. Direct messages where user is recipient
+        // 1. Direct messages where user is recipient AND message is not yet read
         const directMessages = await Message.find({
           receiverId: userId,
+          status: { $in: ['sent', 'delivered'] },
           createdAt: { $gte: sinceDate },
           deletedFor: { $ne: userId },
         })
@@ -108,7 +109,7 @@ export function setupSocketIO(io: SocketIOServer): void {
           });
         }
 
-        // 2. Group messages where user is a member
+        // 2. Group messages where user is a member AND user has not read yet
         const userGroupConvs = await Conversation.find({
           isGroup: true,
           $or: [
@@ -124,6 +125,7 @@ export function setupSocketIO(io: SocketIOServer): void {
           groupMessages = await Message.find({
             conversationId: { $in: groupConvIds },
             senderId: { $ne: userId },
+            'readBy.user': { $ne: userId },
             createdAt: { $gte: sinceDate },
             deletedFor: { $ne: userId },
           })

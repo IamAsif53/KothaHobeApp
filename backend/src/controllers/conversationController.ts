@@ -147,6 +147,8 @@ export const listConversations = async (
         let myMembershipStatus: 'accepted' | 'pending' | 'declined' = 'accepted';
         const isArchived = conv.archivedBy?.some((id: any) => id.toString() === userId.toString()) || false;
 
+        const isLastSenderMe = conv.lastMessage?.senderId && (conv.lastMessage.senderId.toString() === userId.toString() || conv.lastMessage.senderId?._id?.toString() === userId.toString());
+
         if (conv.isGroup) {
           const memberEntry = conv.groupMeta?.members?.find(
             (m: any) => m.user?._id?.toString() === userId.toString() || m.user?.toString() === userId.toString()
@@ -155,11 +157,12 @@ export const listConversations = async (
             myMembershipStatus = memberEntry.status;
           }
 
-          unreadCount = await Message.countDocuments({
+          unreadCount = isLastSenderMe ? 0 : await Message.countDocuments({
             conversationId: conv._id,
             senderId: { $ne: userId },
             'readBy.user': { $ne: userId },
             type: { $ne: 'system' },
+            deletedFor: { $ne: userId },
           });
 
           return {
@@ -176,10 +179,11 @@ export const listConversations = async (
             updatedAt: conv.updatedAt,
           };
         } else {
-          unreadCount = await Message.countDocuments({
+          unreadCount = isLastSenderMe ? 0 : await Message.countDocuments({
             conversationId: conv._id,
             senderId: { $ne: userId },
             status: { $in: ['sending', 'sent', 'delivered'] },
+            deletedFor: { $ne: userId },
           });
 
           const recipient = conv.participants.find(

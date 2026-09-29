@@ -412,6 +412,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const latestMsg = msgs[msgs.length - 1];
             if (idx > -1 && latestMsg) {
               const isActive = activeChatRef.current === convId;
+              const isLatestFromMe = user?._id && latestMsg.senderId && (latestMsg.senderId.toString() === user._id.toString());
+              const unreadInSync = msgs.filter(
+                (m) =>
+                  m.senderId?.toString() !== user?._id?.toString() &&
+                  m.status !== 'read' &&
+                  (!m.readBy || !m.readBy.some((r: any) => (r.user?._id || r.user)?.toString() === user?._id?.toString()))
+              ).length;
+
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
@@ -421,7 +429,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   status: isActive ? 'read' : latestMsg.status || 'sent',
                 },
                 lastMessageAt: latestMsg.createdAt,
-                unreadCount: isActive ? 0 : Math.max(list[idx].unreadCount || 0, msgs.length),
+                unreadCount: (isActive || isLatestFromMe) ? 0 : Math.max(list[idx].unreadCount || 0, unreadInSync),
               };
               changed = true;
             }
@@ -465,6 +473,30 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             updated.push(sentMsg);
           }
           localStorage.setItem(cacheKey, JSON.stringify(updated));
+
+          // Also update cached conversations list
+          const convsCached = localStorage.getItem('kotha_hobe_cached_conversations');
+          if (convsCached) {
+            const list = JSON.parse(convsCached);
+            const idx = list.findIndex((c: any) => c._id === sentMsg.conversationId);
+            if (idx > -1) {
+              list[idx] = {
+                ...list[idx],
+                lastMessage: {
+                  text: sentMsg.text,
+                  senderId: sentMsg.senderId,
+                  createdAt: sentMsg.createdAt,
+                  status: sentMsg.status || 'sent',
+                },
+                lastMessageAt: sentMsg.createdAt,
+                unreadCount: 0, // Since I sent the message, unread count is 0
+              };
+              list.sort(
+                (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+              );
+              localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
+            }
+          }
         } catch {}
       }
 
@@ -491,55 +523,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const idx = list.findIndex((c: any) => c._id === newMsg.conversationId);
             if (idx > -1) {
               const isActive = activeChatRef.current === newMsg.conversationId;
+              const isFromMe = user?._id && (newMsg.senderId?.toString() === user._id.toString());
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
                   text: newMsg.text,
                   senderId: newMsg.senderId,
                   createdAt: newMsg.createdAt,
-                  status: isActive ? 'read' : newMsg.status || 'sent',
+                  status: (isActive || isFromMe) ? 'read' : newMsg.status || 'sent',
                 },
                 lastMessageAt: newMsg.createdAt,
-                unreadCount: isActive ? 0 : (list[idx].unreadCount || 0) + 1,
-              };
-              list.sort(
-                (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-              );
-              localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));
-            }
-          }
-        } catch {}
-      }
-
-      window.dispatchEvent(new CustomEvent('kothahobe:message_new', { detail: newMsg }));
-      if (newMsg.conversationId) {
-        try {
-          const cacheKey = `kotha_hobe_msgs_${newMsg.conversationId}`;
-          const cached = localStorage.getItem(cacheKey);
-          const currentList: IMessage[] = cached ? JSON.parse(cached) : [];
-          if (!currentList.some((m) => m._id === newMsg._id || (m.clientMessageId && newMsg.clientMessageId && m.clientMessageId === newMsg.clientMessageId))) {
-            currentList.push(newMsg);
-            currentList.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-            localStorage.setItem(cacheKey, JSON.stringify(currentList));
-          }
-
-          // Immediately update conversation preview in local storage
-          const convsCached = localStorage.getItem('kotha_hobe_cached_conversations');
-          if (convsCached) {
-            const list = JSON.parse(convsCached);
-            const idx = list.findIndex((c: any) => c._id === newMsg.conversationId);
-            if (idx > -1) {
-              const isActive = activeChatRef.current === newMsg.conversationId;
-              list[idx] = {
-                ...list[idx],
-                lastMessage: {
-                  text: newMsg.text,
-                  senderId: newMsg.senderId,
-                  createdAt: newMsg.createdAt,
-                  status: isActive ? 'read' : newMsg.status || 'sent',
-                },
-                lastMessageAt: newMsg.createdAt,
-                unreadCount: isActive ? 0 : (list[idx].unreadCount || 0) + 1,
+                unreadCount: (isActive || isFromMe) ? 0 : (list[idx].unreadCount || 0) + 1,
               };
               list.sort(
                 (a: any, b: any) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()

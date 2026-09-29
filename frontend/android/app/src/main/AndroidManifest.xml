@@ -83,6 +83,15 @@
                 <action android:name="com.kothahobe.chat.ACTION_REPLY_MESSAGE" />
             </intent-filter>
         </receiver>
+
+        <!-- Receiver for background Message Mark As Read action button -->
+        <receiver
+            android:name=".MarkReadReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kothahobe.chat.ACTION_MARK_AS_READ" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions for Network, Push Notifications & Vibration -->

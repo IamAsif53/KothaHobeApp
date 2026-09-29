@@ -1,4 +1,4 @@
-﻿import { Response } from 'express';
+import { Response } from 'express';
 import { Types } from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { Story, IStory } from '../models/Story';
@@ -354,7 +354,12 @@ export const reactToStory = async (req: AuthenticatedRequest, res: Response): Pr
       sendPushNotification({
         recipientId: story.user.toString(),
         senderName: req.user.displayName,
-        messageText: `Reacted ${emoji} to your story`,
+        senderNickname: req.user.displayName,
+        senderAvatar: req.user.avatarUrl || '',
+        isGroup: false,
+        messageText: `${emoji}`,
+        messageType: 'reaction',
+        reactionEmoji: emoji,
         conversationId: '',
         senderId: currentUserId.toString(),
       }).catch(() => {});
@@ -477,7 +482,12 @@ export const replyToStory = async (req: AuthenticatedRequest, res: Response): Pr
     sendPushNotification({
       recipientId: receiverId.toString(),
       senderName: req.user.displayName,
-      messageText: `Replied to your story: "${replyContent}"`,
+      senderNickname: req.user.displayName,
+      senderAvatar: req.user.avatarUrl || '',
+      isGroup: false,
+      messageText: replyContent,
+      messageType: 'story_reply',
+      storyContext: 'Replied to your Story',
       conversationId: conversation._id.toString(),
       senderId: currentUserId.toString(),
       messageId: message._id.toString(),

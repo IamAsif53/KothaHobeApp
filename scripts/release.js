@@ -77,14 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🔗 Production-Grade Link Previews & URL Handling: Automatically linkifies all URLs in chat messages with full tap-to-open support for native apps (Facebook, YouTube, etc.) and external browser",
-      "🛡️ Social Link Preview Scraper: Optimized User-Agent header and error sanitization so Facebook profiles, Instagram, Twitter, and web links extract valid OpenGraph titles and previews instead of error cards",
-      "🔕 Smart Chat Notification Restriction: Automatically suppresses system push notifications when actively viewing the specific chat in foreground, while preserving notifications in all other cases",
-      "💬 Notification Instant Reply: Background RemoteInput action for direct reply straight from notification shade",
-      "✏️ Message Edit: In-place message editing within 15 minutes with real-time socket synchronization",
-      "↪️ Message Forwarding: Multi-target message forwarding with attribution banner",
-      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section",
-      "👥 Group-Only Typing Indicators: Aggregated real-time typing indicators for group chats"
+      "📱 Production Conversation Notifications: Native Android MessagingStyle & Person metadata with zero-delay sender avatars and circular initials",
+      "💬 Native Message History Stream: Groups and aggregates consecutive messages per conversation cleanly into expandable Android conversation cards",
+      "⚡ Instant Inline Reply & Mark as Read: Preserves high-speed RemoteInput direct reply and introduces one-tap 'Mark as read' action in notification shade",
+      "🎨 Rich Message Previews: Clean previews for Photos, Videos, Documents, Voice messages with duration, Custom emojis, Reactions, and Story replies without exposing technical URLs",
+      "🔗 Production Link Previews: Universal clickable links with native app intent routing (Facebook, YouTube, Browser)",
+      "🔕 Smart Foreground Suppression: Suppresses push notifications when actively inside the open chat"
     ],
     mandatory: false
   };

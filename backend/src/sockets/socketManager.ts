@@ -284,8 +284,16 @@ export function setupSocketIO(io: SocketIOServer): void {
                   recipientId: pIdStr,
                   senderId: userId,
                   messageId: message!._id.toString(),
-                  senderName: conversation.groupMeta?.name || 'Group Chat',
-                  messageText: `${senderNickname}: ${previewText}`,
+                  senderName: senderNickname,
+                  senderNickname: senderNickname,
+                  senderAvatar: senderUser?.avatarUrl || '',
+                  isGroup: true,
+                  groupName: conversation.groupMeta?.name || 'Group Chat',
+                  groupAvatar: conversation.groupMeta?.avatarUrl || '',
+                  messageText: text.trim(),
+                  messageType: type,
+                  attachmentFileName: attachment?.fileName,
+                  customEmojiId: validatedCustomEmojiId,
                   conversationId,
                 }).catch(() => {});
               });
@@ -338,18 +346,18 @@ export function setupSocketIO(io: SocketIOServer): void {
               io.to(`user:${targetReceiverId}`).emit('message:new', message);
 
               // 3. Dispatch FCM Push Notification
-              let notifBody = text.trim();
-              if (type === 'image') notifBody = '📷 Photo';
-              else if (type === 'audio') notifBody = '🎤 Voice message';
-              else if (type === 'document') notifBody = `📄 ${attachment?.fileName || 'Document'}`;
-              else if (type === 'custom_emoji') notifBody = '✨ Animated Emoji';
-
               sendPushNotification({
                 recipientId: targetReceiverId,
                 senderId: userId,
                 messageId: message._id.toString(),
                 senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
-                messageText: notifBody,
+                senderNickname: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+                senderAvatar: senderUser?.avatarUrl || '',
+                isGroup: false,
+                messageText: text.trim(),
+                messageType: type,
+                attachmentFileName: attachment?.fileName,
+                customEmojiId: validatedCustomEmojiId,
                 conversationId,
               })
                 .then(async (pushRes) => {

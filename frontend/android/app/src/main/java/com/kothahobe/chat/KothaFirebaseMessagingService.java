@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -14,11 +16,18 @@ import android.os.PowerManager;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
+import androidx.core.graphics.drawable.IconCompat;
 import com.capacitorjs.plugins.pushnotifications.PushNotificationsPlugin;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     private static final String TAG = "KothaFCMService";
@@ -29,6 +38,51 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
     private static final ConcurrentHashMap<String, Long> activeCallNotifications = new ConcurrentHashMap<>();
     // Deduplication tracking: messageKey -> timestamp
     private static final ConcurrentHashMap<String, Long> activeMessageNotifications = new ConcurrentHashMap<>();
+
+    // Conversation message history cache: conversationId -> List<NotificationMessageItem>
+    private static final ConcurrentHashMap<String, CopyOnWriteArrayList<NotificationMessageItem>> conversationMessageHistory = new ConcurrentHashMap<>();
+    private static final int MAX_HISTORY_PER_CONVERSATION = 10;
+
+    public static class NotificationMessageItem {
+        public final CharSequence text;
+        public final long timestamp;
+        public final String senderId;
+        public final String senderName;
+        public final String senderAvatar;
+        public final boolean isMe;
+
+        public NotificationMessageItem(CharSequence text, long timestamp, String senderId, String senderName, String senderAvatar, boolean isMe) {
+            this.text = text;
+            this.timestamp = timestamp;
+            this.senderId = senderId;
+            this.senderName = senderName;
+            this.senderAvatar = senderAvatar;
+            this.isMe = isMe;
+        }
+    }
+
+    public static void clearConversationHistory(String conversationId) {
+        if (conversationId != null) {
+            conversationMessageHistory.remove(conversationId);
+            activeMessageNotifications.keySet().removeIf(k -> k.startsWith(conversationId + ":"));
+        }
+    }
+
+    public static void addMessageToHistory(String conversationId, NotificationMessageItem item) {
+        if (conversationId == null || item == null) return;
+        CopyOnWriteArrayList<NotificationMessageItem> list = conversationMessageHistory.get(conversationId);
+        if (list == null) {
+            list = new CopyOnWriteArrayList<>();
+            CopyOnWriteArrayList<NotificationMessageItem> existing = conversationMessageHistory.putIfAbsent(conversationId, list);
+            if (existing != null) {
+                list = existing;
+            }
+        }
+        list.add(item);
+        while (list.size() > MAX_HISTORY_PER_CONVERSATION) {
+            list.remove(0);
+        }
+    }
 
     public static void removeActiveCall(String callId) {
         if (callId != null) {
@@ -131,7 +185,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         }
 
         // 3. Handle Regular Text / Media Chat Messages (Build & Post Native Notification)
-        Log.d(TAG, "[NATIVE FCM] Building and posting native chat message notification");
+        Log.d(TAG, "[NATIVE FCM] Building and posting native conversation notification");
         handleChatMessagePush(remoteMessage, data);
 
         // Also pass to Capacitor plugin for foreground web listeners if active
@@ -289,39 +343,51 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         removeActiveCall(callId);
     }
 
+    /**
+     * Build and post native Android conversation notification with MessagingStyle, Person metadata,
+     * sender avatar, message history aggregation, and inline reply.
+     */
     private void handleChatMessagePush(RemoteMessage remoteMessage, Map<String, String> data) {
-        String title = null;
-        String body = null;
-
-        if (remoteMessage.getNotification() != null) {
-            title = remoteMessage.getNotification().getTitle();
-            body = remoteMessage.getNotification().getBody();
-        }
-
-        if (title == null || title.trim().isEmpty()) {
-            title = data.get("senderName");
-        }
-        if (title == null || title.trim().isEmpty()) {
-            title = "Kotha Hobe";
-        }
-
-        if (body == null || body.trim().isEmpty()) {
-            body = data.get("messageText");
-        }
-        if (body == null || body.trim().isEmpty()) {
-            body = data.get("text");
-        }
-        if (body == null || body.trim().isEmpty()) {
-            body = "Sent you a message";
-        }
-
         String conversationId = data.get("conversationId");
         String senderId = data.get("senderId");
         String messageId = data.get("messageId");
+        String senderName = data.get("senderName");
+        String senderNickname = data.get("senderNickname");
+        String senderAvatar = data.get("senderAvatar");
+        String messageType = data.get("messageType");
+        String attachmentFileName = data.get("attachmentFileName");
+        String audioDuration = data.get("audioDuration");
+        String customEmojiId = data.get("customEmojiId");
+        String storyContext = data.get("storyContext");
+        String reactionEmoji = data.get("reactionEmoji");
+        boolean isGroup = "true".equalsIgnoreCase(data.get("isGroup"));
+        String groupName = data.get("groupName");
+        String groupAvatar = data.get("groupAvatar");
+
+        String rawText = data.get("messageText");
+        if (rawText == null || rawText.isEmpty()) rawText = data.get("text");
+        if (rawText == null || rawText.isEmpty()) rawText = data.get("body");
+
+        // Fallbacks for display names
+        if (senderNickname == null || senderNickname.trim().isEmpty()) {
+            senderNickname = (senderName != null && !senderName.trim().isEmpty()) ? senderName.trim() : "Member";
+        }
+        if (isGroup && (groupName == null || groupName.trim().isEmpty())) {
+            groupName = (senderName != null && !senderName.trim().isEmpty()) ? senderName : "Group Chat";
+        }
+
+        // Format message preview according to message type
+        CharSequence formattedText = formatNotificationMessageText(
+            rawText,
+            messageType,
+            attachmentFileName,
+            audioDuration,
+            customEmojiId,
+            storyContext,
+            reactionEmoji
+        );
 
         // RESTRICTION: If user is actively viewing THIS specific conversation in foreground, suppress notification
-        // (the user already sees the live typing indicator and message appearing in real-time).
-        // For all other cases (app in background, another chat, chat list, or app killed), show notification!
         if (CallNotificationPlugin.isAppInForeground() &&
             conversationId != null &&
             !conversationId.isEmpty() &&
@@ -332,7 +398,7 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         // Deduplicate: If notification for this messageId was already posted within last 15 seconds, ignore
         long now = System.currentTimeMillis();
-        String dedupKey = (messageId != null && !messageId.isEmpty()) ? messageId : (conversationId + ":" + body);
+        String dedupKey = (messageId != null && !messageId.isEmpty()) ? messageId : (conversationId + ":" + formattedText);
         Long prevTime = activeMessageNotifications.get(dedupKey);
         if (prevTime != null && (now - prevTime) < 15000) {
             Log.d(TAG, "Ignoring duplicate chat message notification for key: " + dedupKey);
@@ -349,6 +415,59 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         createNotificationChannels(this);
 
+        // Add incoming message to conversation history
+        String safeConvId = (conversationId != null && !conversationId.isEmpty()) ? conversationId : "direct_default";
+        NotificationMessageItem incomingItem = new NotificationMessageItem(
+            formattedText,
+            now,
+            senderId != null ? senderId : "unknown_sender",
+            senderNickname,
+            senderAvatar,
+            false
+        );
+        addMessageToHistory(safeConvId, incomingItem);
+
+        // Retrieve current logged in user metadata for Person "You"
+        SharedPreferences authPrefs = getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
+        String currentUserId = authPrefs.getString("user_id", "me");
+        Person currentUser = new Person.Builder()
+            .setName("You")
+            .setKey(currentUserId)
+            .build();
+
+        // Build MessagingStyle
+        NotificationCompat.MessagingStyle messagingStyle = new NotificationCompat.MessagingStyle(currentUser);
+        if (isGroup) {
+            messagingStyle.setGroupConversation(true);
+            messagingStyle.setConversationTitle(groupName);
+        } else {
+            messagingStyle.setGroupConversation(false);
+            messagingStyle.setConversationTitle(null);
+        }
+
+        // Populate historical and recent messages into MessagingStyle
+        List<NotificationMessageItem> historyList = conversationMessageHistory.get(safeConvId);
+        if (historyList == null || historyList.isEmpty()) {
+            historyList = Collections.singletonList(incomingItem);
+        }
+
+        for (NotificationMessageItem item : historyList) {
+            if (item.isMe) {
+                messagingStyle.addMessage(item.text, item.timestamp, (Person) null);
+            } else {
+                Bitmap itemAvatarBitmap = AvatarBitmapHelper.getAvatarOrInitials(this, item.senderAvatar, item.senderName, 128);
+                Person.Builder personBuilder = new Person.Builder()
+                    .setName(item.senderName)
+                    .setKey(item.senderId);
+
+                if (itemAvatarBitmap != null) {
+                    personBuilder.setIcon(IconCompat.createWithBitmap(itemAvatarBitmap));
+                }
+                messagingStyle.addMessage(item.text, item.timestamp, personBuilder.build());
+            }
+        }
+
+        // Tap Intent: Launches MainActivity into the exact conversation
         Intent intent = new Intent(this, MainActivity.class);
         intent.setAction(Intent.ACTION_MAIN);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -361,10 +480,12 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
         if (conversationId != null) intent.putExtra("conversationId", conversationId);
         if (senderId != null) intent.putExtra("senderId", senderId);
         if (messageId != null) intent.putExtra("messageId", messageId);
-        if (body != null) intent.putExtra("messageText", body);
-        if (title != null) intent.putExtra("senderName", title);
+        intent.putExtra("messageText", formattedText.toString());
+        intent.putExtra("senderName", isGroup ? groupName : senderNickname);
 
-        int notifId = conversationId != null ? Math.abs(conversationId.hashCode()) : (int) System.currentTimeMillis();
+        int notifId = safeConvId.hashCode();
+        if (notifId == Integer.MIN_VALUE) notifId = 0;
+        notifId = Math.abs(notifId);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
@@ -375,9 +496,9 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
 
         Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
-        // RemoteInput Direct Reply Setup
+        // Action 1: RemoteInput Inline Direct Reply
         androidx.core.app.RemoteInput remoteInput = new androidx.core.app.RemoteInput.Builder(MessageReplyReceiver.KEY_TEXT_REPLY)
-            .setLabel("Reply (max 50 words)...")
+            .setLabel("Reply...")
             .build();
 
         Intent replyIntent = new Intent(this, MessageReplyReceiver.class);
@@ -409,10 +530,37 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             .setAllowGeneratedReplies(true)
             .build();
 
+        // Action 2: Mark as read
+        Intent markReadIntent = new Intent(this, MarkReadReceiver.class);
+        markReadIntent.setAction(MarkReadReceiver.ACTION_MARK_AS_READ);
+        if (conversationId != null) markReadIntent.putExtra("conversationId", conversationId);
+        markReadIntent.putExtra("notificationId", notifId);
+
+        PendingIntent markReadPendingIntent = PendingIntent.getBroadcast(
+            this,
+            notifId + 6,
+            markReadIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+
+        NotificationCompat.Action markReadAction = new NotificationCompat.Action.Builder(
+            0,
+            "Mark as read",
+            markReadPendingIntent
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .build();
+
+        // Primary Avatar for Large Icon
+        Bitmap primaryAvatarBitmap = isGroup
+            ? AvatarBitmapHelper.getAvatarOrInitials(this, groupAvatar, groupName, 128)
+            : AvatarBitmapHelper.getAvatarOrInitials(this, senderAvatar, senderNickname, 128);
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHAT_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(body)
+            .setStyle(messagingStyle)
+            .setContentTitle(isGroup ? groupName : senderNickname)
+            .setContentText(formattedText)
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setVibrate(new long[]{0, 250, 250, 250})
@@ -420,12 +568,74 @@ public class KothaFirebaseMessagingService extends FirebaseMessagingService {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(pendingIntent)
-            .addAction(replyAction);
+            .setGroup(safeConvId)
+            .addAction(replyAction)
+            .addAction(markReadAction);
 
-        if (conversationId != null && !conversationId.isEmpty()) {
-            builder.setGroup(conversationId);
+        if (primaryAvatarBitmap != null) {
+            builder.setLargeIcon(primaryAvatarBitmap);
         }
 
         notificationManager.notify(notifId, builder.build());
+    }
+
+    /**
+     * Clean formatting for message previews across various message types without exposing technical URLs or IDs.
+     */
+    private CharSequence formatNotificationMessageText(
+        String rawText,
+        String messageType,
+        String attachmentFileName,
+        String audioDuration,
+        String customEmojiId,
+        String storyContext,
+        String reactionEmoji
+    ) {
+        if ("image".equalsIgnoreCase(messageType)) {
+            return "📷 Photo";
+        }
+        if ("video".equalsIgnoreCase(messageType)) {
+            return "🎥 Video";
+        }
+        if ("document".equalsIgnoreCase(messageType)) {
+            if (attachmentFileName != null && !attachmentFileName.trim().isEmpty()) {
+                return "📄 " + attachmentFileName.trim();
+            }
+            return "📄 Document";
+        }
+        if ("audio".equalsIgnoreCase(messageType) || "voice".equalsIgnoreCase(messageType)) {
+            if (audioDuration != null && !audioDuration.trim().isEmpty()) {
+                try {
+                    int seconds = (int) Math.round(Double.parseDouble(audioDuration));
+                    int mins = seconds / 60;
+                    int secs = seconds % 60;
+                    String formattedDur = String.format("%d:%02d", mins, secs);
+                    return "🎙 Voice message · " + formattedDur;
+                } catch (Exception ignored) {}
+            }
+            return "🎙 Voice message";
+        }
+        if ("custom_emoji".equalsIgnoreCase(messageType)) {
+            return "✨ Animated Emoji";
+        }
+        if ("story_reply".equalsIgnoreCase(messageType)) {
+            if (rawText != null && !rawText.trim().isEmpty()) {
+                return "↩️ Replied to your Story: \"" + rawText.trim() + "\"";
+            }
+            return "↩️ Replied to your Story";
+        }
+        if ("reaction".equalsIgnoreCase(messageType)) {
+            String emoji = (reactionEmoji != null && !reactionEmoji.trim().isEmpty()) ? reactionEmoji.trim() : "❤️";
+            return emoji + " Reacted to your message";
+        }
+        if ("call".equalsIgnoreCase(messageType)) {
+            return "📞 Missed call";
+        }
+
+        if (rawText != null && !rawText.trim().isEmpty()) {
+            return rawText.trim();
+        }
+
+        return "Sent you a message";
     }
 }

@@ -214,6 +214,21 @@ public class CallNotificationPlugin extends Plugin {
         String convId = call.getString("conversationId");
         currentActiveConversationId = convId;
         Log.d(TAG, "Native active conversation updated via plugin: " + convId);
+
+        if (convId != null && !convId.isEmpty()) {
+            Context ctx = getContext();
+            if (ctx != null) {
+                try {
+                    NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (nm != null) {
+                        int notifId = Math.abs(convId.hashCode());
+                        nm.cancel(notifId);
+                    }
+                } catch (Exception ignored) {}
+            }
+            KothaFirebaseMessagingService.clearConversationHistory(convId);
+        }
+
         call.resolve();
     }
 

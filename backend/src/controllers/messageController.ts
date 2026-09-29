@@ -234,8 +234,14 @@ export const sendDirectReply = async (
           recipientId: pIdStr,
           senderId: userId.toString(),
           messageId: message._id.toString(),
-          senderName: conversation.groupMeta?.name || 'Group Chat',
-          messageText: `${senderNickname}: ${trimmedText}`,
+          senderName: senderNickname,
+          senderNickname: senderNickname,
+          senderAvatar: senderUser?.avatarUrl || '',
+          isGroup: true,
+          groupName: conversation.groupMeta?.name || 'Group Chat',
+          groupAvatar: conversation.groupMeta?.avatarUrl || '',
+          messageText: trimmedText,
+          messageType: 'text',
           conversationId: conversationId.toString(),
         }).catch(() => {});
       });
@@ -281,7 +287,11 @@ export const sendDirectReply = async (
         senderId: userId.toString(),
         messageId: message._id.toString(),
         senderName: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+        senderNickname: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
+        senderAvatar: senderUser?.avatarUrl || '',
+        isGroup: false,
         messageText: trimmedText,
+        messageType: 'text',
         conversationId: conversationId.toString(),
       }).catch(() => {});
 
@@ -662,7 +672,12 @@ export const forwardMessage = async (
           senderId: currentUserIdStr,
           messageId: createdMsg._id.toString(),
           senderName: senderDisplayName,
+          senderNickname: senderDisplayName,
+          senderAvatar: (req.user as any)?.avatarUrl || '',
+          isGroup: false,
           messageText: previewText || 'Forwarded a message',
+          messageType: createdMsg.type || 'text',
+          attachmentFileName: createdMsg.attachment?.fileName,
           conversationId: destConv._id.toString(),
         }).catch(() => {});
       } else if (destConv.isGroup) {
@@ -672,8 +687,15 @@ export const forwardMessage = async (
               recipientId: pId.toString(),
               senderId: currentUserIdStr,
               messageId: createdMsg._id.toString(),
-              senderName: destConv.groupMeta?.name || 'Group Chat',
-              messageText: `${myNickname}: ${previewText || 'Forwarded a message'}`,
+              senderName: myNickname,
+              senderNickname: myNickname,
+              senderAvatar: (req.user as any)?.avatarUrl || '',
+              isGroup: true,
+              groupName: destConv.groupMeta?.name || 'Group Chat',
+              groupAvatar: destConv.groupMeta?.avatarUrl || '',
+              messageText: previewText || 'Forwarded a message',
+              messageType: createdMsg.type || 'text',
+              attachmentFileName: createdMsg.attachment?.fileName,
               conversationId: destConv._id.toString(),
             }).catch(() => {});
           }

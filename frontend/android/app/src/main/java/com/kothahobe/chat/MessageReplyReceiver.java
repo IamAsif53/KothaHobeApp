@@ -62,6 +62,19 @@ public class MessageReplyReceiver extends BroadcastReceiver {
 
         Log.d(TAG, "Submitting direct reply (" + count + " words): " + replyText);
 
+        // Record outgoing reply in conversation message history
+        KothaFirebaseMessagingService.addMessageToHistory(
+            conversationId,
+            new KothaFirebaseMessagingService.NotificationMessageItem(
+                replyText,
+                System.currentTimeMillis(),
+                "me",
+                "You",
+                "",
+                true
+            )
+        );
+
         // Cancel notification in notification bar immediately upon sending
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager != null && notificationId != 0) {

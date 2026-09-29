@@ -8,6 +8,17 @@ export interface PushNotificationPayload {
   conversationId: string;
   senderId?: string;
   messageId?: string;
+  isGroup?: boolean | string;
+  groupName?: string;
+  groupAvatar?: string;
+  senderAvatar?: string;
+  senderNickname?: string;
+  messageType?: string;
+  attachmentFileName?: string;
+  audioDuration?: number | string;
+  customEmojiId?: string;
+  storyContext?: string;
+  reactionEmoji?: string;
 }
 
 export interface PushResult {
@@ -19,9 +30,35 @@ export interface PushResult {
   error?: string;
 }
 
+const normalizeAvatarUrl = (url?: string): string => {
+  if (!url || typeof url !== 'string' || url.startsWith('data:image')) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url.trim();
+  const base = process.env.BASE_URL || 'https://kotha-hobe-api.onrender.com';
+  return `${base.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+};
+
 export const sendPushNotification = async (payload: PushNotificationPayload): Promise<PushResult> => {
   try {
-    const { recipientId, senderName, messageText, conversationId, senderId, messageId } = payload;
+    const {
+      recipientId,
+      senderName,
+      messageText,
+      conversationId,
+      senderId,
+      messageId,
+      isGroup,
+      groupName,
+      groupAvatar,
+      senderAvatar,
+      senderNickname,
+      messageType,
+      attachmentFileName,
+      audioDuration,
+      customEmojiId,
+      storyContext,
+      reactionEmoji,
+    } = payload;
+
     if (!recipientId) {
       return { success: false, attempted: 0, successCount: 0, failureCount: 0, message: 'Missing recipientId' };
     }
@@ -52,8 +89,11 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
     const safeBody = (messageText || 'Sent you a message').slice(0, 500);
     const safeTitle = (senderName || 'Kotha Hobe').slice(0, 100);
 
+    const safeSenderAvatar = normalizeAvatarUrl(senderAvatar);
+    const safeGroupAvatar = normalizeAvatarUrl(groupAvatar);
+
     // High-priority Data-only payload: Directly triggers KothaFirebaseMessagingService onMessageReceived()
-    // across all Android states (foreground, background, killed), rendering custom notification with Direct Reply RemoteInput.
+    // across all Android states (foreground, background, killed), rendering native MessagingStyle conversation notification.
     const messagePayload = {
       data: {
         type: 'chat_message',
@@ -61,7 +101,18 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
         senderId: String(senderId || ''),
         messageId: String(messageId || ''),
         senderName: safeTitle,
+        senderNickname: String(senderNickname || safeTitle),
+        senderAvatar: safeSenderAvatar,
+        isGroup: isGroup ? 'true' : 'false',
+        groupName: String(groupName || ''),
+        groupAvatar: safeGroupAvatar,
         messageText: safeBody,
+        messageType: String(messageType || 'text'),
+        attachmentFileName: String(attachmentFileName || ''),
+        audioDuration: String(audioDuration || ''),
+        customEmojiId: String(customEmojiId || ''),
+        storyContext: String(storyContext || ''),
+        reactionEmoji: String(reactionEmoji || ''),
         title: safeTitle,
         body: safeBody,
       },

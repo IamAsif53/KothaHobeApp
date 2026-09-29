@@ -52,11 +52,9 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
     const safeBody = (messageText || 'Sent you a message').slice(0, 500);
     const safeTitle = (senderName || 'Kotha Hobe').slice(0, 100);
 
+    // High-priority Data-only payload: Directly triggers KothaFirebaseMessagingService onMessageReceived()
+    // across all Android states (foreground, background, killed), rendering custom notification with Direct Reply RemoteInput.
     const messagePayload = {
-      notification: {
-        title: safeTitle,
-        body: safeBody,
-      },
       data: {
         type: 'chat_message',
         conversationId: String(conversationId || ''),
@@ -64,17 +62,11 @@ export const sendPushNotification = async (payload: PushNotificationPayload): Pr
         messageId: String(messageId || ''),
         senderName: safeTitle,
         messageText: safeBody,
+        title: safeTitle,
+        body: safeBody,
       },
       android: {
         priority: 'high' as const,
-        notification: {
-          channelId: 'chat_messages',
-          sound: 'default',
-          priority: 'max' as const,
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          visibility: 'public' as const,
-        },
       },
       tokens,
     };

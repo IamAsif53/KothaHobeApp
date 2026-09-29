@@ -77,11 +77,12 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✏️ Message Edit: In-place message editing for sender within 15 minutes with real-time socket synchronization and '(Edited)' indicators",
-      "↪️ Message Forwarding: Multi-target message forwarding to individual chats and groups with 'Forwarded' attribution banner",
-      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section, unread state preservation, and search support",
-      "🔗 Rich Link Previews: Automatic, non-blocking URL detection with SSRF-protected backend OpenGraph scrapers and embedded interactive preview cards",
-      "👥 Group-Only Typing Indicators: Aggregated real-time typing indicator strictly for group conversations with formatted participant names and pulsing animation dots"
+      "💬 Notification Instant Reply: Pure data-only FCM push payloads and custom background RemoteInput action for direct reply straight from notification shade",
+      "✏️ Message Edit: In-place message editing within 15 minutes with real-time socket synchronization",
+      "↪️ Message Forwarding: Multi-target message forwarding with 'Forwarded' attribution banner",
+      "📦 Chat Archive: Per-user conversation archiving with dedicated Archived section and search support",
+      "🔗 Rich Link Previews: Automatic URL detection with SSRF-protected preview scrapers",
+      "👥 Group-Only Typing Indicators: Aggregated real-time typing indicators for group chats"
     ],
     mandatory: false
   };

@@ -81,14 +81,16 @@ public class MessageReplyReceiver extends BroadcastReceiver {
                 conn.setDoOutput(true);
 
                 // Retrieve auth token from SharedPreferences
-                SharedPreferences prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
-                String token = prefs.getString("token", null);
-                if (token == null) {
-                    SharedPreferences authPrefs = context.getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
-                    token = authPrefs.getString("auth_token", null);
+                SharedPreferences authPrefs = context.getSharedPreferences("kothahobe_auth", Context.MODE_PRIVATE);
+                String token = authPrefs.getString("auth_token", null);
+                if (token == null || token.isEmpty()) {
+                    SharedPreferences prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
+                    token = prefs.getString("token", null);
                 }
                 if (token != null && !token.isEmpty()) {
                     conn.setRequestProperty("Authorization", "Bearer " + token);
+                } else {
+                    Log.w(TAG, "No auth token found in SharedPreferences for direct reply");
                 }
 
                 String clientMessageId = "notif_reply_" + System.currentTimeMillis();
@@ -103,6 +105,18 @@ public class MessageReplyReceiver extends BroadcastReceiver {
 
                 int responseCode = conn.getResponseCode();
                 Log.d(TAG, "Direct Reply API response code: " + responseCode);
+                if (responseCode >= 200 && responseCode < 300) {
+                    Log.d(TAG, "Direct reply sent successfully!");
+                } else {
+                    try {
+                        java.io.InputStream errStream = conn.getErrorStream();
+                        if (errStream != null) {
+                            java.util.Scanner s = new java.util.Scanner(errStream).useDelimiter("\\A");
+                            String errBody = s.hasNext() ? s.next() : "";
+                            Log.e(TAG, "Direct reply error body: " + errBody);
+                        }
+                    } catch (Exception ignored) {}
+                }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to send direct reply API request: " + e.getMessage());
             } finally {

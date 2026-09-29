@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
+      "✨ Smooth Upward Message Scrolling: Eliminated jump/glitch when sliding up to earlier messages with synchronous scroll anchoring",
+      "📌 Smart Bottom Scroll Pinning: Prevents forced auto-scroll to bottom while user is actively reading older message history",
       "🎨 Light Theme Redesign (Soft Neutral): Clean #F5F7F6 surface, mint outgoing bubbles, high contrast typography & WCAG AA sender colors",
       "🖼️ Intrinsic Media Sizing: Tight image bubbles without bloated empty padding, floating frosted timestamp & read receipts",
-      "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA",
-      "📩 Universal Read Receipts & Unread Sync: Seamless sync between Web/Desktop and Android with real-time mark-as-read",
-      "📱 Native Conversation Notifications: MessagingStyle notifications with inline reply & grouped avatars"
+      "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA"
     ],
     mandatory: false
   };

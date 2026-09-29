@@ -363,7 +363,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   if (isCustomEmojiMessage && customEmojiId) {
     return (
       <div
-        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none animate-message-enter transition-all ${
+        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none ${
           isSelected ? 'scale-[1.02]' : ''
         }`}
         onContextMenu={(e) => {
@@ -528,7 +528,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none animate-message-enter transition-all ${
+      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none ${
         isSelected ? 'scale-[1.01]' : ''
       }`}
       onContextMenu={(e) => {

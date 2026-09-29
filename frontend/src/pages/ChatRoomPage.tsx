@@ -121,6 +121,8 @@ export const ChatRoomPage: React.FC = () => {
   // New Messages while scrolled up badge
   const [unreadNewCount, setUnreadNewCount] = useState(0);
   const isNearBottomRef = useRef(true);
+  const isLoadingMoreRef = useRef(false);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   // Scroll offset preservation ref for upward pagination
   const scrollOffsetRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
@@ -192,7 +194,7 @@ export const ChatRoomPage: React.FC = () => {
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    isNearBottomRef.current = distanceToBottom < 130;
+    isNearBottomRef.current = distanceToBottom < 45;
 
     if (isNearBottomRef.current) {
       setUnreadNewCount(0);
@@ -201,8 +203,8 @@ export const ChatRoomPage: React.FC = () => {
       }
     }
 
-    // Trigger loading older messages when near top (within 50px)
-    if (scrollTop < 50 && hasMore && !loadingMore && oldestCursor) {
+    // Trigger loading older messages when near top (within 100px)
+    if (scrollTop < 100 && hasMore && !isLoadingMoreRef.current && !loadingMore && oldestCursor) {
       handleLoadMore();
     }
   };
@@ -210,9 +212,9 @@ export const ChatRoomPage: React.FC = () => {
   // Synchronize Scroll on initial render and upward pagination
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!container || messages.length === 0) return;
 
-    // Upward pagination scroll compensation
+    // 1. Upward pagination scroll compensation (runs synchronously before paint)
     if (scrollOffsetRef.current) {
       const { prevScrollHeight, prevScrollTop } = scrollOffsetRef.current;
       const heightDelta = container.scrollHeight - prevScrollHeight;
@@ -221,18 +223,28 @@ export const ChatRoomPage: React.FC = () => {
       return;
     }
 
-    // Initial mount bottom pin
-    if (!initialScrollDoneRef.current && messages.length > 0) {
+    // 2. Initial mount bottom pin
+    if (!initialScrollDoneRef.current) {
       container.scrollTop = container.scrollHeight;
       initialScrollDoneRef.current = true;
+      lastMessageIdRef.current = messages[messages.length - 1]?._id || messages[messages.length - 1]?.clientMessageId || null;
       return;
     }
 
-    // If already near bottom, stay pinned
-    if (isNearBottomRef.current) {
-      container.scrollTop = container.scrollHeight;
+    // 3. New message added at the bottom
+    const currentLastId = messages[messages.length - 1]?._id || messages[messages.length - 1]?.clientMessageId || null;
+    const isNewBottomMessage = currentLastId !== lastMessageIdRef.current;
+    lastMessageIdRef.current = currentLastId;
+
+    if (isNewBottomMessage) {
+      const lastMsg = messages[messages.length - 1];
+      const isSentByMe = lastMsg && lastMsg.senderId === user?._id;
+      // Always scroll to bottom if sent by me, or if user is currently near bottom
+      if (isSentByMe || isNearBottomRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
     }
-  }, [messages]);
+  }, [messages, user?._id]);
 
   // Set Active Conversation ID
   useEffect(() => {
@@ -287,6 +299,15 @@ export const ChatRoomPage: React.FC = () => {
         }
 
         if (msgRes.success && msgRes.messages) {
+          const container = scrollContainerRef.current;
+          // If already mounted and user is scrolled up reading older messages, preserve scroll anchor
+          if (initialScrollDoneRef.current && container && !isNearBottomRef.current) {
+            scrollOffsetRef.current = {
+              prevScrollHeight: container.scrollHeight,
+              prevScrollTop: container.scrollTop,
+            };
+          }
+
           setMessages((prev) => {
             const map = new Map<string, IMessage>();
             // 1. Add current local/optimistic messages
@@ -316,7 +337,10 @@ export const ChatRoomPage: React.FC = () => {
         console.warn('[ChatRoom] Background sync notice:', error);
       } finally {
         setLoading(false);
-        requestAnimationFrame(() => scrollToBottom(true));
+        // ONLY scroll to bottom if initial scroll was not yet done OR user is currently at the bottom
+        if (!initialScrollDoneRef.current || isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(true));
+        }
       }
     };
 
@@ -646,28 +670,38 @@ export const ChatRoomPage: React.FC = () => {
 
   // Load older messages with zero-jump scroll anchoring
   const handleLoadMore = async () => {
-    if (!conversationId || !hasMore || loadingMore || !oldestCursor) return;
+    if (!conversationId || !hasMore || isLoadingMoreRef.current || !oldestCursor) return;
 
-    const container = scrollContainerRef.current;
-    if (container) {
-      scrollOffsetRef.current = {
-        prevScrollHeight: container.scrollHeight,
-        prevScrollTop: container.scrollTop,
-      };
-    }
-
+    isLoadingMoreRef.current = true;
     setLoadingMore(true);
+
     try {
       const msgRes = await fetchMessagesApi(conversationId, oldestCursor, 30);
-      if (msgRes.success && msgRes.messages) {
-        setMessages((prev) => [...(msgRes.messages || []), ...prev]);
+      if (msgRes.success && msgRes.messages && msgRes.messages.length > 0) {
+        const container = scrollContainerRef.current;
+        if (container) {
+          scrollOffsetRef.current = {
+            prevScrollHeight: container.scrollHeight,
+            prevScrollTop: container.scrollTop,
+          };
+        }
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m._id || m.clientMessageId));
+          const newOlder = (msgRes.messages || []).filter(
+            (m) => !existingIds.has(m._id) && !existingIds.has(m.clientMessageId)
+          );
+          return [...newOlder, ...prev];
+        });
         setHasMore(msgRes.hasMore);
         setOldestCursor(msgRes.oldestCursor);
+      } else {
+        setHasMore(false);
       }
     } catch (error) {
       console.error('[ChatRoom] Failed to load older messages:', error);
       scrollOffsetRef.current = null;
     } finally {
+      isLoadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
@@ -1476,19 +1510,23 @@ export const ChatRoomPage: React.FC = () => {
         </div>
       )}
 
+      {/* Floating Loading Older Messages Pill (Zero Layout Shift) */}
+      {loadingMore && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-fade-in">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-chat-card/95 backdrop-blur-md border border-chat-border shadow-md text-chat-textSecondary text-[11px] font-medium">
+            <div className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading earlier messages...</span>
+          </div>
+        </div>
+      )}
+
       {/* Messages Scroll Area */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        style={{ backgroundColor: themeConfig.bg }}
+        style={{ backgroundColor: themeConfig.bg, overflowAnchor: 'none' }}
         className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col select-text transition-colors duration-200 relative hardware-accelerated overscroll-contain"
       >
-        {/* Loading Older Messages Spinner */}
-        {loadingMore && (
-          <div className="flex justify-center py-2">
-            <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
 
         {loading ? (
           <div className="space-y-4 py-2">

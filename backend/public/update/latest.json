@@ -1,15 +1,15 @@
 {
-  "versionCode": 99,
-  "versionName": "1.1.54",
+  "versionCode": 100,
+  "versionName": "1.1.55",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "c6083cd5b335e2cf512050ac000668803e5b79b40a610108e47d0ece62945b45",
+  "sha256": "e2cf3f889f86bbc63e7f5bebd8a2c510e90be9438a79993f040dbcb63905d5b4",
   "releaseNotes": [
-    "Release v1.1.54 (Build 99)",
+    "Release v1.1.55 (Build 100)",
+    "✨ Smooth Upward Message Scrolling: Eliminated jump/glitch when sliding up to earlier messages with synchronous scroll anchoring",
+    "📌 Smart Bottom Scroll Pinning: Prevents forced auto-scroll to bottom while user is actively reading older message history",
     "🎨 Light Theme Redesign (Soft Neutral): Clean #F5F7F6 surface, mint outgoing bubbles, high contrast typography & WCAG AA sender colors",
     "🖼️ Intrinsic Media Sizing: Tight image bubbles without bloated empty padding, floating frosted timestamp & read receipts",
-    "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA",
-    "📩 Universal Read Receipts & Unread Sync: Seamless sync between Web/Desktop and Android with real-time mark-as-read",
-    "📱 Native Conversation Notifications: MessagingStyle notifications with inline reply & grouped avatars"
+    "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA"
   ],
   "mandatory": false
 }

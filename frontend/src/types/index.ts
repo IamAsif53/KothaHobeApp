@@ -46,6 +46,9 @@ export interface IAttachment {
   width?: number;
   height?: number;
   thumbnailUrl?: string;
+  mediaId?: string;
+  storageProvider?: string;
+  checksum?: string;
 }
 
 export interface IReplyTo {

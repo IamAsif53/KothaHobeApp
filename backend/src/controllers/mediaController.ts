@@ -1,19 +1,13 @@
 import { Request, Response } from 'express';
-import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import multer from 'multer';
-import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
 import { verifyToken } from '../utils/jwt';
-
-// Ensure uploads directory exists for fallback
-const UPLOADS_DIR = path.resolve(__dirname, '../../uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+import { MediaStorageService } from '../services/storage/MediaStorageService';
+import { MigrationService } from '../services/storage/migrationService';
+import { MediaMetadata } from '../models/MediaMetadata';
 
 // Allowed MIME types & limits
 const ALLOWED_MIMES = new Set([
@@ -45,12 +39,16 @@ const ALLOWED_MIMES = new Set([
   'application/x-zip-compressed',
 ]);
 
-// Fast in-memory buffer storage to eliminate slow disk I/O bottlenecks
+// Upload middleware with file verification
 export const uploadMiddleware = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIMES.has(file.mimetype) || file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
+    if (
+      ALLOWED_MIMES.has(file.mimetype) ||
+      file.mimetype.startsWith('image/') ||
+      file.mimetype.startsWith('audio/')
+    ) {
       cb(null, true);
     } else {
       cb(new Error('Unsupported or executable file format rejected.'));
@@ -58,55 +56,17 @@ export const uploadMiddleware = multer({
   },
 });
 
-// GridFS Bucket Instance Manager
-let gridFSBucket: mongoose.mongo.GridFSBucket | null = null;
-
-function getGridFSBucket(): mongoose.mongo.GridFSBucket {
-  if (!gridFSBucket) {
-    const db = mongoose.connection.db;
-    if (!db) {
-      throw new Error('Database connection not established yet');
-    }
-    gridFSBucket = new mongoose.mongo.GridFSBucket(db, {
-      bucketName: 'mediaFiles',
-      chunkSizeBytes: 4 * 1024 * 1024, // 4MB chunk size to eliminate multi-roundtrip chunking overhead
-    });
-  }
-  return gridFSBucket;
-}
-
-function getMimeFromExtension(filename: string): string {
-  const ext = path.extname(filename).toLowerCase();
-  if (['.jpg', '.jpeg'].includes(ext)) return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.webp') return 'image/webp';
-  if (ext === '.gif') return 'image/gif';
-  if (ext === '.pdf') return 'application/pdf';
-  if (['.webm', '.weba'].includes(ext)) return 'audio/webm';
-  if (['.mp4', '.m4a'].includes(ext)) return 'audio/mp4';
-  if (ext === '.mp3') return 'audio/mpeg';
-  if (ext === '.aac') return 'audio/aac';
-  if (ext === '.ogg' || ext === '.opus') return 'audio/ogg';
-  if (ext === '.wav') return 'audio/wav';
-  if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (ext === '.txt') return 'text/plain';
-  return 'application/octet-stream';
-}
-
 function decodeUtf8Filename(name: string): string {
   if (!name || typeof name !== 'string') return '';
   try {
-    // Multer / busboy header standard: latin1 decoded string from UTF-8 bytes
     const decoded = Buffer.from(name, 'latin1').toString('utf8');
-    // If conversion produces valid non-replacement string, use it
-    return decoded && !decoded.includes('') ? decoded : name;
+    return decoded && !decoded.includes('\uFFFD') ? decoded : name;
   } catch {
     return name;
   }
 }
 
-// POST /api/messages/upload (Direct memory-to-GridFS stream for sub-second uploads)
+// POST /api/messages/upload (Standard Multipart Upload through Storage Service)
 export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uploadStartTime = Date.now();
   try {
@@ -127,7 +87,7 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    // Verify user is a member of the conversation
+    // Verify user is an active participant of the conversation
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: req.user._id,
@@ -141,48 +101,26 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
     // Accurately preserve Unicode/Bengali original filename
     const rawFilename = explicitOriginalName || file.originalname || 'file';
     const originalName = decodeUtf8Filename(rawFilename);
+    const finalMime = file.mimetype || 'application/octet-stream';
 
-    const ext = path.extname(originalName).toLowerCase() || (type === 'audio' ? '.webm' : '.jpg');
-    const uniqueFilename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
-    const finalMime = file.mimetype || getMimeFromExtension(uniqueFilename);
-
-    // Stream directly from RAM buffer into MongoDB GridFS
-    const bucket = getGridFSBucket();
-    const uploadStream = bucket.openUploadStream(uniqueFilename, {
-      contentType: finalMime,
-      metadata: {
-        originalName: originalName,
-        mimeType: finalMime,
-        conversationId,
-        uploaderId: req.user._id,
-        size: file.size,
-      },
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      uploadStream.on('finish', () => resolve());
-      uploadStream.on('error', (err: any) => reject(err));
-      uploadStream.end(file.buffer);
-    });
-
-    // Asynchronously save local copy without blocking the client response
-    fs.writeFile(path.join(UPLOADS_DIR, uniqueFilename), file.buffer, (err) => {
-      if (err) console.warn('[MediaUpload] Background disk cache notice:', err);
+    const storageService = MediaStorageService.getInstance();
+    const result = await storageService.upload(file.buffer, {
+      originalName,
+      mimeType: finalMime,
+      conversationId,
+      uploaderId: req.user._id.toString(),
+      size: file.size,
+      type,
     });
 
     const elapsedMs = Date.now() - uploadStartTime;
-    console.log(`[MediaUpload] Uploaded ${uniqueFilename} ("${originalName}", ${file.size} bytes) in ${elapsedMs}ms`);
-
-    const relativeUrl = `/api/messages/media/${uniqueFilename}`;
+    console.log(
+      `[MediaUpload] Uploaded "${originalName}" (${file.size} bytes, ${result.attachment.storageProvider}) in ${elapsedMs}ms`
+    );
 
     res.status(200).json({
       success: true,
-      attachment: {
-        url: relativeUrl,
-        fileName: originalName,
-        mimeType: finalMime,
-        size: file.size,
-      },
+      attachment: result.attachment,
     });
   } catch (error: any) {
     console.error('[UploadMedia] Error:', error);
@@ -190,10 +128,110 @@ export const uploadMedia = async (req: AuthenticatedRequest, res: Response): Pro
   }
 };
 
-// GET /api/messages/media/:filename (Secure streaming with GridFS & Range support)
+// POST /api/media/upload-session (Initiate Direct Cloud Presigned Upload Session)
+export const createUploadSession = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { conversationId, originalName, mimeType, size, type } = req.body;
+
+    if (!conversationId || !originalName || !mimeType) {
+      res.status(400).json({
+        success: false,
+        message: 'conversationId, originalName, and mimeType are required',
+      });
+      return;
+    }
+
+    // Verify user is in conversation
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: req.user._id,
+    });
+
+    if (!conversation) {
+      res.status(403).json({ success: false, message: 'Access denied to this conversation' });
+      return;
+    }
+
+    const storageService = MediaStorageService.getInstance();
+
+    if (!storageService.isDirectCloudUploadSupported()) {
+      res.status(200).json({
+        success: true,
+        directUploadSupported: false,
+        fallbackEndpoint: '/api/messages/upload',
+        message: 'Direct cloud upload not configured, please use standard multipart upload',
+      });
+      return;
+    }
+
+    const cleanName = decodeUtf8Filename(originalName);
+    const session = await storageService.createDirectUploadSession({
+      originalName: cleanName,
+      mimeType,
+      conversationId,
+      uploaderId: req.user._id.toString(),
+      size: Number(size) || undefined,
+      type,
+    });
+
+    res.status(200).json({
+      success: true,
+      directUploadSupported: true,
+      session,
+    });
+  } catch (error: any) {
+    console.error('[CreateUploadSession] Error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Failed to create upload session' });
+  }
+};
+
+// POST /api/media/upload-complete (Finalize Direct Cloud Upload Session)
+export const completeUploadSession = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      res.status(400).json({ success: false, message: 'sessionId is required' });
+      return;
+    }
+
+    const storageService = MediaStorageService.getInstance();
+    const result = await storageService.completeDirectUploadSession(
+      sessionId,
+      req.user._id.toString()
+    );
+
+    res.status(200).json({
+      success: true,
+      attachment: result.attachment,
+    });
+  } catch (error: any) {
+    console.error('[CompleteUploadSession] Error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Failed to complete upload session' });
+  }
+};
+
+// GET /api/messages/media/:filename and GET /api/media/:mediaId
 export const streamMedia = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { filename } = req.params;
+    const { filename, mediaId } = req.params;
+    const identifier = filename || mediaId;
+
     const authHeader = req.headers.authorization?.replace('Bearer ', '');
     const queryToken = req.query.token as string;
     const token = authHeader || queryToken;
@@ -203,88 +241,127 @@ export const streamMedia = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    let decoded: any;
     try {
-      decoded = verifyToken(token);
+      verifyToken(token);
     } catch {
       res.status(401).json({ success: false, message: 'Invalid or expired media token' });
       return;
     }
 
-    const safeFilename = Array.isArray(filename) ? filename[0] : String(filename || '');
-    const cleanFilename = path.basename(safeFilename);
+    const safeIdentifier = Array.isArray(identifier) ? identifier[0] : String(identifier || '');
+    const cleanKey = path.basename(safeIdentifier);
     const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined;
 
-    // 1. Primary Source: MongoDB GridFS (Permanent Cloud Storage)
-    try {
-      const bucket = getGridFSBucket();
-      const files = await bucket.find({ filename: cleanFilename }).toArray();
+    const storageService = MediaStorageService.getInstance();
 
-      if (files && files.length > 0) {
-        const fileDoc = files[0];
-        const fileSize = fileDoc.length;
-        const contentType = fileDoc.contentType || (fileDoc.metadata as any)?.mimeType || getMimeFromExtension(cleanFilename);
+    // 1. Partial byte-range request (HTTP 206) for video/audio seeking
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : Number.MAX_SAFE_INTEGER;
 
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // 1-day client cache
-
-        if (rangeHeader) {
-          const parts = rangeHeader.replace(/bytes=/, '').split('-');
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-          const chunksize = end - start + 1;
-
-          res.writeHead(206, {
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Content-Length': chunksize,
-          });
-
-          bucket.openDownloadStreamByName(cleanFilename, { start, end: end + 1 }).pipe(res);
-        } else {
-          res.setHeader('Content-Length', fileSize);
-          bucket.openDownloadStreamByName(cleanFilename).pipe(res);
-        }
-        return;
-      }
-    } catch (gridErr) {
-      console.warn('[StreamMedia] GridFS lookup error, attempting disk fallback:', gridErr);
-    }
-
-    // 2. Fallback Source: Local Disk (For legacy files)
-    const filePath = path.join(UPLOADS_DIR, cleanFilename);
-    if (fs.existsSync(filePath)) {
-      const stat = fs.statSync(filePath);
-      const fileSize = stat.size;
-      const contentType = getMimeFromExtension(cleanFilename);
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-
-      if (rangeHeader) {
-        const parts = rangeHeader.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunksize = end - start + 1;
-        const fileStream = fs.createReadStream(filePath, { start, end });
+      try {
+        const rangeResult = await storageService.getRangeStream(cleanKey, start, end);
 
         res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Content-Length': chunksize,
+          'Content-Range': `bytes ${rangeResult.start}-${rangeResult.end}/${rangeResult.totalLength}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': rangeResult.contentLength,
+          'Content-Type': rangeResult.mimeType,
+          'Cache-Control': 'public, max-age=86400',
         });
-        fileStream.pipe(res);
-      } else {
-        res.setHeader('Content-Length', fileSize);
-        fs.createReadStream(filePath).pipe(res);
+
+        rangeResult.stream.pipe(res);
+        return;
+      } catch (rangeErr) {
+        console.warn('[StreamMedia] Range stream failed, attempting full stream fallback:', rangeErr);
       }
+    }
+
+    // 2. Full file stream
+    const { stream, metadata } = await storageService.getStream(cleanKey);
+
+    res.setHeader('Content-Type', metadata.mimeType);
+    res.setHeader('Content-Length', metadata.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (metadata.checksum) {
+      res.setHeader('ETag', `"${metadata.checksum}"`);
+    }
+
+    stream.pipe(res);
+  } catch (error: any) {
+    console.error('[StreamMedia] Error:', error);
+    res.status(404).json({ success: false, message: 'Media file not found' });
+  }
+};
+
+// GET /api/media/:mediaId/info
+export const getMediaInfo = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
       return;
     }
 
-    res.status(404).json({ success: false, message: 'File not found' });
+    const rawMediaId = req.params.mediaId;
+    const mediaIdStr = Array.isArray(rawMediaId) ? rawMediaId[0] : String(rawMediaId || '');
+    const cleanMediaId = path.basename(mediaIdStr);
+
+    const media = await MediaMetadata.findOne({
+      $or: [
+        { mediaKey: cleanMediaId },
+        { objectKey: cleanMediaId },
+      ],
+      status: { $ne: 'deleted' },
+    });
+
+    if (!media) {
+      res.status(404).json({ success: false, message: 'Media not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      media: {
+        mediaId: media._id,
+        mediaKey: media.mediaKey,
+        originalName: media.originalName,
+        mimeType: media.mimeType,
+        size: media.size,
+        storageProvider: media.storageProvider,
+        url: media.url,
+        createdAt: media.createdAt,
+      },
+    });
   } catch (error: any) {
-    console.error('[StreamMedia] Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to stream media' });
+    console.error('[GetMediaInfo] Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch media information' });
+  }
+};
+
+// POST /api/media/migrate (Admin/Dev batch migration tool)
+export const triggerMigration = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { batchSize = 20, limit = 100, dryRun = false } = req.body;
+    const progress = await MigrationService.migrateGridFSToObjectStorage({
+      batchSize: Number(batchSize),
+      limit: Number(limit),
+      dryRun: Boolean(dryRun),
+    });
+
+    res.status(200).json({
+      success: true,
+      progress,
+    });
+  } catch (error: any) {
+    console.error('[TriggerMigration] Error:', error);
+    res.status(500).json({ success: false, message: error?.message || 'Migration failed' });
   }
 };
 

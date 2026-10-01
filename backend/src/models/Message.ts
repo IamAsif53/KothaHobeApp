@@ -35,6 +35,9 @@ export interface IAttachment {
   width?: number;
   height?: number;
   thumbnailUrl?: string;
+  mediaId?: string;
+  storageProvider?: string;
+  checksum?: string;
 }
 
 export interface IReplyTo {
@@ -121,6 +124,9 @@ const AttachmentSchema = new Schema(
     width: { type: Number },
     height: { type: Number },
     thumbnailUrl: { type: String },
+    mediaId: { type: String },
+    storageProvider: { type: String },
+    checksum: { type: String },
   },
   { _id: false }
 );

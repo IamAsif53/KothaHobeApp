@@ -37,7 +37,8 @@ interface SocketContextType {
     type?: string,
     attachment?: any,
     replyTo?: any,
-    customEmojiId?: string
+    customEmojiId?: string,
+    viewOnce?: boolean
   ) => void;
   flushPendingOutbox: () => void;
   removeOutboxItem: (clientMessageId?: string) => void;
@@ -741,7 +742,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     type: string = 'text',
     attachment?: any,
     replyTo?: any,
-    customEmojiId?: string
+    customEmojiId?: string,
+    viewOnce?: boolean
   ) => {
     const payload = {
       conversationId,
@@ -752,6 +754,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       attachment,
       replyTo,
       customEmojiId,
+      viewOnce,
     };
 
     const outbox = getStoredOutbox();

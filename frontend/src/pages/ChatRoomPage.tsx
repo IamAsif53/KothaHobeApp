@@ -12,6 +12,7 @@ import { Avatar } from '../components/common/Avatar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
 import { MediaViewerModal } from '../components/chat/MediaViewerModal';
+import { ViewOnceViewerModal } from '../components/chat/ViewOnceViewerModal';
 import { DocumentViewerModal } from '../components/chat/DocumentViewerModal';
 import { ForwardMessageModal } from '../components/chat/ForwardMessageModal';
 import { GroupCallBanner } from '../components/call/GroupCallBanner';
@@ -160,6 +161,7 @@ export const ChatRoomPage: React.FC = () => {
   const [editingMessage, setEditingMessage] = useState<IMessage | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<IMessage | null>(null);
   const [activeMediaModal, setActiveMediaModal] = useState<IMessage | null>(null);
+  const [activeViewOnceModal, setActiveViewOnceModal] = useState<IMessage | null>(null);
   const [activeDocModal, setActiveDocModal] = useState<IMessage | null>(null);
   const [actionMenuMessage, setActionMenuMessage] = useState<IMessage | null>(null);
   const [reactionListMessage, setReactionListMessage] = useState<IMessage | null>(null);
@@ -800,6 +802,30 @@ export const ChatRoomPage: React.FC = () => {
       });
     };
 
+    // 12. View Once Opened Realtime Synchronization
+    const handleViewOnceOpened = ({
+      messageId,
+      conversationId: msgConvId,
+      openedBy,
+      openedAt,
+    }: {
+      messageId: string;
+      conversationId: string;
+      openedBy: string;
+      openedAt: string;
+    }) => {
+      if (msgConvId && msgConvId !== conversationId) return;
+      setMessages((prev) => {
+        const updated = prev.map((m) =>
+          m._id === messageId
+            ? { ...m, viewOnceOpenedAt: openedAt, viewOnceOpenedBy: (openedBy as any) }
+            : m
+        );
+        persistMessages(updated);
+        return updated;
+      });
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:sent', handleMessageSent);
     socket.on('message:edited', handleMessageEdited);
@@ -807,6 +833,7 @@ export const ChatRoomPage: React.FC = () => {
     socket.on('message:deleted', handleMessageDeleted);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
+    socket.on('message:view_once_opened', handleViewOnceOpened);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
     socket.on('group:typing:update', handleGroupTypingUpdate);
@@ -830,6 +857,7 @@ export const ChatRoomPage: React.FC = () => {
       socket.off('message:deleted', handleMessageDeleted);
       socket.off('message:read', handleMessageRead);
       socket.off('message:delivered', handleMessageDelivered);
+      socket.off('message:view_once_opened', handleViewOnceOpened);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
       socket.off('group:typing:update', handleGroupTypingUpdate);
@@ -937,7 +965,8 @@ export const ChatRoomPage: React.FC = () => {
     type: 'text' | 'image' | 'audio' | 'document' | 'custom_emoji' = 'text',
     attachment?: IAttachment,
     replyTo?: IReplyTo,
-    localFile?: File | Blob
+    localFile?: File | Blob,
+    viewOnce?: boolean
   ) => {
     if (!conversationId) return;
     if (!isGroup && !recipient) return;
@@ -969,6 +998,9 @@ export const ChatRoomPage: React.FC = () => {
       status: 'sending',
       clientMessageId: tempId,
       createdAt: new Date().toISOString(),
+      viewOnce: !!viewOnce,
+      viewOnceOpenedAt: null,
+      viewOnceOpenedBy: null,
     };
 
     // 1. Instant 0ms display in chat
@@ -994,7 +1026,7 @@ export const ChatRoomPage: React.FC = () => {
             // Update optimistic message with real server attachment URL
             setMessages((prev) => {
               const updated = prev.map((m) =>
-                m.clientMessageId === tempId ? { ...m, attachment: serverAttachment } : m
+                m.clientMessageId === tempId ? { ...m, attachment: serverAttachment, viewOnce: !!viewOnce } : m
               );
               persistMessages(updated);
               return updated;
@@ -1009,7 +1041,8 @@ export const ChatRoomPage: React.FC = () => {
               type,
               serverAttachment,
               replyTo,
-              customEmojiId
+              customEmojiId,
+              viewOnce
             );
           } else {
             // Mark failed on server error
@@ -1046,14 +1079,27 @@ export const ChatRoomPage: React.FC = () => {
       type,
       attachment,
       replyTo,
-      customEmojiId
+      customEmojiId,
+      viewOnce
     );
   };
 
   // 1. Native Media Viewer
   const handleOpenMedia = useCallback((msg: IMessage) => {
+    if (msg.viewOnce) {
+      if (msg.viewOnceOpenedAt) {
+        showToast('This media has already been opened');
+        return;
+      }
+      if (msg.senderId === user?._id) {
+        showToast('View once media can only be opened by the recipient');
+        return;
+      }
+      setActiveViewOnceModal(msg);
+      return;
+    }
     setActiveMediaModal(msg);
-  }, []);
+  }, [user?._id]);
 
   // 2. Native Document Open (Default Reader App)
   const handleOpenDocument = useCallback(async (msg: IMessage) => {
@@ -1266,6 +1312,25 @@ export const ChatRoomPage: React.FC = () => {
         />
       )}
 
+      {/* View Once Media Viewer Modal (Protected single-view) */}
+      {activeViewOnceModal && (
+        <ViewOnceViewerModal
+          message={activeViewOnceModal}
+          onClose={() => setActiveViewOnceModal(null)}
+          onOpened={(messageId, openedAt) => {
+            setMessages((prev) => {
+              const updated = prev.map((m) =>
+                m._id === messageId
+                  ? { ...m, viewOnceOpenedAt: openedAt, viewOnceOpenedBy: (user?._id as any) || null }
+                  : m
+              );
+              persistMessages(updated);
+              return updated;
+            });
+          }}
+        />
+      )}
+
       {/* Document Viewer Modal (Fallback when no native app installed) */}
       {activeDocModal && (
         <DocumentViewerModal
@@ -1399,6 +1464,7 @@ export const ChatRoomPage: React.FC = () => {
 
               {/* Forward Message */}
               {actionMenuMessage.type !== 'system' &&
+                !actionMenuMessage.viewOnce &&
                 !actionMenuMessage.isDeletedForEveryone &&
                 actionMenuMessage.status !== 'failed' &&
                 !actionMenuMessage._id.startsWith('temp_') && (
@@ -1415,9 +1481,27 @@ export const ChatRoomPage: React.FC = () => {
                   </button>
               )}
 
+              {/* View Once Media Open Action (Recipient only, Unopened only) */}
+              {actionMenuMessage.viewOnce &&
+                !actionMenuMessage.viewOnceOpenedAt &&
+                actionMenuMessage.senderId !== user?._id && (
+                  <button
+                    onClick={() => {
+                      const msg = actionMenuMessage;
+                      setActionMenuMessage(null);
+                      handleOpenMedia(msg);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-chat-surfaceSecondary text-brand-600 dark:text-brand-400 font-semibold rounded-lg transition-colors text-left"
+                  >
+                    <ExternalLink className="w-4 h-4 text-brand-500" />
+                    <span>Open View Once</span>
+                  </button>
+              )}
+
               {/* Edit Message (Sender only, Text message, within 15 minutes) */}
               {actionMenuMessage.senderId === user?._id &&
                 actionMenuMessage.type === 'text' &&
+                !actionMenuMessage.viewOnce &&
                 !actionMenuMessage.isDeletedForEveryone &&
                 !actionMenuMessage._id.startsWith('temp_') &&
                 Date.now() - new Date(actionMenuMessage.createdAt).getTime() <= 15 * 60 * 1000 && (
@@ -1434,7 +1518,7 @@ export const ChatRoomPage: React.FC = () => {
                   </button>
               )}
 
-              {actionMenuMessage.text && (
+              {actionMenuMessage.text && !actionMenuMessage.viewOnce && (
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(actionMenuMessage.text || '');
@@ -1448,7 +1532,7 @@ export const ChatRoomPage: React.FC = () => {
                 </button>
               )}
 
-              {actionMenuMessage.attachment && (
+              {actionMenuMessage.attachment && !actionMenuMessage.viewOnce && (
                 <button
                   onClick={() => {
                     if (actionMenuMessage.type === 'image') handleOpenMedia(actionMenuMessage);

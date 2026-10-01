@@ -157,6 +157,9 @@ export interface IMessage {
   deliveredAt?: string;
   readAt?: string;
   editedAt?: string;
+  viewOnce?: boolean;
+  viewOnceOpenedAt?: string | null;
+  viewOnceOpenedBy?: string | null;
 }
 
 export type GroupRole = 'creator' | 'admin' | 'moderator' | 'member';

@@ -455,6 +455,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toggleNativeSpeakerphone(true);
     }
 
+    enableCallAudioMode();
+
     const tempCallId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
     const session: CallSession = {
@@ -551,6 +553,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSpeakerOn(true);
       toggleNativeSpeakerphone(true);
     }
+
+    enableCallAudioMode();
 
     try {
       // 3. Refresh dynamic ICE servers & start local media stream
@@ -696,10 +700,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Switch Between Front & Rear Camera
   const switchCamera = async () => {
-    const nextFront = !isFrontCamera;
-    const track = await webrtcVideoService.switchCamera(nextFront);
-    if (track) {
-      setIsFrontCamera(nextFront);
+    const res = await webrtcVideoService.switchCamera();
+    if (res && res.track) {
+      setIsFrontCamera(res.isFrontCamera);
     }
   };
 

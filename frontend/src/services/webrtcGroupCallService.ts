@@ -125,9 +125,16 @@ class WebRTCGroupCallService {
     }
 
     const audioConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      echoCancellation: { ideal: true },
+      noiseSuppression: { ideal: true },
+      autoGainControl: { ideal: true },
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: 48000 },
+      googEchoCancellation: true,
+      googAutoGainControl: true,
+      googNoiseSuppression: true,
+      googHighpassFilter: true,
+      googTypingNoiseDetection: true,
     };
 
     const videoConstraints =
@@ -435,33 +442,94 @@ class WebRTCGroupCallService {
   public async switchCamera(): Promise<boolean> {
     if (!this.localStream || this.callType !== 'video') return this.isFrontCamera;
 
-    this.isFrontCamera = !this.isFrontCamera;
-    const facingMode = this.isFrontCamera ? 'user' : 'environment';
+    const targetFront = !this.isFrontCamera;
+    const targetFacing = targetFront ? 'user' : 'environment';
+    console.log(`[GroupRTC] 🔄 Flipping camera to ${targetFront ? 'front (user)' : 'rear (environment)'}...`);
+
+    const oldVideoTrack = this.localStream.getVideoTracks()[0];
+    if (oldVideoTrack) {
+      try {
+        oldVideoTrack.stop();
+        this.localStream.removeTrack(oldVideoTrack);
+      } catch (e) {
+        console.warn('[GroupRTC] Note stopping old track:', e);
+      }
+    }
+
+    let newStream: MediaStream | null = null;
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 640, max: 1280 },
-          height: { ideal: 480, max: 720 },
-        },
-      });
+      // 1. Try exact/ideal device enumeration if available
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+        if (videoDevices.length > 1) {
+          const match = videoDevices.find((d) => {
+            const lbl = (d.label || '').toLowerCase();
+            return targetFront ? lbl.includes('front') || lbl.includes('user') : lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
+          });
+
+          if (match && match.deviceId) {
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                deviceId: { exact: match.deviceId },
+                width: { ideal: 640, max: 1280 },
+                height: { ideal: 480, max: 720 },
+              },
+            });
+          }
+        }
+      } catch (enumErr) {
+        console.warn('[GroupRTC] Device enumeration fallback:', enumErr);
+      }
+
+      // 2. Fallback to facingMode constraint
+      if (!newStream) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: targetFacing },
+              width: { ideal: 640, max: 1280 },
+              height: { ideal: 480, max: 720 },
+            },
+          });
+        } catch {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: targetFacing,
+            },
+          });
+        }
+      }
 
       const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = this.localStream.getVideoTracks()[0];
+      if (!newVideoTrack) throw new Error('No video track found in switched camera stream');
 
-      if (oldVideoTrack) {
-        this.localStream.removeTrack(oldVideoTrack);
-        oldVideoTrack.stop();
-      }
+      newVideoTrack.enabled = this.isVideoEnabled;
       this.localStream.addTrack(newVideoTrack);
+      this.isFrontCamera = targetFront;
 
       // Replace video track in all active peer connections
       for (const pc of this.peerConnections.values()) {
-        const senders = pc.getSenders();
-        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-        if (videoSender) {
-          await videoSender.replaceTrack(newVideoTrack);
+        try {
+          let replaced = false;
+          const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
+          for (const tr of transceivers) {
+            if (tr.sender && (tr.sender.track?.kind === 'video' || tr.receiver?.track?.kind === 'video')) {
+              await tr.sender.replaceTrack(newVideoTrack);
+              replaced = true;
+              break;
+            }
+          }
+          if (!replaced) {
+            const senders = pc.getSenders();
+            const videoSender = senders.find((s) => s.track?.kind === 'video' || (s as any).kind === 'video');
+            if (videoSender) {
+              await videoSender.replaceTrack(newVideoTrack);
+            }
+          }
+        } catch (pcErr) {
+          console.warn('[GroupRTC] Error replacing track on peer:', pcErr);
         }
       }
 
@@ -469,6 +537,20 @@ class WebRTCGroupCallService {
       return this.isFrontCamera;
     } catch (err) {
       console.error('[GroupRTC] switchCamera error:', err);
+      // Recovery fallback
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const fallbackTrack = fallbackStream.getVideoTracks()[0];
+        if (fallbackTrack) {
+          fallbackTrack.enabled = this.isVideoEnabled;
+          this.localStream.addTrack(fallbackTrack);
+          for (const pc of this.peerConnections.values()) {
+            const vs = pc.getSenders().find((s) => s.track?.kind === 'video');
+            if (vs) await vs.replaceTrack(fallbackTrack);
+          }
+          this.notifyLocalStream();
+        }
+      } catch {}
       return this.isFrontCamera;
     }
   }

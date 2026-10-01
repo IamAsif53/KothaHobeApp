@@ -323,6 +323,7 @@ export const createMessage = async (
       replyTo,
       customEmojiId,
       clientMessageId,
+      viewOnce,
     } = req.body;
 
     if (!conversationId) {
@@ -332,6 +333,7 @@ export const createMessage = async (
 
     const userId = req.user._id;
     const userIdStr = userId.toString();
+    const isViewOnce = Boolean(viewOnce && (type === 'image' || type === 'video'));
 
     const conversation = await Conversation.findOne({
       _id: conversationId,
@@ -370,7 +372,10 @@ export const createMessage = async (
     const io = getGlobalIO();
 
     let previewText = text.trim();
-    if (type === 'image') previewText = '📷 Photo';
+    if (isViewOnce) {
+      previewText = type === 'video' ? '🎬 View Once video' : '📷 View Once photo';
+    } else if (type === 'image') previewText = '📷 Photo';
+    else if (type === 'video') previewText = '🎬 Video';
     else if (type === 'audio') previewText = '🎙 Voice message';
     else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
     else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
@@ -406,6 +411,9 @@ export const createMessage = async (
         serverSequence,
         expiresAt,
         deliveredAt: new Date(),
+        viewOnce: isViewOnce,
+        viewOnceOpenedAt: null,
+        viewOnceOpenedBy: null,
       });
 
       await Conversation.findByIdAndUpdate(conversationId, {
@@ -445,9 +453,9 @@ export const createMessage = async (
           isGroup: true,
           groupName: conversation.groupMeta?.name || 'Group Chat',
           groupAvatar: conversation.groupMeta?.avatarUrl || '',
-          messageText: text.trim(),
+          messageText: isViewOnce ? (type === 'video' ? 'Video' : 'Photo') : text.trim(),
           messageType: type,
-          attachmentFileName: attachment?.fileName,
+          attachmentFileName: isViewOnce ? undefined : attachment?.fileName,
           customEmojiId,
           conversationId: conversationId.toString(),
         }).catch(() => {});
@@ -479,6 +487,9 @@ export const createMessage = async (
         replyTo: replyTo || undefined,
         serverSequence,
         deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
+        viewOnce: isViewOnce,
+        viewOnceOpenedAt: null,
+        viewOnceOpenedBy: null,
       });
 
       await Conversation.findByIdAndUpdate(conversationId, {
@@ -505,9 +516,9 @@ export const createMessage = async (
         senderNickname: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
         senderAvatar: senderUser?.avatarUrl || '',
         isGroup: false,
-        messageText: text.trim(),
+        messageText: isViewOnce ? (type === 'video' ? 'Video' : 'Photo') : text.trim(),
         messageType: type,
-        attachmentFileName: attachment?.fileName,
+        attachmentFileName: isViewOnce ? undefined : attachment?.fileName,
         customEmojiId,
         conversationId: conversationId.toString(),
       }).catch(() => {});
@@ -848,6 +859,11 @@ export const forwardMessage = async (
 
     if (!sourceConv) {
       res.status(403).json({ success: false, message: 'Access denied to original message' });
+      return;
+    }
+
+    if (sourceMsg.viewOnce) {
+      res.status(403).json({ success: false, message: 'View Once media cannot be forwarded' });
       return;
     }
 
@@ -1325,6 +1341,115 @@ export const getMessageContext = async (
     res.status(500).json({ success: false, message: 'Failed to retrieve message context' });
   }
 };
+
+/**
+ * POST /api/messages/:messageId/view-once-open
+ * Atomically marks View Once media as opened and returns one-time media streaming details.
+ */
+export const openViewOnce = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { messageId } = req.params;
+    const userId = req.user._id;
+    const userIdStr = userId.toString();
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      res.status(404).json({ success: false, message: 'Message not found' });
+      return;
+    }
+
+    if (!message.viewOnce) {
+      res.status(400).json({ success: false, message: 'Message is not a View Once media' });
+      return;
+    }
+
+    // Sender cannot consume view once
+    if (message.senderId.toString() === userIdStr) {
+      res.status(403).json({ success: false, message: 'Sender cannot open View Once media' });
+      return;
+    }
+
+    // Verify conversation access
+    const conversation = await Conversation.findOne({
+      _id: message.conversationId,
+      $or: [
+        { participants: userId },
+        { 'groupMeta.members.user': userId },
+        { 'groupMeta.creator': userId },
+      ],
+    });
+
+    if (!conversation) {
+      res.status(403).json({ success: false, message: 'Access denied to conversation' });
+      return;
+    }
+
+    // ATOMIC UPDATE: Only succeeds if viewOnceOpenedAt is null
+    const now = new Date();
+    const updated = await Message.findOneAndUpdate(
+      {
+        _id: messageId,
+        viewOnce: true,
+        viewOnceOpenedAt: null,
+      },
+      {
+        $set: {
+          viewOnceOpenedAt: now,
+          viewOnceOpenedBy: userId,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      res.status(410).json({
+        success: false,
+        error: 'already_opened',
+        message: 'This media has already been viewed',
+      });
+      return;
+    }
+
+    // Realtime broadcast to conversation and user rooms
+    const io = getGlobalIO();
+    if (io) {
+      const payload = {
+        messageId: message._id.toString(),
+        conversationId: message.conversationId.toString(),
+        openedAt: updated.viewOnceOpenedAt,
+        openedBy: userIdStr,
+      };
+      io.to(`conv:${message.conversationId}`).emit('message:view_once_opened', payload);
+      io.to(`user:${message.senderId.toString()}`).emit('message:view_once_opened', payload);
+      io.to(`user:${userIdStr}`).emit('message:view_once_opened', payload);
+    }
+
+    res.status(200).json({
+      success: true,
+      mediaUrl: updated.attachment?.url,
+      fileName: updated.attachment?.fileName,
+      mimeType: updated.attachment?.mimeType,
+      size: updated.attachment?.size,
+      duration: updated.attachment?.duration,
+      width: updated.attachment?.width,
+      height: updated.attachment?.height,
+      type: updated.type,
+      openedAt: updated.viewOnceOpenedAt,
+    });
+  } catch (error) {
+    console.error('[MessageController] openViewOnce error:', error);
+    res.status(500).json({ success: false, message: 'Failed to open View Once media' });
+  }
+};
+
 
 
 

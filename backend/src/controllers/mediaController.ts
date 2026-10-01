@@ -396,6 +396,7 @@ export const getSharedMedia = async (req: AuthenticatedRequest, res: Response): 
     const query: any = {
       conversationId,
       type: typeQuery,
+      viewOnce: { $ne: true },
       isDeletedForEveryone: { $ne: true },
       deletedFor: { $ne: req.user._id },
     };

@@ -111,9 +111,11 @@ class WebRTCVoiceService {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+            echoCancellation: { ideal: true },
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
+            channelCount: { ideal: 1 },
+            sampleRate: { ideal: 48000 },
             googEchoCancellation: true,
             googAutoGainControl: true,
             googNoiseSuppression: true,
@@ -124,12 +126,16 @@ class WebRTCVoiceService {
         });
         console.log('[WebRTC DIAGNOSTIC] ✅ getUserMedia succeeded with advanced audio constraints');
       } catch (advancedErr: any) {
-        console.warn('[WebRTC DIAGNOSTIC] ⚠️ Advanced audio constraints rejected, falling back to basic audio: true', advancedErr?.message);
+        console.warn('[WebRTC DIAGNOSTIC] ⚠️ Advanced audio constraints rejected, falling back to basic AEC audio', advancedErr?.message);
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
           video: false,
         });
-        console.log('[WebRTC DIAGNOSTIC] ✅ getUserMedia succeeded with basic constraints');
+        console.log('[WebRTC DIAGNOSTIC] ✅ getUserMedia succeeded with basic AEC constraints');
       }
 
       const audioTracks = stream.getAudioTracks();

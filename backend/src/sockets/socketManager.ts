@@ -226,6 +226,7 @@ export function setupSocketIO(io: SocketIOServer): void {
         attachment?: IAttachment;
         replyTo?: IReplyTo;
         customEmojiId?: string;
+        viewOnce?: boolean;
       }) => {
         try {
           const {
@@ -237,6 +238,7 @@ export function setupSocketIO(io: SocketIOServer): void {
             attachment,
             replyTo,
             customEmojiId,
+            viewOnce,
           } = data;
 
           if (!conversationId || !clientMessageId) {
@@ -246,6 +248,8 @@ export function setupSocketIO(io: SocketIOServer): void {
             });
             return;
           }
+
+          const isViewOnce = Boolean(viewOnce && (type === 'image' || type === 'video'));
 
           // Validate conversation membership
           const conversation = await Conversation.findOne({
@@ -326,10 +330,16 @@ export function setupSocketIO(io: SocketIOServer): void {
                 serverSequence,
                 expiresAt,
                 deliveredAt: new Date(),
+                viewOnce: isViewOnce,
+                viewOnceOpenedAt: null,
+                viewOnceOpenedBy: null,
               });
 
               let previewText = text.trim();
-              if (type === 'image') previewText = '📷 Photo';
+              if (isViewOnce) {
+                previewText = type === 'video' ? '🎬 View Once video' : '📷 View Once photo';
+              } else if (type === 'image') previewText = '📷 Photo';
+              else if (type === 'video') previewText = '🎬 Video';
               else if (type === 'audio') previewText = '🎤 Voice message';
               else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
               else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
@@ -403,10 +413,16 @@ export function setupSocketIO(io: SocketIOServer): void {
                 replyTo: replyTo || undefined,
                 serverSequence,
                 deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
+                viewOnce: isViewOnce,
+                viewOnceOpenedAt: null,
+                viewOnceOpenedBy: null,
               });
 
               let previewText = text.trim();
-              if (type === 'image') previewText = '📷 Photo';
+              if (isViewOnce) {
+                previewText = type === 'video' ? '🎬 View Once video' : '📷 View Once photo';
+              } else if (type === 'image') previewText = '📷 Photo';
+              else if (type === 'video') previewText = '🎬 Video';
               else if (type === 'audio') previewText = '🎤 Voice message';
               else if (type === 'document') previewText = `📄 ${attachment?.fileName || 'Document'}`;
               else if (type === 'custom_emoji') previewText = '✨ Animated Emoji';
@@ -437,9 +453,9 @@ export function setupSocketIO(io: SocketIOServer): void {
                 senderNickname: senderUser?.displayName || senderUser?.username || 'Kotha Hobe',
                 senderAvatar: senderUser?.avatarUrl || '',
                 isGroup: false,
-                messageText: text.trim(),
+                messageText: isViewOnce ? (type === 'video' ? 'Video' : 'Photo') : text.trim(),
                 messageType: type,
-                attachmentFileName: attachment?.fileName,
+                attachmentFileName: isViewOnce ? undefined : attachment?.fileName,
                 customEmojiId: validatedCustomEmojiId,
                 conversationId,
               })

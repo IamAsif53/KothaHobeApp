@@ -105,6 +105,7 @@ export async function sendMessageRestApi(payload: {
   attachment?: any;
   replyTo?: any;
   customEmojiId?: string;
+  viewOnce?: boolean;
 }): Promise<{ success: boolean; message?: IMessage; isDuplicate?: boolean }> {
   return apiFetch(`/messages/send`, {
     method: 'POST',
@@ -137,6 +138,29 @@ export async function fetchMessageContextApi(
   messageId: string
 ): Promise<MessageContextResponse> {
   return apiFetch<MessageContextResponse>(`/messages/${conversationId}/context/${messageId}`);
+}
+
+export interface ViewOnceOpenResponse {
+  success: boolean;
+  error?: string;
+  message?: string;
+  mediaUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  size?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  type?: string;
+  openedAt?: string;
+}
+
+export async function openViewOnceMessageApi(
+  messageId: string
+): Promise<ViewOnceOpenResponse> {
+  return apiFetch<ViewOnceOpenResponse>(`/messages/${messageId}/view-once-open`, {
+    method: 'POST',
+  });
 }
 
 

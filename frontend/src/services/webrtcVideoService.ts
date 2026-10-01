@@ -150,9 +150,11 @@ class WebRTCVideoService {
       }
 
       const audioConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        echoCancellation: { ideal: true },
+        noiseSuppression: { ideal: true },
+        autoGainControl: { ideal: true },
+        channelCount: { ideal: 1 },
+        sampleRate: { ideal: 48000 },
         googEchoCancellation: true,
         googAutoGainControl: true,
         googNoiseSuppression: true,
@@ -180,7 +182,11 @@ class WebRTCVideoService {
         console.warn('[WebRTC-VIDEO] ⚠️ 720p constraints rejected, falling back to flexible VGA/480p:', hdErr?.message);
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
             video: this.isVideoEnabled
               ? {
                   facingMode: this.isFrontCamera ? 'user' : 'environment',
@@ -191,9 +197,13 @@ class WebRTCVideoService {
           });
           console.log('[WebRTC-VIDEO] ✅ getUserMedia succeeded with fallback resolution');
         } catch (basicErr: any) {
-          console.warn('[WebRTC-VIDEO] ⚠️ Fallback video failed, attempting basic true:', basicErr?.message);
+          console.warn('[WebRTC-VIDEO] ⚠️ Fallback video failed, attempting basic AEC audio:', basicErr?.message);
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
             video: this.isVideoEnabled ? true : false,
           });
         }
@@ -674,24 +684,74 @@ class WebRTCVideoService {
   /**
    * 13. Switch Between Front and Rear Camera using RTCRtpSender.replaceTrack()
    */
-  public async switchCamera(forceFront?: boolean): Promise<MediaStreamTrack | null> {
+  public async switchCamera(forceFront?: boolean): Promise<{ track: MediaStreamTrack; isFrontCamera: boolean } | null> {
     if (!this.localStream) return null;
 
     const currentVideoTrack = this.localStream.getVideoTracks()[0];
-    if (!currentVideoTrack) return null;
+    const targetFront = forceFront !== undefined ? forceFront : !this.isFrontCamera;
+    const targetFacing = targetFront ? 'user' : 'environment';
+    console.log(`[WebRTC-VIDEO] 🔄 Flipping camera to ${targetFront ? 'front (user)' : 'rear (environment)'}...`);
 
-    const nextFront = forceFront !== undefined ? forceFront : !this.isFrontCamera;
-    console.log(`[WebRTC-VIDEO] 🔄 Flipping camera to ${nextFront ? 'front' : 'rear'}...`);
+    // Stop existing video track to release camera hardware on Android/mobile before requesting new facingMode
+    if (currentVideoTrack) {
+      try {
+        currentVideoTrack.stop();
+        this.localStream.removeTrack(currentVideoTrack);
+      } catch (e) {
+        console.warn('[WebRTC-VIDEO] Note stopping old track:', e);
+      }
+    }
+
+    let newStream: MediaStream | null = null;
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: nextFront ? 'user' : 'environment',
-          width: { ideal: 1280, max: 1280 },
-          height: { ideal: 720, max: 720 },
-          frameRate: { ideal: 30, max: 30 },
-        },
-      });
+      // 1. Try exact/ideal device enumeration if available
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+        console.log(`[WebRTC-VIDEO] Available video inputs: ${videoDevices.length}`);
+
+        if (videoDevices.length > 1) {
+          // Find device matching facing if labels contain front/back
+          const match = videoDevices.find((d) => {
+            const lbl = (d.label || '').toLowerCase();
+            return targetFront ? lbl.includes('front') || lbl.includes('user') : lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
+          });
+
+          if (match && match.deviceId) {
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                deviceId: { exact: match.deviceId },
+                width: { ideal: 1280, max: 1280 },
+                height: { ideal: 720, max: 720 },
+                frameRate: { ideal: 30, max: 30 },
+              },
+            });
+          }
+        }
+      } catch (enumErr) {
+        console.warn('[WebRTC-VIDEO] Device enumeration fallback:', enumErr);
+      }
+
+      // 2. Fallback to facingMode constraint
+      if (!newStream) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: targetFacing },
+              width: { ideal: 1280, max: 1280 },
+              height: { ideal: 720, max: 720 },
+              frameRate: { ideal: 30, max: 30 },
+            },
+          });
+        } catch {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: targetFacing,
+            },
+          });
+        }
+      }
 
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) throw new Error('No video track found in switched camera stream');
@@ -701,27 +761,61 @@ class WebRTCVideoService {
 
       // Replace track on RTCPeerConnection sender seamlessly without renegotiation
       if (this.pc) {
-        const senders = this.pc.getSenders();
-        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-        if (videoSender) {
-          await videoSender.replaceTrack(newVideoTrack);
-          console.log('[WebRTC-VIDEO] ✅ Successfully replaced video track on PeerConnection sender');
+        let replaced = false;
+        // Try transceivers first
+        const transceivers = this.pc.getTransceivers ? this.pc.getTransceivers() : [];
+        for (const tr of transceivers) {
+          if (tr.sender && (tr.sender.track?.kind === 'video' || tr.receiver?.track?.kind === 'video')) {
+            await tr.sender.replaceTrack(newVideoTrack);
+            replaced = true;
+            console.log('[WebRTC-VIDEO] ✅ Successfully replaced video track on transceiver sender');
+            break;
+          }
+        }
+
+        if (!replaced) {
+          const senders = this.pc.getSenders();
+          for (const sender of senders) {
+            if (sender.track?.kind === 'video' || (sender as any).kind === 'video') {
+              await sender.replaceTrack(newVideoTrack);
+              replaced = true;
+              console.log('[WebRTC-VIDEO] ✅ Successfully replaced video track on sender');
+              break;
+            }
+          }
         }
       }
 
-      // Stop old video track to release old camera hardware
-      currentVideoTrack.stop();
-      this.localStream.removeTrack(currentVideoTrack);
       this.localStream.addTrack(newVideoTrack);
-      this.isFrontCamera = nextFront;
+      this.isFrontCamera = targetFront;
 
       if (this.onLocalStreamChangeCallback) {
         this.onLocalStreamChangeCallback(this.localStream);
       }
 
-      return newVideoTrack;
+      return { track: newVideoTrack, isFrontCamera: this.isFrontCamera };
     } catch (err: any) {
-      console.warn('[WebRTC-VIDEO] ❌ Camera flip failed:', err?.message || err);
+      console.warn('[WebRTC-VIDEO] ❌ Camera flip failed, attempting recovery to default camera:', err?.message || err);
+      // Recovery fallback
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const fallbackTrack = fallbackStream.getVideoTracks()[0];
+        if (fallbackTrack) {
+          fallbackTrack.enabled = this.isVideoEnabled;
+          this.localStream.addTrack(fallbackTrack);
+          if (this.pc) {
+            const senders = this.pc.getSenders();
+            const vs = senders.find((s) => s.track?.kind === 'video');
+            if (vs) await vs.replaceTrack(fallbackTrack);
+          }
+          if (this.onLocalStreamChangeCallback) {
+            this.onLocalStreamChangeCallback(this.localStream);
+          }
+          return { track: fallbackTrack, isFrontCamera: this.isFrontCamera };
+        }
+      } catch (recErr) {
+        console.error('[WebRTC-VIDEO] Recovery failed:', recErr);
+      }
       return null;
     }
   }

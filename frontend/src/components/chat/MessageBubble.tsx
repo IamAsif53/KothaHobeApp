@@ -523,8 +523,18 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     });
   };
 
-  const isPureImage = message.type === 'image' && Boolean(message.attachment) && !message.text && !message.replyTo && !message.storyContext;
-  const isImageWithTextOrQuote = message.type === 'image' && Boolean(message.attachment) && (Boolean(message.text) || Boolean(message.replyTo) || Boolean(message.storyContext));
+  const isPureImage =
+    message.type === 'image' &&
+    Boolean(message.attachment) &&
+    !message.viewOnce &&
+    !message.text &&
+    !message.replyTo &&
+    !message.storyContext;
+  const isImageWithTextOrQuote =
+    message.type === 'image' &&
+    Boolean(message.attachment) &&
+    !message.viewOnce &&
+    (Boolean(message.text) || Boolean(message.replyTo) || Boolean(message.storyContext));
 
   const getBubblePaddingClass = () => {
     if (isPureImage) {
@@ -532,6 +542,9 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
     }
     if (isImageWithTextOrQuote) {
       return 'p-1.5 pb-2.5';
+    }
+    if (message.viewOnce) {
+      return 'px-3 py-2';
     }
     return 'px-3.5 pt-2.5 pb-2';
   };
@@ -644,6 +657,96 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
             </div>
           </div>
         )}
+
+        {/* View Once Protected Media Card */}
+        {message.viewOnce && (() => {
+          const isOpened = Boolean(message.viewOnceOpenedAt);
+          const isVideo =
+            message.type === 'video' ||
+            message.attachment?.mimeType?.startsWith('video/') ||
+            /\.(mp4|mov|webm|mkv|3gp)$/i.test(message.attachment?.fileName || message.attachment?.url || '');
+          const mediaLabel = isVideo ? 'Video' : 'Photo';
+
+          if (isOpened) {
+            return (
+              <div className="flex items-center gap-3 py-1.5 px-1 min-w-[190px] select-none opacity-85">
+                <div className="w-9 h-9 rounded-full bg-white/10 dark:bg-white/10 border border-current/20 flex items-center justify-center shrink-0">
+                  <span className="text-xs font-bold font-mono">1</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold truncate">
+                    {isMe ? `${mediaLabel} opened` : 'Opened'}
+                  </div>
+                  <div className="text-[10px] opacity-70 truncate">
+                    View once
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 ml-2 self-end pb-0.5 shrink-0">
+                  <span className={`text-[10.5px] font-normal tracking-tight ${
+                    isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'
+                  }`}>
+                    {formatMessageTime(message.createdAt)}
+                  </span>
+                  {renderStatusIcon()}
+                </div>
+              </div>
+            );
+          }
+
+          if (isMe) {
+            return (
+              <div className="flex items-center gap-3 py-1.5 px-1 min-w-[200px] select-none">
+                <div className="w-9 h-9 rounded-full bg-brand-500/20 border border-brand-500/40 text-brand-500 dark:text-brand-400 flex items-center justify-center shrink-0">
+                  <span className="text-xs font-bold font-mono">1</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold truncate">
+                    View Once {mediaLabel}
+                  </div>
+                  <div className="text-[10px] opacity-70 truncate">
+                    Sent
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 ml-2 self-end pb-0.5 shrink-0">
+                  <span className={`text-[10.5px] font-normal tracking-tight ${
+                    isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'
+                  }`}>
+                    {formatMessageTime(message.createdAt)}
+                  </span>
+                  {renderStatusIcon()}
+                </div>
+              </div>
+            );
+          }
+
+          // Recipient unopened View Once card (interactive tap)
+          return (
+            <div
+              onClick={() => onOpenMedia && onOpenMedia(message)}
+              className="flex items-center gap-3 py-1.5 px-1 min-w-[210px] select-none cursor-pointer active:scale-[0.98] transition-transform"
+            >
+              <div className="w-10 h-10 rounded-full bg-brand-500/20 border-2 border-brand-500 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0 shadow-xs">
+                <span className="text-sm font-bold font-mono">1</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold truncate text-brand-600 dark:text-brand-400">
+                  {mediaLabel}
+                </div>
+                <div className="text-[11px] text-chat-textSecondary font-medium">
+                  Tap to view
+                </div>
+              </div>
+              <div className="flex items-center gap-1 ml-2 self-end pb-0.5 shrink-0">
+                <span className={`text-[10.5px] font-normal tracking-tight ${
+                  isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'
+                }`}>
+                  {formatMessageTime(message.createdAt)}
+                </span>
+                {renderStatusIcon()}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Pure Image Attachment (Tight Wrap & Floating Timestamp) */}
         {isPureImage && message.attachment && (
@@ -857,7 +960,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
         })()}
 
         {/* Media/Doc Bottom Timestamp fallback if no text and not pure image */}
-        {!message.text && !isPureImage && message.type !== 'call' && message.type !== 'custom_emoji' && (
+        {!message.text && !isPureImage && message.type !== 'call' && message.type !== 'custom_emoji' && !message.viewOnce && (
           <div className="mt-1 flex items-center justify-end gap-1 select-none">
             <span className={`text-[10.5px] font-normal ${isMe ? 'text-chat-bubbleOutText/75' : 'text-chat-bubbleInText/70'}`}>
               {formatMessageTime(message.createdAt)}
@@ -898,6 +1001,9 @@ export const MessageBubble = React.memo(MessageBubbleComponent, (prev, next) => 
     prev.message.status === next.message.status &&
     prev.message.text === next.message.text &&
     prev.message.editedAt === next.message.editedAt &&
+    prev.message.viewOnce === next.message.viewOnce &&
+    prev.message.viewOnceOpenedAt === next.message.viewOnceOpenedAt &&
+    prev.message.viewOnceOpenedBy === next.message.viewOnceOpenedBy &&
     prev.message.forwardedFrom?.senderName === next.message.forwardedFrom?.senderName &&
     prev.message.forwardedFrom?.messageId === next.message.forwardedFrom?.messageId &&
     prev.message.linkPreview?.url === next.message.linkPreview?.url &&

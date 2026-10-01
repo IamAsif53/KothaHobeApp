@@ -23,6 +23,7 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
+import android.view.WindowManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -443,6 +444,27 @@ public class NativeMediaPlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to check speakerphone status", e);
+        }
+    }
+
+    @PluginMethod
+    public void setSecureWindow(PluginCall call) {
+        try {
+            boolean enabled = call.getBoolean("enabled", true);
+            getActivity().runOnUiThread(() -> {
+                try {
+                    if (enabled) {
+                        getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                    } else {
+                        getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                    }
+                } catch (Exception ignored) {}
+            });
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to toggle secure window", e);
         }
     }
 

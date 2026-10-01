@@ -25,6 +25,7 @@ export interface NativeMediaPluginInterface {
   setAudioRoute(options: { route: AudioRouteType }): Promise<{ success: boolean } & AudioRoutesInfo>;
   getAvailableAudioRoutes(): Promise<AudioRoutesInfo>;
   setProximitySensorEnabled(options: { enabled: boolean }): Promise<{ success: boolean; enabled: boolean }>;
+  setSecureWindow(options: { enabled: boolean }): Promise<{ success: boolean }>;
   saveImageToGallery(options: { base64Data: string; fileName: string }): Promise<{ success: boolean; uri?: string; filePath?: string }>;
   downloadDocument(options: { base64Data: string; fileName: string; mimeType: string }): Promise<{ success: boolean; fileName: string; uri?: string; filePath?: string }>;
   openUrl(options: { url: string }): Promise<{ success: boolean }>;
@@ -432,6 +433,18 @@ export async function openExternalUrl(url: string): Promise<void> {
     window.open(cleanUrl, '_blank', 'noopener,noreferrer');
   } catch {
     window.location.href = cleanUrl;
+  }
+}
+
+/**
+ * Toggle Android FLAG_SECURE window protection for View Once media viewers
+ */
+export async function setNativeSecureWindow(enabled: boolean): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await NativeMedia.setSecureWindow({ enabled });
+  } catch (err) {
+    console.warn('[NativeMedia] setSecureWindow error:', err);
   }
 }
 

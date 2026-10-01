@@ -10,6 +10,7 @@ import {
   getLinkPreview,
   createMessage,
   deleteMessage,
+  openViewOnce,
 } from '../controllers/messageController';
 import { uploadMedia, uploadMiddleware, streamMedia } from '../controllers/mediaController';
 import { authenticateToken } from '../middleware/authMiddleware';
@@ -26,6 +27,7 @@ router.get('/:conversationId/messages', getMessages);
 router.get('/:conversationId/context/:messageId', getMessageContext);
 router.post('/upload', uploadMiddleware.single('file'), uploadMedia);
 router.post('/send', createMessage);
+router.post('/:messageId/view-once-open', openViewOnce);
 router.delete('/:messageId', deleteMessage);
 router.post('/delivered', markMessageDelivered);
 router.post('/reply-direct', sendDirectReply);

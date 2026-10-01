@@ -103,6 +103,9 @@ export interface IMessage extends Document {
   deliveredAt?: Date;
   readAt?: Date;
   editedAt?: Date;
+  viewOnce?: boolean;
+  viewOnceOpenedAt?: Date | null;
+  viewOnceOpenedBy?: Types.ObjectId | null;
 }
 
 const ReactionSchema = new Schema(
@@ -337,6 +340,20 @@ const MessageSchema: Schema = new Schema(
     },
     editedAt: {
       type: Date,
+      default: null,
+    },
+    viewOnce: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    viewOnceOpenedAt: {
+      type: Date,
+      default: null,
+    },
+    viewOnceOpenedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
       default: null,
     },
   },

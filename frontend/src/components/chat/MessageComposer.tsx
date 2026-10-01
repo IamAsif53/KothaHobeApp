@@ -29,7 +29,8 @@ interface MessageComposerProps {
     type?: 'text' | 'image' | 'audio' | 'document' | 'custom_emoji',
     attachment?: IAttachment,
     replyTo?: IReplyTo,
-    localFile?: File | Blob
+    localFile?: File | Blob,
+    viewOnce?: boolean
   ) => void;
   onTyping: () => void;
   replyingTo?: IReplyTo | null;
@@ -53,6 +54,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isViewOnce, setIsViewOnce] = useState(false);
 
   // Contextual Suggestions State
   const [suggestions, setSuggestions] = useState<ICustomEmoji[]>([]);
@@ -240,7 +242,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               size: compressedFile.size,
             },
             replyingTo || undefined,
-            compressedFile
+            compressedFile,
+            isViewOnce
           );
         });
       } else {
@@ -254,11 +257,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             size: originalFile.size,
           },
           replyingTo || undefined,
-          originalFile
+          originalFile,
+          isViewOnce
         );
       }
 
       setPendingFile(null);
+      setIsViewOnce(false);
       setText('');
       if (onCancelReply) onCancelReply();
       return;
@@ -624,12 +629,38 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   </span>
                 </div>
               </div>
-              <button
-                onClick={() => setPendingFile(null)}
-                className="p-1.5 rounded-full bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary text-chat-textSecondary hover:text-chat-textPrimary transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {pendingFile.type === 'image' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsViewOnce((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all border shrink-0 ${
+                      isViewOnce
+                        ? 'bg-brand-500 text-white border-brand-400 shadow-sm'
+                        : 'bg-chat-surfaceSecondary text-chat-textSecondary border-chat-border/80 hover:text-chat-textPrimary'
+                    }`}
+                    title="View Once (media can be opened only once)"
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-black leading-none ${
+                        isViewOnce ? 'border-white text-white' : 'border-current'
+                      }`}
+                    >
+                      1
+                    </div>
+                    <span>{isViewOnce ? 'View Once' : '1'}</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setPendingFile(null);
+                    setIsViewOnce(false);
+                  }}
+                  className="p-1.5 rounded-full bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary text-chat-textSecondary hover:text-chat-textPrimary transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

@@ -240,9 +240,12 @@ export const GroupCallScreen: React.FC = () => {
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch(() => {});
     }
-  }, [localStream]);
+  }, [localStream, isVideoEnabled, isFrontCamera]);
 
   if (!isGroupCallActive || !groupCallSession) {
     return null;

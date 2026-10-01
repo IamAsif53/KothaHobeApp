@@ -227,6 +227,7 @@ export const CallScreen: React.FC = () => {
             ref={remoteVideoRef}
             autoPlay
             playsInline
+            muted
             controls={false}
             disablePictureInPicture
             disableRemotePlayback
@@ -407,7 +408,7 @@ export const CallScreen: React.FC = () => {
             <button
               type="button"
               onClick={handleCameraFlip}
-              disabled={!isConnected || !isVideoEnabled || isSwitchingCam}
+              disabled={!isVideoEnabled || isSwitchingCam || isEnding}
               className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 flex items-center justify-center transition-all disabled:opacity-40 active:scale-95"
               title="Switch Front/Rear Camera"
             >

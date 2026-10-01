@@ -624,40 +624,47 @@ export const ChatRoomPage: React.FC = () => {
     // 5. Read Receipt (0ms Live Real-time Seen Indicator)
     const handleMessageRead = (data: { conversationId?: string; readBy?: string; readAt?: string; messageId?: string }) => {
       if (!data) return;
-      if (data.conversationId === conversationId || (!data.conversationId && data.messageId)) {
-        const targetReadAt = data.readAt || new Date().toISOString();
-        const currentUserIdStr = user?._id?.toString();
-        const readerIdStr = data.readBy?.toString();
-
-        // If readerId is myself, I am reading incoming messages from others.
-        // My sent messages ONLY become 'read' (seen ✓✓ sky-blue) when the OTHER party reads them!
-        if (readerIdStr && readerIdStr === currentUserIdStr && !data.messageId) {
-          return;
-        }
-
-        setMessages((prev) => {
-          let hasChanges = false;
-          const updated = prev.map((m) => {
-            if (data.messageId && m._id === data.messageId) {
-              hasChanges = true;
-              return { ...m, status: 'read' as const, readAt: targetReadAt };
-            }
-            const senderIdStr = m.senderId?.toString() || (m.senderId as any)?._id?.toString();
-            // Outgoing message sent by me becomes 'read' ONLY when recipient (readerId !== currentUserIdStr) reads it!
-            if (senderIdStr === currentUserIdStr && m.status !== 'read' && (!readerIdStr || readerIdStr !== currentUserIdStr)) {
-              hasChanges = true;
-              return { ...m, status: 'read' as const, readAt: targetReadAt };
-            }
-            return m;
-          });
-
-          if (hasChanges) {
-            persistMessages(updated);
-            return updated;
-          }
-          return prev;
-        });
+      const targetConvId = data.conversationId?.toString();
+      if (targetConvId && targetConvId !== conversationId?.toString()) {
+        return;
       }
+
+      const targetReadAt = data.readAt || new Date().toISOString();
+      const currentUserIdStr = user?._id?.toString();
+      const readerIdStr = data.readBy?.toString();
+
+      // Outgoing messages sent by current user ONLY become 'read' (seen ✓✓ sky-blue)
+      // when the OTHER party (readerIdStr && readerIdStr !== currentUserIdStr) reads them.
+      const isOtherUserReading = Boolean(readerIdStr && currentUserIdStr && readerIdStr !== currentUserIdStr);
+
+      if (!isOtherUserReading) {
+        // If current user is reading their own chat, outgoing sent messages MUST NOT change to 'read'!
+        return;
+      }
+
+      setMessages((prev) => {
+        let hasChanges = false;
+        const updated = prev.map((m) => {
+          if (data.messageId && m._id !== data.messageId) {
+            return m;
+          }
+          const senderIdStr = m.senderId?.toString() || (m.senderId as any)?._id?.toString();
+          const isSentByMe = Boolean(currentUserIdStr && senderIdStr && senderIdStr === currentUserIdStr);
+
+          // Only transition outgoing messages sent by me to 'read' (seen) when recipient read them
+          if (isSentByMe && m.status !== 'read') {
+            hasChanges = true;
+            return { ...m, status: 'read' as const, readAt: targetReadAt };
+          }
+          return m;
+        });
+
+        if (hasChanges) {
+          persistMessages(updated);
+          return updated;
+        }
+        return prev;
+      });
     };
 
     // 6. Delivered Receipt

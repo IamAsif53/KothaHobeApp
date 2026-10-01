@@ -870,7 +870,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 2. Dispatch event for all active subscribers (ChatList, notification banners, unread badges)
     window.dispatchEvent(
       new CustomEvent('kothahobe:conversation_read', {
-        detail: { conversationId, readAt: new Date().toISOString() },
+        detail: { conversationId, readBy: user?._id?.toString(), readAt: new Date().toISOString() },
       })
     );
 

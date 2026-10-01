@@ -463,6 +463,9 @@ export const createMessage = async (
         return;
       }
 
+      const recipientSockets = io ? await io.in(`user:${targetReceiverId}`).fetchSockets() : [];
+      const initialStatus: 'sent' | 'delivered' = recipientSockets.length > 0 ? 'delivered' : 'sent';
+
       const message = await Message.create({
         conversationId,
         senderId: userId,
@@ -470,11 +473,12 @@ export const createMessage = async (
         text: text.trim(),
         type,
         customEmojiId,
-        status: 'sent',
+        status: initialStatus,
         clientMessageId: cMsgId,
         attachment: attachment || undefined,
         replyTo: replyTo || undefined,
         serverSequence,
+        deliveredAt: recipientSockets.length > 0 ? new Date() : undefined,
       });
 
       await Conversation.findByIdAndUpdate(conversationId, {
@@ -482,7 +486,7 @@ export const createMessage = async (
           text: previewText,
           senderId: userId,
           createdAt: message.createdAt,
-          status: 'sent',
+          status: initialStatus,
         },
         lastMessageAt: message.createdAt,
       });

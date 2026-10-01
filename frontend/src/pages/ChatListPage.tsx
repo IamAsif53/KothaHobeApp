@@ -281,13 +281,19 @@ export const ChatListPage: React.FC = () => {
       setLocallyReadTimestamp(conversationId);
 
       setConversations((prev) => {
+        const currentUserIdStr = currentUser?._id?.toString();
         const next = prev.map((c) => {
           if (c._id === conversationId) {
+            const lastSenderStr = c.lastMessage?.senderId?.toString() || (c.lastMessage?.senderId as any)?._id?.toString();
+            const isLastMine = Boolean(currentUserIdStr && lastSenderStr && currentUserIdStr === lastSenderStr);
             return {
               ...c,
               unreadCount: 0,
               lastMessage: c.lastMessage
-                ? { ...c.lastMessage, status: 'read' as MessageStatus }
+                ? {
+                    ...c.lastMessage,
+                    status: isLastMine ? (c.lastMessage.status || 'sent') : ('read' as MessageStatus),
+                  }
                 : undefined,
             };
           }
@@ -302,7 +308,7 @@ export const ChatListPage: React.FC = () => {
     return () => {
       window.removeEventListener('kothahobe:conversation_read', handleLocalRead);
     };
-  }, []);
+  }, [currentUser]);
 
   // Socket event listeners for real-time synchronization
   useEffect(() => {
@@ -356,16 +362,29 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
-    const handleMessageRead = ({ conversationId }: { conversationId: string }) => {
+    const handleMessageRead = (data: { conversationId: string; readBy?: string }) => {
+      const conversationId = data?.conversationId;
       if (!conversationId) return;
+      const currentUserIdStr = currentUser?._id?.toString();
+      const readerIdStr = data.readBy?.toString();
+
       setLocallyReadTimestamp(conversationId);
       setConversations((prev) => {
         const next = prev.map((c) => {
           if (c._id === conversationId) {
+            const lastSenderStr = c.lastMessage?.senderId?.toString() || (c.lastMessage?.senderId as any)?._id?.toString();
+            const isLastMine = Boolean(currentUserIdStr && lastSenderStr && currentUserIdStr === lastSenderStr);
+            const shouldMarkRead = isLastMine ? Boolean(readerIdStr && readerIdStr !== currentUserIdStr) : true;
+
             return {
               ...c,
-              unreadCount: 0,
-              lastMessage: c.lastMessage ? { ...c.lastMessage, status: 'read' as MessageStatus } : undefined,
+              unreadCount: isLastMine ? 0 : (readerIdStr === currentUserIdStr ? 0 : c.unreadCount),
+              lastMessage: c.lastMessage
+                ? {
+                    ...c.lastMessage,
+                    status: shouldMarkRead ? ('read' as MessageStatus) : (c.lastMessage.status || 'sent'),
+                  }
+                : undefined,
             };
           }
           return c;

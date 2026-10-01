@@ -1,10 +1,10 @@
 {
-  "versionCode": 112,
-  "versionName": "1.1.67",
+  "versionCode": 113,
+  "versionName": "1.1.68",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "8c645d6724526f3251a9541459b277e6aff9bf3dd1cfd0ac37bf974707014f6d",
+  "sha256": "e8237cc5d58ec5b2611c99fc8a91276c116a5c555c1c8e8f5454c11da8ba13d8",
   "releaseNotes": [
-    "Release v1.1.67 (Build 112)",
+    "Release v1.1.68 (Build 113)",
     "👁️ 0ms Live Seen Receipt Sync: Realtime read receipts update instantly on the sender's screen as soon as recipient opens the chat room",
     "✓ True Outgoing-Only Status Indicators: Fixed recipient preview so incoming messages are never falsely marked with sent/seen checks",
     "⚡ Zero-Jitter Instant Chat Landing: Chat rooms instantly load and pin to the latest message with 0ms visual latency and zero fluctuation",

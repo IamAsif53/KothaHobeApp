@@ -524,14 +524,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const idx = list.findIndex((c: any) => c._id === newMsg.conversationId);
             if (idx > -1) {
               const isActive = activeChatRef.current === newMsg.conversationId;
-              const isFromMe = user?._id && (newMsg.senderId?.toString() === user._id.toString());
+              const isFromMe = Boolean(user?._id && (newMsg.senderId?.toString() === user._id.toString() || (newMsg.senderId as any)?._id?.toString() === user._id.toString()));
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
                   text: formatConversationPreview(newMsg, list[idx].isGroup),
                   senderId: newMsg.senderId,
                   createdAt: newMsg.createdAt,
-                  status: (isActive || isFromMe) ? 'read' : newMsg.status || 'sent',
+                  type: newMsg.type,
+                  attachment: newMsg.attachment,
+                  status: isFromMe ? (newMsg.status || 'sent') : (isActive ? 'read' : newMsg.status || 'delivered'),
                 },
                 lastMessageAt: newMsg.createdAt,
                 unreadCount: (isActive || isFromMe) ? 0 : (list[idx].unreadCount || 0) + 1,
@@ -846,11 +848,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const list = JSON.parse(cached);
         const idx = list.findIndex((c: any) => c._id === conversationId);
         if (idx > -1) {
+          const currentUserIdStr = user?._id?.toString();
+          const lastSenderStr = list[idx].lastMessage?.senderId?.toString() || (list[idx].lastMessage?.senderId as any)?._id?.toString();
+          const isLastMine = Boolean(currentUserIdStr && lastSenderStr && currentUserIdStr === lastSenderStr);
+
           list[idx] = {
             ...list[idx],
             unreadCount: 0,
             lastMessage: list[idx].lastMessage
-              ? { ...list[idx].lastMessage, status: 'read' }
+              ? {
+                  ...list[idx].lastMessage,
+                  status: isLastMine ? (list[idx].lastMessage.status || 'sent') : 'read',
+                }
               : undefined,
           };
           localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(list));

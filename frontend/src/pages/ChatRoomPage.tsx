@@ -627,6 +627,13 @@ export const ChatRoomPage: React.FC = () => {
       if (data.conversationId === conversationId || (!data.conversationId && data.messageId)) {
         const targetReadAt = data.readAt || new Date().toISOString();
         const currentUserIdStr = user?._id?.toString();
+        const readerIdStr = data.readBy?.toString();
+
+        // If readerId is myself, I am reading incoming messages from others.
+        // My sent messages ONLY become 'read' (seen ✓✓ sky-blue) when the OTHER party reads them!
+        if (readerIdStr && readerIdStr === currentUserIdStr && !data.messageId) {
+          return;
+        }
 
         setMessages((prev) => {
           let hasChanges = false;
@@ -636,7 +643,8 @@ export const ChatRoomPage: React.FC = () => {
               return { ...m, status: 'read' as const, readAt: targetReadAt };
             }
             const senderIdStr = m.senderId?.toString() || (m.senderId as any)?._id?.toString();
-            if (senderIdStr === currentUserIdStr && m.status !== 'read') {
+            // Outgoing message sent by me becomes 'read' ONLY when recipient (readerId !== currentUserIdStr) reads it!
+            if (senderIdStr === currentUserIdStr && m.status !== 'read' && (!readerIdStr || readerIdStr !== currentUserIdStr)) {
               hasChanges = true;
               return { ...m, status: 'read' as const, readAt: targetReadAt };
             }

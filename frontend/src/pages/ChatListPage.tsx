@@ -311,7 +311,7 @@ export const ChatListPage: React.FC = () => {
     const handleNewMessageData = (data: any) => {
       const msg = data?.message || data;
       if (!msg || !msg.conversationId) return;
-      const convId = msg.conversationId;
+      const convId = msg.conversationId?.toString();
       const currentUserId = currentUser?._id?.toString();
       const isMine =
         msg.senderId === currentUserId ||
@@ -319,18 +319,27 @@ export const ChatListPage: React.FC = () => {
         (typeof msg.senderId === 'object' && msg.senderId?._id?.toString() === currentUserId);
 
       setConversations((prev) => {
-        const existingIdx = prev.findIndex((c) => c._id === convId);
+        const existingIdx = prev.findIndex((c) => c._id?.toString() === convId);
         if (existingIdx !== -1) {
           const conv = prev[existingIdx];
-          const unreadIncrement = isMine ? 0 : 1;
+          const lastMsgAny = conv.lastMessage as any;
+          const isAlreadyProcessed =
+            (msg._id && lastMsgAny?._id === msg._id) ||
+            (msg.clientMessageId && lastMsgAny?.clientMessageId === msg.clientMessageId) ||
+            (conv.lastMessageAt && new Date(conv.lastMessageAt).getTime() >= new Date(msg.createdAt).getTime());
+
+          const unreadIncrement = (isMine || isAlreadyProcessed) ? 0 : 1;
           const previewText = formatConversationPreview(msg, conv.isGroup);
 
           const updated: IConversation = {
             ...conv,
             lastMessage: {
+              ...msg,
               text: previewText,
               senderId: msg.senderId,
               createdAt: msg.createdAt,
+              type: msg.type,
+              attachment: msg.attachment,
               status: isMine ? (msg.status || 'sent') : 'delivered',
             },
             lastMessageAt: msg.createdAt,

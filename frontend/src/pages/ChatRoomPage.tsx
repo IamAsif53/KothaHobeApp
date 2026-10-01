@@ -236,8 +236,8 @@ export const ChatRoomPage: React.FC = () => {
       }
     }
 
-    // Trigger loading older messages when near top (within 100px)
-    if (scrollTop < 100 && hasMore && !isLoadingMoreRef.current && !loadingMore && oldestCursor) {
+    // Trigger loading older messages when user actively scrolls near top (only after initial scroll is done)
+    if (initialScrollDoneRef.current && scrollTop < 80 && hasMore && !isLoadingMoreRef.current && !loadingMore && oldestCursor) {
       handleLoadMore();
     }
   };
@@ -403,9 +403,9 @@ export const ChatRoomPage: React.FC = () => {
         console.warn('[ChatRoom] Background sync notice:', error);
       } finally {
         setLoading(false);
-        // ONLY scroll to bottom if initial scroll was not yet done OR user is currently at the bottom
+        // Instant static scroll to latest message with zero animation latency
         if (!initialScrollDoneRef.current || isNearBottomRef.current) {
-          requestAnimationFrame(() => scrollToBottom(true));
+          scrollToBottom(false);
         }
       }
     };

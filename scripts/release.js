@@ -86,11 +86,14 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "👁️ 0ms Live Seen Receipt Sync: Realtime read receipts update instantly on the sender's screen as soon as recipient opens the chat room",
-      "✓ True Outgoing-Only Status Indicators: Fixed recipient preview so incoming messages are never falsely marked with sent/seen checks",
-      "⚡ Zero-Jitter Instant Chat Landing: Chat rooms instantly load and pin to the latest message with 0ms visual latency and zero fluctuation",
-      "🔕 Streamlined Notifications: Removed redundant in-app banner popups when active in app; rely cleanly on FCM push when backgrounded",
-      "📄 High-Performance File & Media UX: Live circular progress indicators with instant native file opening from persistent local cache"
+      "📞 Dedicated Calls Tab: New standalone bottom navigation tab with complete call history, filters (All / Missed), duration, and one-tap redial",
+      "🔄 WebRTC Network Resilience & ICE Restart: Seamless auto-recovery when switching between Wi-Fi and mobile data",
+      "📊 Live Network Quality Indicator: Real-time RTT and packet loss indicator (Good/Fair/Poor) with adaptive video bitrate & audio-first fallback",
+      "🎧 Dynamic Audio Routing & Proximity: Automatic Bluetooth headset detection/switching and proximity sensor ear detection",
+      "👥 Group Call Moderation & Host Controls: Remote mute, participant removal, raise/lower hand, and host transfer",
+      "📌 Participant Pinning & Aspect Ratio: Pin active speakers or shared screens; toggle between Fit (contain) and Fill (cover) video layout",
+      "💬 In-Call Text Chat & Screen Sharing: Send live messages inside active calls and share screen on supported devices",
+      "📲 Call Waiting UX: Secondary incoming call notifications with Accept & Hold / Decline options"
     ],
     mandatory: false
   };

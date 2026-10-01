@@ -9,6 +9,9 @@
 
 import { getWebRTCConfig, getSanitizedWebRTCConfig } from '../config/webrtcConfig';
 
+export type NetworkQuality = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'RECONNECTING';
+export type VideoQualityTier = 'HIGH' | 'MEDIUM' | 'LOW' | 'AUDIO_PRIORITY';
+
 export interface CandidateCounts {
   total: number;
   host: number;
@@ -34,6 +37,9 @@ export interface VideoStats {
   videoPacketsReceived: number;
   videoBytesReceived: number;
   videoPacketsLost: number;
+  packetLossPercent?: number;
+  networkQuality?: NetworkQuality;
+  qualityTier?: VideoQualityTier;
   framesSent?: number;
   framesReceived?: number;
   framesDecoded?: number;
@@ -63,6 +69,16 @@ class WebRTCVideoService {
   private currentCallId: string | null = null;
   private isFrontCamera: boolean = true;
   private isVideoEnabled: boolean = true;
+  private isScreenSharing: boolean = false;
+  private screenStream: MediaStream | null = null;
+
+  // Adaptive Bitrate & Quality Hysteresis
+  private currentQualityTier: VideoQualityTier = 'HIGH';
+  private prevVideoPacketsReceived: number = 0;
+  private prevVideoPacketsLost: number = 0;
+  private qualityHistory: NetworkQuality[] = [];
+  private currentQuality: NetworkQuality = 'EXCELLENT';
+  private recoverySuccessStreak: number = 0;
 
   // Local candidate counters
   private candidateCounts: CandidateCounts = {
@@ -94,6 +110,18 @@ class WebRTCVideoService {
 
   public getIsVideoEnabled(): boolean {
     return this.isVideoEnabled;
+  }
+
+  public getIsScreenSharing(): boolean {
+    return this.isScreenSharing;
+  }
+
+  public isScreenShareSupported(): boolean {
+    return (
+      typeof navigator !== 'undefined' &&
+      !!navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getDisplayMedia === 'function'
+    );
   }
 
   public onLocalStreamChange(cb: (stream: MediaStream | null) => void): void {
@@ -336,6 +364,112 @@ class WebRTCVideoService {
     await this.pc.setLocalDescription(offer);
     console.log(`[SDP_VIDEO_OFFER_SET] Local description set for video offer successfully.`);
     return offer;
+  }
+
+  /**
+   * 3.1 Create SDP Offer with ICE Restart for transient connection recovery
+   */
+  public async restartIce(): Promise<RTCSessionDescriptionInit> {
+    if (!this.pc) throw new Error('PeerConnection not initialized');
+
+    console.log(`[ICE_RESTART_VIDEO] callId=${this.currentCallId} Initiating video ICE restart offer...`);
+    const senders = this.pc.getSenders();
+    if (senders.length === 0 && this.localStream) {
+      this.localStream.getTracks().forEach((track) => {
+        this.pc!.addTrack(track, this.localStream!);
+      });
+    }
+
+    const offer = await this.pc.createOffer({ iceRestart: true });
+    this.inspectSDP('Offer', offer.sdp);
+
+    await this.pc.setLocalDescription(offer);
+    console.log(`[ICE_RESTART_VIDEO] Local description set for video ICE restart.`);
+    return offer;
+  }
+
+  /**
+   * Adaptive video bitrate / congestion management using RTCRtpSender.getParameters() / setParameters()
+   * Non-destructive: No renegotiation or PeerConnection recreation needed.
+   */
+  public async adaptVideoBitrate(lossPercent: number, rttMs?: number): Promise<VideoQualityTier> {
+    if (!this.pc) return this.currentQualityTier;
+
+    let targetTier: VideoQualityTier = 'HIGH';
+
+    if (lossPercent >= 25 || (rttMs && rttMs >= 800)) {
+      targetTier = 'AUDIO_PRIORITY';
+      this.recoverySuccessStreak = 0;
+    } else if (lossPercent >= 12 || (rttMs && rttMs >= 500)) {
+      targetTier = 'LOW';
+      this.recoverySuccessStreak = 0;
+    } else if (lossPercent >= 5 || (rttMs && rttMs >= 250)) {
+      targetTier = 'MEDIUM';
+      this.recoverySuccessStreak = 0;
+    } else if (lossPercent <= 3 && (!rttMs || rttMs < 200)) {
+      this.recoverySuccessStreak += 1;
+      if (this.recoverySuccessStreak >= 3) {
+        targetTier = 'HIGH';
+      } else {
+        targetTier = this.currentQualityTier;
+      }
+    } else {
+      this.recoverySuccessStreak = 0;
+    }
+
+    if (targetTier === this.currentQualityTier) {
+      return this.currentQualityTier;
+    }
+
+    try {
+      const senders = this.pc.getSenders();
+      const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (!videoSender) return this.currentQualityTier;
+
+      const params = videoSender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+
+      const enc = params.encodings[0];
+      switch (targetTier) {
+        case 'AUDIO_PRIORITY':
+          enc.maxBitrate = 80000; // 80 kbps
+          enc.maxFramerate = 10;
+          enc.scaleResolutionDownBy = 4.0;
+          (params as any).degradationPreference = 'maintain-framerate';
+          console.log(`[WebRTC-ADAPTATION] 📉 Severe congestion detected (loss=${lossPercent}%, rtt=${rttMs || 0}ms). Switching to AUDIO_PRIORITY tier.`);
+          break;
+        case 'LOW':
+          enc.maxBitrate = 200000; // 200 kbps
+          enc.maxFramerate = 15;
+          enc.scaleResolutionDownBy = 2.0;
+          (params as any).degradationPreference = 'balanced';
+          console.log(`[WebRTC-ADAPTATION] 📉 High packet loss (loss=${lossPercent}%). Switching to LOW tier.`);
+          break;
+        case 'MEDIUM':
+          enc.maxBitrate = 500000; // 500 kbps
+          enc.maxFramerate = 24;
+          enc.scaleResolutionDownBy = 1.5;
+          (params as any).degradationPreference = 'balanced';
+          console.log(`[WebRTC-ADAPTATION] 📉 Moderate loss (loss=${lossPercent}%). Switching to MEDIUM tier.`);
+          break;
+        case 'HIGH':
+          enc.maxBitrate = 1200000; // 1.2 Mbps
+          enc.maxFramerate = 30;
+          enc.scaleResolutionDownBy = 1.0;
+          (params as any).degradationPreference = 'maintain-resolution';
+          console.log(`[WebRTC-ADAPTATION] 📈 Network healthy (loss=${lossPercent}%, rtt=${rttMs || 0}ms). Restoring HIGH tier.`);
+          break;
+      }
+
+      await videoSender.setParameters(params);
+      this.currentQualityTier = targetTier;
+    } catch (err: any) {
+      console.warn('[WebRTC-ADAPTATION] Error setting encoding parameters:', err?.message || err);
+    }
+
+    return this.currentQualityTier;
   }
 
   /**
@@ -593,7 +727,128 @@ class WebRTCVideoService {
   }
 
   /**
-   * 14. Real-time Video Diagnostics & Quality Monitoring
+   * 14. Start Screen Sharing using getDisplayMedia() and RTCRtpSender.replaceTrack()
+   */
+  public async startScreenShare(): Promise<MediaStreamTrack | null> {
+    if (!this.isScreenShareSupported()) {
+      console.warn('[WebRTC-VIDEO] Screen sharing is not supported in this environment');
+      return null;
+    }
+
+    if (this.isScreenSharing && this.screenStream) {
+      return this.screenStream.getVideoTracks()[0] || null;
+    }
+
+    console.log('[WebRTC-VIDEO] 🖥️ Requesting screen display stream...');
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+
+      const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) {
+        throw new Error('No screen video track acquired');
+      }
+
+      this.screenStream = displayStream;
+      this.isScreenSharing = true;
+
+      // Handle user terminating screen share via browser floating controls
+      screenTrack.onended = () => {
+        console.log('[WebRTC-VIDEO] 🖥️ Screen sharing ended by user (native UI)');
+        this.stopScreenShare();
+      };
+
+      // Replace active video track on PeerConnection
+      if (this.pc) {
+        const senders = this.pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(screenTrack);
+          console.log('[WebRTC-VIDEO] ✅ Successfully replaced sender video track with screen track');
+        }
+      }
+
+      // Update localStream video track
+      if (this.localStream) {
+        const oldTracks = this.localStream.getVideoTracks();
+        oldTracks.forEach((t) => this.localStream?.removeTrack(t));
+        this.localStream.addTrack(screenTrack);
+        if (this.onLocalStreamChangeCallback) {
+          this.onLocalStreamChangeCallback(this.localStream);
+        }
+      }
+
+      return screenTrack;
+    } catch (err: any) {
+      console.warn('[WebRTC-VIDEO] ⚠️ startScreenShare cancelled or failed:', err?.message || err);
+      this.isScreenSharing = false;
+      this.screenStream = null;
+      return null;
+    }
+  }
+
+  /**
+   * 15. Stop Screen Sharing and restore camera feed
+   */
+  public async stopScreenShare(): Promise<void> {
+    if (!this.isScreenSharing && !this.screenStream) return;
+    console.log('[WebRTC-VIDEO] 🖥️ Stopping screen share and restoring camera feed...');
+
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((t) => t.stop());
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
+
+    // Restore camera track
+    try {
+      let cameraStream: MediaStream;
+      if (this.isVideoEnabled) {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: this.isFrontCamera ? 'user' : 'environment',
+            width: { ideal: 1280, max: 1280 },
+            height: { ideal: 720, max: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          },
+        });
+      } else {
+        cameraStream = new MediaStream();
+      }
+
+      const cameraTrack = cameraStream.getVideoTracks()[0] || null;
+
+      if (this.pc) {
+        const senders = this.pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(cameraTrack);
+          console.log('[WebRTC-VIDEO] ✅ Restored camera track on PeerConnection');
+        }
+      }
+
+      if (this.localStream) {
+        const oldTracks = this.localStream.getVideoTracks();
+        oldTracks.forEach((t) => {
+          t.stop();
+          this.localStream?.removeTrack(t);
+        });
+        if (cameraTrack) {
+          this.localStream.addTrack(cameraTrack);
+        }
+        if (this.onLocalStreamChangeCallback) {
+          this.onLocalStreamChangeCallback(this.localStream);
+        }
+      }
+    } catch (err) {
+      console.warn('[WebRTC-VIDEO] ⚠️ Failed restoring camera after screen share:', err);
+    }
+  }
+
+  /**
+   * 16. Real-time Video Diagnostics & Quality Monitoring
    */
   public async getVideoStats(): Promise<VideoStats> {
     const stats: VideoStats = {
@@ -686,6 +941,49 @@ class WebRTCVideoService {
           stats.rtt = stats.selectedCandidatePair.rtt;
         }
       }
+
+      // Delta packet loss & quality calculation
+      const deltaReceived = Math.max(0, stats.videoPacketsReceived - this.prevVideoPacketsReceived);
+      const deltaLost = Math.max(0, stats.videoPacketsLost - this.prevVideoPacketsLost);
+      this.prevVideoPacketsReceived = stats.videoPacketsReceived;
+      this.prevVideoPacketsLost = stats.videoPacketsLost;
+
+      const totalDelta = deltaReceived + deltaLost;
+      const lossPercent = totalDelta > 0 ? Math.round((deltaLost / totalDelta) * 100) : 0;
+      stats.packetLossPercent = lossPercent;
+
+      let instantQuality: NetworkQuality = 'EXCELLENT';
+      if (stats.iceState === 'disconnected' || stats.iceState === 'failed' || stats.connectionState === 'disconnected' || stats.connectionState === 'failed') {
+        instantQuality = 'RECONNECTING';
+      } else if (lossPercent >= 15 || (stats.rtt && stats.rtt >= 450) || stats.jitter >= 0.1) {
+        instantQuality = 'POOR';
+      } else if (lossPercent >= 6 || (stats.rtt && stats.rtt >= 250) || stats.jitter >= 0.06) {
+        instantQuality = 'FAIR';
+      } else if (lossPercent >= 2 || (stats.rtt && stats.rtt >= 100) || stats.jitter >= 0.03) {
+        instantQuality = 'GOOD';
+      } else {
+        instantQuality = 'EXCELLENT';
+      }
+
+      this.qualityHistory.push(instantQuality);
+      if (this.qualityHistory.length > 4) this.qualityHistory.shift();
+
+      if (instantQuality === 'RECONNECTING') {
+        this.currentQuality = 'RECONNECTING';
+      } else {
+        const counts = this.qualityHistory.reduce((acc, q) => {
+          acc[q] = (acc[q] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        const dominant = Object.keys(counts).reduce((a, b) => (counts[a] >= counts[b] ? a : b)) as NetworkQuality;
+        this.currentQuality = dominant;
+      }
+
+      stats.networkQuality = this.currentQuality;
+
+      // Adapt video bitrate based on network condition
+      const qualityTier = await this.adaptVideoBitrate(lossPercent, stats.rtt);
+      stats.qualityTier = qualityTier;
     } catch (e) {
       console.warn('[WebRTC-VIDEO] Error reading stats:', e);
     }
@@ -731,6 +1029,12 @@ class WebRTCVideoService {
     if (this.remoteAudioElement) {
       this.remoteAudioElement.srcObject = null;
     }
+
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((t) => t.stop());
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
 
     if (this.onLocalStreamChangeCallback) {
       this.onLocalStreamChangeCallback(null);

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useCall } from '../../context/CallContext';
+import { NetworkQuality } from '../../services/webrtcVoiceService';
+import { InCallChatDrawer } from './InCallChatDrawer';
 import {
   Mic,
   MicOff,
@@ -11,15 +13,75 @@ import {
   VideoOff,
   SwitchCamera,
   Move,
+  RefreshCw,
+  Bluetooth,
+  MonitorUp,
+  MessageSquare,
 } from 'lucide-react';
+
+const NetworkQualityIndicator: React.FC<{ quality: NetworkQuality; isConnected: boolean; isReconnecting: boolean }> = ({
+  quality,
+  isConnected,
+  isReconnecting,
+}) => {
+  if (!isConnected && !isReconnecting) return null;
+
+  if (isReconnecting || quality === 'RECONNECTING') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[11px] font-medium tracking-wide shadow-sm backdrop-blur-md animate-pulse">
+        <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+        <span>Reconnecting...</span>
+      </div>
+    );
+  }
+
+  // 3-bar signal indicator with smooth colors
+  const barColor =
+    quality === 'EXCELLENT'
+      ? 'bg-emerald-400'
+      : quality === 'GOOD'
+      ? 'bg-emerald-400'
+      : quality === 'FAIR'
+      ? 'bg-amber-400'
+      : 'bg-red-400';
+
+  const activeBars =
+    quality === 'EXCELLENT' ? 3 : quality === 'GOOD' ? 3 : quality === 'FAIR' ? 2 : 1;
+
+  const qualityText =
+    quality === 'EXCELLENT' ? 'HD' : quality === 'GOOD' ? 'Good' : quality === 'FAIR' ? 'Fair' : 'Weak';
+
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-[10px] text-chat-textMuted font-medium shadow-sm"
+      title={`Network Quality: ${quality}`}
+    >
+      <div className="flex items-end gap-0.5 h-3">
+        <span className={`w-0.5 h-1.5 rounded-sm ${activeBars >= 1 ? barColor : 'bg-white/20'}`} />
+        <span className={`w-0.5 h-2.2 rounded-sm ${activeBars >= 2 ? barColor : 'bg-white/20'}`} />
+        <span className={`w-0.5 h-3 rounded-sm ${activeBars >= 3 ? barColor : 'bg-white/20'}`} />
+      </div>
+      <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-white/80">{qualityText}</span>
+    </div>
+  );
+};
 
 export const CallScreen: React.FC = () => {
   const {
     callState,
     activeCall,
+    secondaryCall,
+    acceptSecondaryCall,
+    declineSecondaryCall,
     callDuration,
+    networkQuality,
     isMuted,
     isSpeakerOn,
+    audioRoute,
+    availableAudioRoutes,
+    isScreenSharing,
+    isScreenShareSupported,
+    toggleScreenShare,
     isVideoEnabled,
     isFrontCamera,
     localStream,
@@ -36,7 +98,7 @@ export const CallScreen: React.FC = () => {
   } = useCall();
 
   const handleEndOrCancel = () => {
-    if (callState === 'CONNECTED' || callState === 'CONNECTING' || callState === 'ACCEPTED') {
+    if (callState === 'CONNECTED' || callState === 'RECONNECTING' || callState === 'CONNECTING' || callState === 'ACCEPTED') {
       endCall();
     } else if (activeCall?.isIncoming) {
       rejectCall();
@@ -49,6 +111,7 @@ export const CallScreen: React.FC = () => {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [isSwitchingCam, setIsSwitchingCam] = useState<boolean>(false);
   const [pipCorner, setPipCorner] = useState<'tr' | 'tl' | 'br' | 'bl'>('tr');
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
   const isVideo = activeCall?.callType === 'video';
   const otherParticipant = activeCall?.isIncoming ? activeCall.caller : activeCall?.receiver;
@@ -90,6 +153,8 @@ export const CallScreen: React.FC = () => {
         return isVideo ? 'Connecting video...' : 'Connecting audio...';
       case 'CONNECTED':
         return formatTimer(callDuration);
+      case 'RECONNECTING':
+        return 'Reconnecting...';
       case 'ENDED':
         return 'Call Ended';
       case 'REJECTED':
@@ -106,6 +171,7 @@ export const CallScreen: React.FC = () => {
   };
 
   const isConnected = callState === 'CONNECTED';
+  const isReconnecting = callState === 'RECONNECTING';
   const isEnding = ['ENDED', 'REJECTED', 'CANCELLED', 'BUSY', 'FAILED'].includes(callState);
 
   const hasRemoteVideo =
@@ -220,29 +286,42 @@ export const CallScreen: React.FC = () => {
 
       {/* 2. Top Header Overlay */}
       <div className="relative z-10 pt-12 pb-6 px-6 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex flex-col items-center text-center">
-        <div
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider mb-2 shadow-sm backdrop-blur-md ${
-            isVideo
-              ? 'bg-brand-500/20 border-brand-500/30 text-brand-300'
-              : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
-          }`}
-        >
-          {isVideo ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
-          <span>{isVideo ? 'Kotha Hobe Video Call' : 'Kotha Hobe Voice Call'}</span>
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
+          <div
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider shadow-sm backdrop-blur-md ${
+              isVideo
+                ? 'bg-brand-500/20 border-brand-500/30 text-brand-300'
+                : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+            }`}
+          >
+            {isVideo ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+            <span>{isVideo ? 'Kotha Hobe Video Call' : 'Kotha Hobe Voice Call'}</span>
+          </div>
+
+          <NetworkQualityIndicator
+            quality={networkQuality}
+            isConnected={isConnected}
+            isReconnecting={isReconnecting}
+          />
         </div>
+
         <h2 className="text-2xl font-bold text-white tracking-tight drop-shadow-md">{displayName}</h2>
         {otherParticipant?.username && (
           <p className="text-xs text-chat-textMuted mt-0.5">@{otherParticipant.username}</p>
         )}
-        <p
-          className={`text-sm font-medium mt-1.5 drop-shadow-sm transition-colors ${
-            isConnected
-              ? `${isVideo ? 'text-brand-400' : 'text-emerald-400'} font-mono text-base font-bold`
-              : 'text-chat-textMuted'
-          }`}
-        >
-          {getStatusText()}
-        </p>
+        <div className="flex items-center gap-2 mt-1.5">
+          <p
+            className={`text-sm font-medium drop-shadow-sm transition-colors ${
+              isConnected
+                ? `${isVideo ? 'text-brand-400' : 'text-emerald-400'} font-mono text-base font-bold`
+                : isReconnecting
+                ? 'text-amber-400 animate-pulse font-semibold'
+                : 'text-chat-textMuted'
+            }`}
+          >
+            {getStatusText()}
+          </p>
+        </div>
       </div>
 
       {/* 3. Floating Local Video Self-Preview (PiP) */}
@@ -336,19 +415,64 @@ export const CallScreen: React.FC = () => {
             </button>
           )}
 
-          {/* Speakerphone Button */}
+          {/* Audio Routing Button (Earpiece / Speaker / Bluetooth) */}
           <button
             type="button"
             onClick={toggleSpeaker}
             disabled={!isConnected}
             className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
-              isSpeakerOn
+              audioRoute === 'bluetooth'
+                ? 'bg-sky-500/30 text-sky-300 border border-sky-500/50 shadow-md shadow-sky-500/20'
+                : isSpeakerOn
                 ? `${isVideo ? 'bg-brand-500/30 text-brand-300 border-brand-500/50' : 'bg-emerald-500/30 text-emerald-300 border-emerald-500/50'} border`
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
-            } disabled:opacity-40 active:scale-95`}
-            title={isSpeakerOn ? 'Speaker On' : 'Speaker Off'}
+            } disabled:opacity-40 active:scale-95 relative`}
+            title={
+              audioRoute === 'bluetooth'
+                ? 'Audio: Bluetooth Headset'
+                : isSpeakerOn
+                ? 'Audio: Loudspeaker On'
+                : 'Audio: Earpiece Handset'
+            }
           >
-            {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            {audioRoute === 'bluetooth' ? (
+              <Bluetooth className="w-5 h-5 text-sky-300 animate-pulse" />
+            ) : isSpeakerOn ? (
+              <Volume2 className="w-5 h-5" />
+            ) : (
+              <VolumeX className="w-5 h-5" />
+            )}
+            {availableAudioRoutes.includes('bluetooth') && audioRoute !== 'bluetooth' && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-sky-400 ring-2 ring-black" />
+            )}
+          </button>
+
+          {/* Screen Share Button (Only for Video Calls when supported) */}
+          {isVideo && isScreenShareSupported && (
+            <button
+              type="button"
+              onClick={toggleScreenShare}
+              disabled={!isConnected}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                isScreenSharing
+                  ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50 shadow-md shadow-amber-500/20'
+                  : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
+              } disabled:opacity-40 active:scale-95`}
+              title={isScreenSharing ? 'Stop Screen Sharing' : 'Share Screen'}
+            >
+              <MonitorUp className="w-5 h-5" />
+            </button>
+          )}
+
+          {/* In-Call Text Chat Button */}
+          <button
+            type="button"
+            onClick={() => setIsChatOpen(true)}
+            disabled={!isConnected}
+            className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 flex items-center justify-center transition-all disabled:opacity-40 active:scale-95"
+            title="In-Call Chat"
+          >
+            <MessageSquare className="w-5 h-5" />
           </button>
 
           {/* End / Cancel Call Button */}
@@ -363,6 +487,62 @@ export const CallScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* 5. Call Waiting Floating Banner */}
+      {secondaryCall && (
+        <div className="absolute top-4 left-4 right-4 z-[110] bg-slate-900/95 backdrop-blur-xl border border-brand-500/40 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between animate-slideDown">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-base border border-brand-500/40 overflow-hidden">
+              {secondaryCall.caller.avatarUrl || secondaryCall.caller.avatar ? (
+                <img
+                  src={secondaryCall.caller.avatarUrl || secondaryCall.caller.avatar}
+                  alt={secondaryCall.caller.displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                secondaryCall.caller.displayName.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold uppercase tracking-wider">
+                  Call Waiting
+                </span>
+                <span className="text-xs text-chat-textMuted capitalize">
+                  {secondaryCall.callType} call
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-white mt-0.5">{secondaryCall.caller.displayName}</h4>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={declineSecondaryCall}
+              className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-semibold active:scale-95 transition-all"
+            >
+              Decline
+            </button>
+            <button
+              type="button"
+              onClick={acceptSecondaryCall}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+            >
+              End & Accept
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 6. In-Call Chat Drawer */}
+      <InCallChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        conversationId={activeCall?.conversationId || ''}
+        recipientId={otherParticipant?._id}
+        title={displayName}
+      />
     </div>
   );
 };

@@ -210,8 +210,11 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
         return;
       }
 
-      if (mem.activeParticipants.size >= 10) {
-        socket.emit('group_call:error', { message: 'Group call is full (max 10 participants)' });
+      const maxLimit = mem.callType === 'video' ? 4 : 8;
+      if (mem.activeParticipants.size >= maxLimit) {
+        socket.emit('group_call:error', {
+          message: `Group call is full (max ${maxLimit} participants in P2P mesh mode)`,
+        });
         return;
       }
 
@@ -396,7 +399,121 @@ export function registerGroupCallHandlers(io: SocketIOServer, socket: Authentica
     }
   });
 
-  // 5. Query active call state in a conversation
+  // 5. Kick / Remove Participant (Moderator Action)
+  socket.on('group_call:kick_participant', async (data: { callId: string; targetUserId: string }) => {
+    try {
+      const { callId, targetUserId } = data;
+      if (!callId || !targetUserId) return;
+
+      const mem = activeGroupCallsMap.get(callId);
+      if (!mem) {
+        socket.emit('group_call:error', { message: 'Group call not found' });
+        return;
+      }
+
+      const group = await Conversation.findOne({ _id: mem.conversationId, isGroup: true });
+      if (!group || !group.groupMeta) return;
+
+      const isCreatorOrAdmin =
+        group.groupMeta.creator?.toString() === userId ||
+        group.groupMeta.admins?.some(
+          (a: any) => a._id?.toString() === userId || a.toString() === userId
+        ) ||
+        mem.initiatorId === userId;
+
+      if (!isCreatorOrAdmin) {
+        socket.emit('group_call:error', { message: 'Only group admins or host can remove participants' });
+        return;
+      }
+
+      if (mem.activeParticipants.has(targetUserId)) {
+        mem.activeParticipants.delete(targetUserId);
+
+        // Update DB Call record
+        await Call.updateOne(
+          { callId },
+          {
+            $pull: { activeParticipants: targetUserId },
+            $set: { 'participantsHistory.$[elem].leftAt': new Date() },
+          },
+          { arrayFilters: [{ 'elem.user': targetUserId, 'elem.leftAt': { $exists: false } }] }
+        );
+
+        // Emit kicked notification directly to target user
+        io.to(`user:${targetUserId}`).emit('group_call:kicked', {
+          callId,
+          reason: 'Removed by moderator',
+        });
+
+        // Broadcast participant_left to other participants in the room
+        socket.to(`group_call:${callId}`).emit('group_call:participant_left', {
+          callId,
+          userId: targetUserId,
+          activeParticipantCount: mem.activeParticipants.size,
+        });
+
+        // Also emit to current admin's socket so their UI updates immediately
+        socket.emit('group_call:participant_left', {
+          callId,
+          userId: targetUserId,
+          activeParticipantCount: mem.activeParticipants.size,
+        });
+
+        // Update conversation banner
+        io.to(`conv:${mem.conversationId}`).emit('group_call:banner_update', {
+          conversationId: mem.conversationId,
+          callId,
+          callType: mem.callType,
+          isActive: mem.activeParticipants.size > 0,
+          participantCount: mem.activeParticipants.size,
+          startedAt: mem.startedAt,
+        });
+
+        console.log(`[GroupCall] Moderator ${userId} removed ${targetUserId} from call ${callId}`);
+      }
+    } catch (err: any) {
+      console.error('[GroupCall] kick_participant error:', err);
+      socket.emit('group_call:error', { message: 'Failed to remove participant' });
+    }
+  });
+
+  // 6. Request Mute (Moderator Action)
+  socket.on('group_call:mute_request', async (data: { callId: string; targetUserId: string }) => {
+    try {
+      const { callId, targetUserId } = data;
+      if (!callId || !targetUserId) return;
+
+      const mem = activeGroupCallsMap.get(callId);
+      if (!mem) return;
+
+      const group = await Conversation.findOne({ _id: mem.conversationId, isGroup: true });
+      if (!group || !group.groupMeta) return;
+
+      const isCreatorOrAdmin =
+        group.groupMeta.creator?.toString() === userId ||
+        group.groupMeta.admins?.some(
+          (a: any) => a._id?.toString() === userId || a.toString() === userId
+        ) ||
+        mem.initiatorId === userId;
+
+      if (!isCreatorOrAdmin) {
+        socket.emit('group_call:error', { message: 'Only group admins or host can mute participants' });
+        return;
+      }
+
+      // Forward mute request to target participant
+      io.to(`user:${targetUserId}`).emit('group_call:mute_requested', {
+        callId,
+        requestedBy: userId,
+      });
+
+      console.log(`[GroupCall] Moderator ${userId} sent mute request to ${targetUserId} in call ${callId}`);
+    } catch (err: any) {
+      console.error('[GroupCall] mute_request error:', err);
+    }
+  });
+
+  // 7. Query active call state in a conversation
   socket.on('group_call:get_active', (data: { conversationId: string }) => {
     try {
       const { conversationId } = data;

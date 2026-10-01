@@ -46,6 +46,8 @@ interface GroupCallContextType {
   isVideoEnabled: boolean;
   isFrontCamera: boolean;
   isSpeakerOn: boolean;
+  isScreenSharing: boolean;
+  isScreenShareSupported: boolean;
   callDuration: number;
   startGroupCall: (conversationId: string, groupName: string, groupAvatar?: string, callType?: 'voice' | 'video') => Promise<void>;
   joinGroupCall: (callId: string, conversationId: string, groupName: string, groupAvatar?: string, callType?: 'voice' | 'video') => Promise<void>;
@@ -56,6 +58,9 @@ interface GroupCallContextType {
   toggleVideo: () => void;
   switchCamera: () => Promise<void>;
   toggleSpeaker: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
+  kickParticipant: (targetUserId: string) => void;
+  requestMuteParticipant: (targetUserId: string) => void;
 }
 
 const GroupCallContext = createContext<GroupCallContextType | undefined>(undefined);
@@ -80,6 +85,7 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isVideoEnabled, setIsVideoEnabled] = useState<boolean>(true);
   const [isFrontCamera, setIsFrontCamera] = useState<boolean>(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
+  const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [callDuration, setCallDuration] = useState<number>(0);
 
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -139,6 +145,7 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setGroupCallSession(null);
     setIsMuted(false);
     setIsVideoEnabled(true);
+    setIsScreenSharing(false);
     disableCallAudioMode();
     dismissCallNotification();
   }, [stopDurationTimer]);
@@ -297,6 +304,33 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await toggleNativeSpeakerphone(nextState);
   }, [isSpeakerOn]);
 
+  const toggleScreenShare = useCallback(async () => {
+    if (groupCallSessionRef.current?.callType !== 'video') return;
+    if (isScreenSharing) {
+      await webrtcGroupCallService.stopScreenShare();
+      setIsScreenSharing(false);
+    } else {
+      const track = await webrtcGroupCallService.startScreenShare();
+      if (track) {
+        setIsScreenSharing(true);
+      }
+    }
+  }, [isScreenSharing]);
+
+  const kickParticipant = useCallback((targetUserId: string) => {
+    const callId = groupCallSessionRef.current?.callId;
+    if (socketRef.current && callId && targetUserId) {
+      socketRef.current.emit('group_call:kick_participant', { callId, targetUserId });
+    }
+  }, []);
+
+  const requestMuteParticipant = useCallback((targetUserId: string) => {
+    const callId = groupCallSessionRef.current?.callId;
+    if (socketRef.current && callId && targetUserId) {
+      socketRef.current.emit('group_call:mute_request', { callId, targetUserId });
+    }
+  }, []);
+
   // Socket Event Handlers
   useEffect(() => {
     if (!socket || !isConnected) return;
@@ -443,6 +477,22 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
 
+    // Kicked by Moderator
+    const handleKicked = (data: { callId: string; reason?: string }) => {
+      if (groupCallSessionRef.current?.callId === data.callId) {
+        alert(data.reason || 'You were removed from the call by a moderator');
+        cleanupCall();
+      }
+    };
+
+    // Mute Requested by Moderator
+    const handleMuteRequested = (data: { callId: string }) => {
+      if (groupCallSessionRef.current?.callId === data.callId) {
+        webrtcGroupCallService.toggleMute(true);
+        setIsMuted(true);
+      }
+    };
+
     socket.on('group_call:initiated', handleInitiated);
     socket.on('group_call:joined', handleJoined);
     socket.on('group_call:incoming', handleIncoming);
@@ -453,6 +503,8 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     socket.on('group_call:ended', handleCallEnded);
     socket.on('group_call:error', handleError);
     socket.on('group_call:already_active', handleAlreadyActive);
+    socket.on('group_call:kicked', handleKicked);
+    socket.on('group_call:mute_requested', handleMuteRequested);
 
     return () => {
       socket.off('group_call:initiated', handleInitiated);
@@ -465,8 +517,56 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       socket.off('group_call:ended', handleCallEnded);
       socket.off('group_call:error', handleError);
       socket.off('group_call:already_active', handleAlreadyActive);
+      socket.off('group_call:kicked', handleKicked);
+      socket.off('group_call:mute_requested', handleMuteRequested);
     };
   }, [socket, isConnected, user, cleanupCall]);
+
+  // Network Handoff & Interface Change Listener for Group Call
+  useEffect(() => {
+    let networkTimer: NodeJS.Timeout | null = null;
+
+    const handleNetworkChange = (eventType: string) => {
+      console.log(`[GroupCall] Network change event (${eventType}) detected.`);
+      if (!isGroupCallActive || !groupCallSessionRef.current) return;
+
+      if (networkTimer) clearTimeout(networkTimer);
+
+      networkTimer = setTimeout(async () => {
+        if (!groupCallSessionRef.current || !socketRef.current) return;
+        console.log('[GroupCall] Evaluating peer connection states post-network switch...');
+        const currentCallId = groupCallSessionRef.current.callId;
+
+        const peerStates = webrtcGroupCallService.getPeerStates();
+        for (const [peerId, state] of peerStates.entries()) {
+          if (state.connectionState === 'disconnected' || state.connectionState === 'failed') {
+            console.log(`[GroupCall] Peer ${peerId} disconnected. Triggering isolated ICE restart...`);
+            webrtcGroupCallService.restartIceForPeer(peerId, (targetUserId, signal) => {
+              socketRef.current.emit('group_call:signal', {
+                callId: currentCallId,
+                targetUserId,
+                signal,
+              });
+            });
+          }
+        }
+      }, 1500);
+    };
+
+    window.addEventListener('online', () => handleNetworkChange('online'));
+    window.addEventListener('offline', () => handleNetworkChange('offline'));
+
+    const navConn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+    if (navConn && navConn.addEventListener) {
+      navConn.addEventListener('change', () => handleNetworkChange('interface_change'));
+    }
+
+    return () => {
+      if (networkTimer) clearTimeout(networkTimer);
+      window.removeEventListener('online', () => handleNetworkChange('online'));
+      window.removeEventListener('offline', () => handleNetworkChange('offline'));
+    };
+  }, [isGroupCallActive]);
 
   return (
     <GroupCallContext.Provider
@@ -483,6 +583,8 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isVideoEnabled,
         isFrontCamera,
         isSpeakerOn,
+        isScreenSharing,
+        isScreenShareSupported: webrtcGroupCallService.isScreenShareSupported(),
         callDuration,
         startGroupCall,
         joinGroupCall,
@@ -493,6 +595,9 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         toggleVideo,
         switchCamera,
         toggleSpeaker,
+        toggleScreenShare,
+        kickParticipant,
+        requestMuteParticipant,
       }}
     >
       {children}

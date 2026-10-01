@@ -29,6 +29,7 @@ import { LoginPage } from './pages/LoginPage';
 import { OtpPage } from './pages/OtpPage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
 import { ChatListPage } from './pages/ChatListPage';
+import { CallsPage } from './pages/CallsPage';
 import { StoriesPage } from './pages/StoriesPage';
 import { SearchUserPage } from './pages/SearchUserPage';
 import { ChatRoomPage } from './pages/ChatRoomPage';
@@ -235,6 +236,8 @@ export const AppContent: React.FC = () => {
           navigate(`/chat/${convId}`, { replace: true });
         } else if (path.startsWith('/chat/')) {
           navigate('/chats', { replace: true });
+        } else if (path === '/calls') {
+          navigate('/chats', { replace: true });
         } else if (path === '/search') {
           navigate('/chats', { replace: true });
         } else if (path === '/stories') {
@@ -327,6 +330,14 @@ export const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ChatListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calls"
+            element={
+              <ProtectedRoute>
+                <CallsPage />
               </ProtectedRoute>
             }
           />

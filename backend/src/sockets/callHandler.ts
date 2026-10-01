@@ -392,17 +392,22 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       if (!mem) return;
 
       const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
-      console.log(`[Call] ⚡ Relaying SDP offer for call ${callId} to user ${targetId}`);
-      io.to(`user:${targetId}`).emit('call:offer', { callId, sdp });
+      console.log(`[Call] ⚡ Relaying SDP offer for call ${callId} to user ${targetId} (isIceRestart=${(data as any).isIceRestart || false})`);
+      io.to(`user:${targetId}`).emit('call:offer', {
+        callId,
+        sdp,
+        isIceRestart: (data as any).isIceRestart,
+        attempt: (data as any).attempt,
+      });
     } catch (err) {
       console.error('[Call] Offer error:', err);
     }
   });
 
   // 6. Fast WebRTC SDP Answer Relay
-  socket.on('call:answer', async (data: { callId: string; sdp: any }) => {
+  socket.on('call:answer', async (data: { callId: string; sdp: any; isIceRestart?: boolean }) => {
     try {
-      const { callId, sdp } = data;
+      const { callId, sdp, isIceRestart } = data;
       if (!callId || !sdp) return;
 
       let mem = activeCallsMap.get(callId);
@@ -422,10 +427,40 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       if (!mem) return;
 
       const targetId = mem.callerId === userId ? mem.receiverId : mem.callerId;
-      console.log(`[Call] ⚡ Relaying SDP answer for call ${callId} to user ${targetId}`);
-      io.to(`user:${targetId}`).emit('call:answer', { callId, sdp });
+      console.log(`[Call] ⚡ Relaying SDP answer for call ${callId} to user ${targetId} (isIceRestart=${isIceRestart || false})`);
+      io.to(`user:${targetId}`).emit('call:answer', { callId, sdp, isIceRestart });
     } catch (err) {
       console.error('[Call] Answer error:', err);
+    }
+  });
+
+  // 6.1 Fast WebRTC Callee ICE Restart Request Relay
+  socket.on('call:ice_restart_request', async (data: { callId: string }) => {
+    try {
+      const { callId } = data;
+      if (!callId) return;
+
+      let mem = activeCallsMap.get(callId);
+      if (!mem) {
+        const call = await Call.findOne({ callId });
+        if (call && call.receiverId) {
+          mem = {
+            callId,
+            callerId: call.callerId.toString(),
+            receiverId: call.receiverId.toString(),
+            conversationId: call.conversationId.toString(),
+          };
+          activeCallsMap.set(callId, mem);
+        }
+      }
+
+      if (!mem) return;
+
+      const targetId = mem.callerId;
+      console.log(`[Call] ⚡ Relaying ICE restart request for call ${callId} to caller ${targetId}`);
+      io.to(`user:${targetId}`).emit('call:ice_restart_request', { callId });
+    } catch (err) {
+      console.error('[Call] ICE restart request error:', err);
     }
   });
 

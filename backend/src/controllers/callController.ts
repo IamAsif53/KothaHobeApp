@@ -228,4 +228,142 @@ export const declineCall = async (req: AuthenticatedRequest, res: Response): Pro
   }
 };
 
+/**
+ * GET /api/calls/history
+ * Retrieve paginated call history for authenticated user
+ * Query parameters: page (number), limit (number), filter ('all' | 'missed')
+ */
+export const getCallHistory = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+    const filter = (req.query.filter as string)?.toLowerCase() || 'all';
+
+    let query: any = {
+      $or: [
+        { callerId: userId },
+        { receiverId: userId },
+        { activeParticipants: userId },
+        { 'participantsHistory.user': userId },
+      ],
+    };
+
+    if (filter === 'missed') {
+      // Calls where this user was the recipient/participant and it was missed or unanswered
+      query = {
+        $and: [
+          {
+            $or: [
+              { receiverId: userId },
+              { 'participantsHistory.user': userId },
+            ],
+          },
+          {
+            $or: [
+              { status: 'missed' },
+              { status: 'declined', receiverId: userId, duration: 0 },
+              { status: 'cancelled', receiverId: userId, duration: 0 },
+              { status: 'failed', receiverId: userId, duration: 0 },
+            ],
+          },
+        ],
+      };
+    }
+
+    const total = await Call.countDocuments(query);
+    const totalPages = Math.ceil(total / limit) || 1;
+    const skip = (page - 1) * limit;
+
+    const calls = await Call.find(query)
+      .populate('callerId', 'displayName avatarUrl username')
+      .populate('receiverId', 'displayName avatarUrl username')
+      .populate('conversationId', 'name isGroup avatar groupMeta')
+      .populate('participantsHistory.user', 'displayName avatarUrl username')
+      .sort({ startedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const formattedCalls = calls.map((call: any) => {
+      const isCaller = call.callerId?._id?.toString() === userId.toString();
+      const direction = isCaller ? 'outgoing' : 'incoming';
+
+      return {
+        _id: call._id,
+        callId: call.callId,
+        isGroup: !!call.isGroup,
+        callType: call.callType || 'voice',
+        status: call.status,
+        direction,
+        caller: call.callerId
+          ? {
+              _id: call.callerId._id,
+              displayName: call.callerId.displayName || 'User',
+              avatar: call.callerId.avatarUrl || '',
+              username: call.callerId.username || '',
+            }
+          : null,
+        receiver: call.receiverId
+          ? {
+              _id: call.receiverId._id,
+              displayName: call.receiverId.displayName || 'User',
+              avatar: call.receiverId.avatarUrl || '',
+              username: call.receiverId.username || '',
+            }
+          : null,
+        conversation: call.conversationId
+          ? {
+              _id: call.conversationId._id,
+              name: call.conversationId.name || '',
+              isGroup: !!call.conversationId.isGroup,
+              avatar: call.conversationId.avatar || '',
+              groupMeta: call.conversationId.groupMeta,
+            }
+          : null,
+        participantsHistory: Array.isArray(call.participantsHistory)
+          ? call.participantsHistory.map((p: any) => ({
+              user: p.user
+                ? {
+                    _id: p.user._id,
+                    displayName: p.user.displayName || 'User',
+                    avatar: p.user.avatarUrl || '',
+                    username: p.user.username || '',
+                  }
+                : null,
+              joinedAt: p.joinedAt,
+              leftAt: p.leftAt,
+            }))
+          : [],
+        startedAt: call.startedAt || call.createdAt,
+        answeredAt: call.answeredAt,
+        connectedAt: call.connectedAt,
+        endedAt: call.endedAt,
+        duration: call.duration || 0,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      calls: formattedCalls,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    });
+  } catch (error: any) {
+    console.error('[CallController] getCallHistory error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch call history' });
+  }
+};
+
+
 

@@ -8,6 +8,8 @@
 
 import { getWebRTCConfig, getSanitizedWebRTCConfig } from '../config/webrtcConfig';
 
+export type NetworkQuality = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'RECONNECTING';
+
 export interface CandidateCounts {
   total: number;
   host: number;
@@ -30,6 +32,9 @@ export interface AudioStats {
   bytesReceived: number;
   packetsLost: number;
   jitter: number;
+  packetLossPercent?: number;
+  rtt?: number;
+  networkQuality?: NetworkQuality;
   audioInputLevel?: number;
   audioOutputLevel?: number;
   selectedCandidatePair?: CandidatePairInfo;
@@ -70,6 +75,12 @@ class WebRTCVoiceService {
   private remoteAudioElement: HTMLAudioElement | null = null;
   private pendingIceCandidates: Array<{ candidate: RTCIceCandidateInit; traceId?: string }> = [];
   private currentCallId: string | null = null;
+
+  // Real-time quality smoothing & delta stats
+  private prevPacketsReceived: number = 0;
+  private prevPacketsLost: number = 0;
+  private qualityHistory: NetworkQuality[] = [];
+  private currentQuality: NetworkQuality = 'EXCELLENT';
 
   // Local candidate counters
   private candidateCounts: CandidateCounts = {
@@ -321,6 +332,32 @@ class WebRTCVoiceService {
 
     await this.pc.setLocalDescription(offer);
     console.log(`[SDP_OFFER_LOCAL_SET] callId=${this.currentCallId} Local description set for Offer successfully.`);
+    return offer;
+  }
+
+  /**
+   * 3.1 Create SDP Offer with ICE Restart for transient connection failure recovery
+   */
+  public async restartIce(): Promise<RTCSessionDescriptionInit> {
+    if (!this.pc) throw new Error('PeerConnection not initialized');
+
+    console.log(`[ICE_RESTART_VOICE] callId=${this.currentCallId} Initiating ICE restart offer...`);
+    const senders = this.pc.getSenders();
+    if (senders.length === 0 && this.localStream) {
+      this.localStream.getAudioTracks().forEach((track) => {
+        this.pc!.addTrack(track, this.localStream!);
+      });
+    }
+
+    const offer = await this.pc.createOffer({ iceRestart: true });
+
+    const validation = this.inspectSDP('Offer', offer.sdp);
+    if (!validation.hasAudio) {
+      throw new Error('Generated ICE restart SDP offer lacks audio media descriptor');
+    }
+
+    await this.pc.setLocalDescription(offer);
+    console.log(`[ICE_RESTART_VOICE] callId=${this.currentCallId} Local description set for ICE restart.`);
     return offer;
   }
 
@@ -607,8 +644,48 @@ class WebRTCVoiceService {
             protocol: activePair.protocol || local?.protocol || 'udp',
             rtt: activePair.currentRoundTripTime ? Math.round(activePair.currentRoundTripTime * 1000) : undefined,
           };
+          stats.rtt = stats.selectedCandidatePair.rtt;
         }
       }
+
+      // Delta packet loss & network quality estimation with hysteresis
+      const deltaReceived = Math.max(0, stats.packetsReceived - this.prevPacketsReceived);
+      const deltaLost = Math.max(0, stats.packetsLost - this.prevPacketsLost);
+      this.prevPacketsReceived = stats.packetsReceived;
+      this.prevPacketsLost = stats.packetsLost;
+
+      const totalDelta = deltaReceived + deltaLost;
+      const lossPercent = totalDelta > 0 ? Math.round((deltaLost / totalDelta) * 100) : 0;
+      stats.packetLossPercent = lossPercent;
+
+      let instantQuality: NetworkQuality = 'EXCELLENT';
+      if (stats.iceState === 'disconnected' || stats.iceState === 'failed' || stats.connectionState === 'disconnected' || stats.connectionState === 'failed') {
+        instantQuality = 'RECONNECTING';
+      } else if (lossPercent >= 15 || (stats.rtt && stats.rtt >= 450) || stats.jitter >= 0.1) {
+        instantQuality = 'POOR';
+      } else if (lossPercent >= 6 || (stats.rtt && stats.rtt >= 250) || stats.jitter >= 0.06) {
+        instantQuality = 'FAIR';
+      } else if (lossPercent >= 2 || (stats.rtt && stats.rtt >= 100) || stats.jitter >= 0.03) {
+        instantQuality = 'GOOD';
+      } else {
+        instantQuality = 'EXCELLENT';
+      }
+
+      this.qualityHistory.push(instantQuality);
+      if (this.qualityHistory.length > 4) this.qualityHistory.shift();
+
+      if (instantQuality === 'RECONNECTING') {
+        this.currentQuality = 'RECONNECTING';
+      } else {
+        const counts = this.qualityHistory.reduce((acc, q) => {
+          acc[q] = (acc[q] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        const dominant = Object.keys(counts).reduce((a, b) => (counts[a] >= counts[b] ? a : b)) as NetworkQuality;
+        this.currentQuality = dominant;
+      }
+
+      stats.networkQuality = this.currentQuality;
     } catch (e) {
       console.warn('[WebRTC DIAGNOSTIC] Error reading stats:', e);
     }

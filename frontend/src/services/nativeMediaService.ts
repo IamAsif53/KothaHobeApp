@@ -3,19 +3,35 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { FileOpener } from '@capawesome-team/capacitor-file-opener';
 import { getMediaUrl } from '../api/messageApi';
 
+export type AudioRouteType = 'earpiece' | 'speaker' | 'bluetooth';
+
+export interface AudioRoutesInfo {
+  available: AudioRouteType[];
+  activeRoute: AudioRouteType;
+  isBluetoothAvailable: boolean;
+  isSpeakerphoneOn: boolean;
+}
+
 export interface NativeMediaPluginInterface {
   checkAudioPermission(): Promise<{ state: 'granted' | 'denied' | 'prompt'; shouldShowRationale?: boolean }>;
   requestAudioPermission(): Promise<{ state: 'granted' | 'denied'; shouldShowRationale?: boolean }>;
   checkCameraPermission(): Promise<{ state: 'granted' | 'denied' | 'prompt'; shouldShowRationale?: boolean }>;
   requestCameraPermission(): Promise<{ state: 'granted' | 'denied'; shouldShowRationale?: boolean }>;
   openAppSettings(): Promise<{ success: boolean }>;
-  setCallAudioMode(): Promise<{ success: boolean }>;
+  setCallAudioMode(): Promise<{ success: boolean } & AudioRoutesInfo>;
   resetAudioMode(): Promise<{ success: boolean }>;
-  setSpeakerphoneOn(options: { enabled: boolean }): Promise<{ success: boolean; isSpeakerphoneOn: boolean }>;
+  setSpeakerphoneOn(options: { enabled: boolean }): Promise<{ success: boolean } & AudioRoutesInfo>;
   isSpeakerphoneOn(): Promise<{ isSpeakerphoneOn: boolean }>;
+  setAudioRoute(options: { route: AudioRouteType }): Promise<{ success: boolean } & AudioRoutesInfo>;
+  getAvailableAudioRoutes(): Promise<AudioRoutesInfo>;
+  setProximitySensorEnabled(options: { enabled: boolean }): Promise<{ success: boolean; enabled: boolean }>;
   saveImageToGallery(options: { base64Data: string; fileName: string }): Promise<{ success: boolean; uri?: string; filePath?: string }>;
   downloadDocument(options: { base64Data: string; fileName: string; mimeType: string }): Promise<{ success: boolean; fileName: string; uri?: string; filePath?: string }>;
   openUrl(options: { url: string }): Promise<{ success: boolean }>;
+  addListener(
+    eventName: 'audioRouteChanged',
+    listenerFunc: (info: AudioRoutesInfo) => void
+  ): Promise<any>;
 }
 
 export const NativeMedia = registerPlugin<NativeMediaPluginInterface>('NativeMedia');
@@ -312,6 +328,85 @@ export async function getNativeSpeakerphoneStatus(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Switch native audio route between Earpiece, Speaker, and Bluetooth
+ */
+export async function setNativeAudioRoute(route: AudioRouteType): Promise<AudioRoutesInfo | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    const res = await NativeMedia.setAudioRoute({ route });
+    return res;
+  } catch (err) {
+    console.warn('[NativeMedia] setAudioRoute error:', err);
+    return null;
+  }
+}
+
+/**
+ * Retrieve all available native audio routes and active route
+ */
+export async function getNativeAudioRoutes(): Promise<AudioRoutesInfo> {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      available: ['earpiece', 'speaker'],
+      activeRoute: 'earpiece',
+      isBluetoothAvailable: false,
+      isSpeakerphoneOn: false,
+    };
+  }
+  try {
+    const res = await NativeMedia.getAvailableAudioRoutes();
+    return res;
+  } catch (err) {
+    return {
+      available: ['earpiece', 'speaker'],
+      activeRoute: 'earpiece',
+      isBluetoothAvailable: false,
+      isSpeakerphoneOn: false,
+    };
+  }
+}
+
+/**
+ * Enable/disable Android proximity sensor screen blanking during audio handset calls
+ */
+export async function setNativeProximitySensorEnabled(enabled: boolean): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const res = await NativeMedia.setProximitySensorEnabled({ enabled });
+    return !!res?.enabled;
+  } catch (err) {
+    console.warn('[NativeMedia] setProximitySensorEnabled error:', err);
+    return false;
+  }
+}
+
+/**
+ * Subscribe to native audio route changes (Bluetooth connect/disconnect, headset plug/unplug)
+ */
+export function addNativeAudioRouteListener(
+  callback: (info: AudioRoutesInfo) => void
+): { remove: () => void } | null {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    let handle: any = null;
+    NativeMedia.addListener('audioRouteChanged', callback).then((h) => {
+      handle = h;
+    });
+    return {
+      remove: () => {
+        if (handle && handle.remove) {
+          handle.remove();
+        }
+      },
+    };
+  } catch (err) {
+    console.warn('[NativeMedia] addAudioRouteListener error:', err);
+    return null;
+  }
+}
+
 
 /**
  * Open external URL in system browser or dedicated native app (e.g. Facebook, YouTube)

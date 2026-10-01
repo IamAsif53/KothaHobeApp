@@ -1,10 +1,15 @@
 package com.kothahobe.chat;
 
 import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothHeadset;
+import android.bluetooth.BluetoothProfile;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.media.AudioDeviceInfo;
@@ -13,13 +18,16 @@ import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.Log;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -51,6 +59,141 @@ import java.util.List;
     }
 )
 public class NativeMediaPlugin extends Plugin {
+    private static final String TAG = "NativeMediaPlugin";
+    private PowerManager.WakeLock proximityWakeLock = null;
+    private BroadcastReceiver audioRouteReceiver = null;
+    private String currentAudioRoute = "earpiece";
+
+    @Override
+    public void load() {
+        super.load();
+        registerAudioRouteReceiver();
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        releaseProximityWakeLock();
+        unregisterAudioRouteReceiver();
+        super.handleOnDestroy();
+    }
+
+    private void registerAudioRouteReceiver() {
+        if (audioRouteReceiver != null) return;
+        try {
+            audioRouteReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) return;
+                    String action = intent.getAction();
+                    Log.d(TAG, "Audio route broadcast received: " + action);
+
+                    // When headphones/bluetooth are disconnected (NOISY event)
+                    if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(action)) {
+                        Log.d(TAG, "Audio becoming noisy - falling back gracefully");
+                        currentAudioRoute = "earpiece";
+                    } else if (BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED.equals(action)) {
+                        int state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED);
+                        if (state == BluetoothProfile.STATE_CONNECTED) {
+                            Log.d(TAG, "Bluetooth headset connected - auto-selecting bluetooth route");
+                            currentAudioRoute = "bluetooth";
+                        } else if (state == BluetoothProfile.STATE_DISCONNECTED && "bluetooth".equals(currentAudioRoute)) {
+                            Log.d(TAG, "Bluetooth headset disconnected - falling back to earpiece");
+                            currentAudioRoute = "earpiece";
+                        }
+                    }
+                    notifyAudioRoutesChanged();
+                }
+            };
+
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+            filter.addAction(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED);
+            filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
+            filter.addAction(Intent.ACTION_HEADSET_PLUG);
+
+            getContext().registerReceiver(audioRouteReceiver, filter);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to register audio route receiver: " + e.getMessage());
+        }
+    }
+
+    private void unregisterAudioRouteReceiver() {
+        if (audioRouteReceiver != null) {
+            try {
+                getContext().unregisterReceiver(audioRouteReceiver);
+            } catch (Exception ignored) {}
+            audioRouteReceiver = null;
+        }
+    }
+
+    private void notifyAudioRoutesChanged() {
+        try {
+            JSObject data = getAudioRoutesObject();
+            notifyListeners("audioRouteChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to notify audio routes: " + e.getMessage());
+        }
+    }
+
+    private boolean isBluetoothConnected() {
+        try {
+            Context ctx = getContext();
+            AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && am != null) {
+                List<AudioDeviceInfo> devices = am.getAvailableCommunicationDevices();
+                for (AudioDeviceInfo dev : devices) {
+                    int type = dev.getType();
+                    if (type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                        type == AudioDeviceInfo.TYPE_BLE_SPEAKER) {
+                        return true;
+                    }
+                }
+            } else {
+                BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+                if (adapter != null && adapter.isEnabled()) {
+                    int state = adapter.getProfileConnectionState(BluetoothProfile.HEADSET);
+                    return state == BluetoothProfile.STATE_CONNECTED;
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private JSObject getAudioRoutesObject() {
+        JSObject ret = new JSObject();
+        JSArray available = new JSArray();
+        available.put("earpiece");
+        available.put("speaker");
+
+        boolean btConnected = isBluetoothConnected();
+        if (btConnected) {
+            available.put("bluetooth");
+        } else if ("bluetooth".equals(currentAudioRoute)) {
+            currentAudioRoute = "earpiece";
+        }
+
+        ret.put("available", available);
+        ret.put("activeRoute", currentAudioRoute);
+        ret.put("isBluetoothAvailable", btConnected);
+        ret.put("isSpeakerphoneOn", "speaker".equals(currentAudioRoute));
+        return ret;
+    }
+
+    private void releaseProximityWakeLock() {
+        try {
+            if (proximityWakeLock != null) {
+                if (proximityWakeLock.isHeld()) {
+                    proximityWakeLock.release();
+                }
+                proximityWakeLock = null;
+                Log.d(TAG, "Proximity wake lock released");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error releasing proximity wake lock: " + e.getMessage());
+        }
+    }
 
     // =========================================================================
     // 1. Microphone & Camera Permission & Settings
@@ -167,6 +310,69 @@ public class NativeMediaPlugin extends Plugin {
         }
     }
 
+    private void applyAudioRoute(String route) {
+        AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+
+        currentAudioRoute = route;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
+            AudioDeviceInfo targetDevice = null;
+
+            if ("bluetooth".equals(route)) {
+                for (AudioDeviceInfo dev : devices) {
+                    int type = dev.getType();
+                    if (type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                        type == AudioDeviceInfo.TYPE_BLE_SPEAKER) {
+                        targetDevice = dev;
+                        break;
+                    }
+                }
+            } else if ("speaker".equals(route)) {
+                for (AudioDeviceInfo dev : devices) {
+                    if (dev.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                        targetDevice = dev;
+                        break;
+                    }
+                }
+            } else { // "earpiece"
+                for (AudioDeviceInfo dev : devices) {
+                    if (dev.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) {
+                        targetDevice = dev;
+                        break;
+                    }
+                }
+            }
+
+            if (targetDevice != null) {
+                audioManager.setCommunicationDevice(targetDevice);
+            }
+            audioManager.setSpeakerphoneOn("speaker".equals(route));
+        } else {
+            if ("bluetooth".equals(route)) {
+                audioManager.startBluetoothSco();
+                audioManager.setBluetoothScoOn(true);
+                audioManager.setSpeakerphoneOn(false);
+            } else if ("speaker".equals(route)) {
+                audioManager.stopBluetoothSco();
+                audioManager.setBluetoothScoOn(false);
+                audioManager.setSpeakerphoneOn(true);
+            } else { // "earpiece"
+                audioManager.stopBluetoothSco();
+                audioManager.setBluetoothScoOn(false);
+                audioManager.setSpeakerphoneOn(false);
+            }
+        }
+
+        // Manage proximity sensor: Release automatically when NOT on earpiece
+        if (!"earpiece".equals(route)) {
+            releaseProximityWakeLock();
+        }
+    }
+
     @PluginMethod
     public void setCallAudioMode(PluginCall call) {
         try {
@@ -175,21 +381,15 @@ public class NativeMediaPlugin extends Plugin {
                 audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 audioManager.setMicrophoneMute(false);
 
-                // Default to standard Earpiece to prevent acoustic feedback loop / echo
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
-                    for (AudioDeviceInfo device : devices) {
-                        if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) {
-                            audioManager.setCommunicationDevice(device);
-                            break;
-                        }
-                    }
+                // Default to bluetooth if connected; otherwise earpiece
+                if (isBluetoothConnected()) {
+                    applyAudioRoute("bluetooth");
+                } else {
+                    applyAudioRoute("earpiece");
                 }
-                audioManager.setSpeakerphoneOn(false);
             }
-            JSObject ret = new JSObject();
+            JSObject ret = getAudioRoutesObject();
             ret.put("success", true);
-            ret.put("isSpeakerphoneOn", false);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to set call audio mode", e);
@@ -199,14 +399,20 @@ public class NativeMediaPlugin extends Plugin {
     @PluginMethod
     public void resetAudioMode(PluginCall call) {
         try {
+            releaseProximityWakeLock();
             AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (audioManager != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     audioManager.clearCommunicationDevice();
                 }
+                try {
+                    audioManager.stopBluetoothSco();
+                    audioManager.setBluetoothScoOn(false);
+                } catch (Exception ignored) {}
                 audioManager.setSpeakerphoneOn(false);
                 audioManager.setMode(AudioManager.MODE_NORMAL);
             }
+            currentAudioRoute = "earpiece";
             JSObject ret = new JSObject();
             ret.put("success", true);
             call.resolve(ret);
@@ -219,24 +425,11 @@ public class NativeMediaPlugin extends Plugin {
     public void setSpeakerphoneOn(PluginCall call) {
         try {
             boolean enabled = call.getBoolean("enabled", false);
-            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
-            if (audioManager != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
-                    for (AudioDeviceInfo device : devices) {
-                        int targetType = enabled ? AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
-                        if (device.getType() == targetType) {
-                            audioManager.setCommunicationDevice(device);
-                            break;
-                        }
-                    }
-                }
-                audioManager.setSpeakerphoneOn(enabled);
-            }
-            JSObject ret = new JSObject();
+            applyAudioRoute(enabled ? "speaker" : "earpiece");
+            JSObject ret = getAudioRoutesObject();
             ret.put("success", true);
-            ret.put("isSpeakerphoneOn", enabled);
             call.resolve(ret);
+            notifyAudioRoutesChanged();
         } catch (Exception e) {
             call.reject("Failed to toggle speakerphone", e);
         }
@@ -245,23 +438,70 @@ public class NativeMediaPlugin extends Plugin {
     @PluginMethod
     public void isSpeakerphoneOn(PluginCall call) {
         try {
-            AudioManager audioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
-            boolean isOn = false;
-            if (audioManager != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
-                    isOn = currentDevice != null && currentDevice.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
-                } else {
-                    isOn = audioManager.isSpeakerphoneOn();
-                }
-            }
             JSObject ret = new JSObject();
-            ret.put("isSpeakerphoneOn", isOn);
+            ret.put("isSpeakerphoneOn", "speaker".equals(currentAudioRoute));
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Failed to check speakerphone status", e);
         }
     }
+
+    @PluginMethod
+    public void setAudioRoute(PluginCall call) {
+        String route = call.getString("route", "earpiece");
+        try {
+            applyAudioRoute(route);
+            JSObject ret = getAudioRoutesObject();
+            ret.put("success", true);
+            call.resolve(ret);
+            notifyAudioRoutesChanged();
+        } catch (Exception e) {
+            call.reject("Failed to set audio route: " + e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
+    public void getAvailableAudioRoutes(PluginCall call) {
+        try {
+            JSObject ret = getAudioRoutesObject();
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to get audio routes", e);
+        }
+    }
+
+    @PluginMethod
+    public void setProximitySensorEnabled(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", false);
+        try {
+            PowerManager powerManager = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            if (enabled) {
+                if (proximityWakeLock == null && powerManager != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        if (powerManager.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+                            proximityWakeLock = powerManager.newWakeLock(
+                                PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK,
+                                "kothahobe:proximity_screen_off"
+                            );
+                            proximityWakeLock.setReferenceCounted(false);
+                            proximityWakeLock.acquire();
+                            Log.d(TAG, "Proximity wake lock acquired successfully");
+                        }
+                    }
+                }
+            } else {
+                releaseProximityWakeLock();
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("enabled", enabled && proximityWakeLock != null);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to set proximity sensor", e);
+        }
+    }
+
 
     // =========================================================================
     // 2. Save Image to Device Gallery / MediaStore

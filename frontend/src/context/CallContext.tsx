@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
 import { soundService } from '../services/soundService';
-import { webrtcVoiceService, AudioStats } from '../services/webrtcVoiceService';
+import { webrtcVoiceService, AudioStats, NetworkQuality } from '../services/webrtcVoiceService';
 import { webrtcVideoService, VideoStats } from '../services/webrtcVideoService';
 import { fetchAndSetIceServers } from '../config/webrtcConfig';
 import { fetchActiveCallApi } from '../api/callApi';
@@ -13,6 +13,12 @@ import {
   enableCallAudioMode,
   disableCallAudioMode,
   toggleNativeSpeakerphone,
+  AudioRouteType,
+  AudioRoutesInfo,
+  setNativeAudioRoute,
+  getNativeAudioRoutes,
+  setNativeProximitySensorEnabled,
+  addNativeAudioRouteListener,
 } from '../services/nativeMediaService';
 import { dismissCallNotification, NativeCallNotification } from '../services/callNotificationService';
 
@@ -23,6 +29,7 @@ export type CallState =
   | 'ACCEPTED'
   | 'CONNECTING'
   | 'CONNECTED'
+  | 'RECONNECTING'
   | 'ENDED'
   | 'REJECTED'
   | 'CANCELLED'
@@ -54,12 +61,22 @@ interface CallContextType {
   callDuration: number;
   isMuted: boolean;
   isSpeakerOn: boolean;
+  audioRoute: AudioRouteType;
+  availableAudioRoutes: AudioRouteType[];
+  setAudioRoute: (route: AudioRouteType) => Promise<void>;
+  secondaryCall: CallSession | null;
+  acceptSecondaryCall: () => Promise<void>;
+  declineSecondaryCall: () => void;
+  isScreenSharing: boolean;
+  isScreenShareSupported: boolean;
+  toggleScreenShare: () => Promise<void>;
   isVideoEnabled: boolean;
   isFrontCamera: boolean;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   audioStats: AudioStats | null;
   videoStats: VideoStats | null;
+  networkQuality: NetworkQuality;
   startCall: (recipient: CallParticipant, conversationId: string, callType?: 'voice' | 'video') => Promise<void>;
   acceptCall: () => Promise<void>;
   rejectCall: () => void;
@@ -88,9 +105,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const callStateRef = useRef<CallState>('IDLE');
   const [activeCall, setActiveCall] = useState<CallSession | null>(null);
   const activeCallRef = useRef<CallSession | null>(null);
+  const [secondaryCall, setSecondaryCall] = useState<CallSession | null>(null);
+  const secondaryCallRef = useRef<CallSession | null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
+  const [audioRoute, setAudioRouteState] = useState<AudioRouteType>('earpiece');
+  const [availableAudioRoutes, setAvailableAudioRoutes] = useState<AudioRouteType[]>(['earpiece', 'speaker']);
   const [isVideoEnabled, setIsVideoEnabled] = useState<boolean>(true);
   const [isFrontCamera, setIsFrontCamera] = useState<boolean>(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -102,6 +124,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const callDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isRecoveringRef = useRef<boolean>(false);
+  const recoveryAttemptRef = useRef<number>(0);
+  const recoveryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const networkDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<any>(socket);
   const isConnectedRef = useRef<boolean>(isConnected);
 
@@ -121,6 +147,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     activeCallRef.current = activeCall;
   }, [activeCall]);
+
+  useEffect(() => {
+    secondaryCallRef.current = secondaryCall;
+  }, [secondaryCall]);
 
   // Listen to WebRTC video stream updates
   useEffect(() => {
@@ -150,14 +180,32 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       statsIntervalRef.current = null;
     }
 
+    if (recoveryTimerRef.current) {
+      clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    }
+
+    if (networkDebounceTimerRef.current) {
+      clearTimeout(networkDebounceTimerRef.current);
+      networkDebounceTimerRef.current = null;
+    }
+
+    isRecoveringRef.current = false;
+    recoveryAttemptRef.current = 0;
+
     // Clean up both media engines completely
     webrtcVoiceService.cleanup();
     webrtcVideoService.cleanup();
 
+    setNativeProximitySensorEnabled(false);
     disableCallAudioMode();
     dismissCallNotification(activeCallRef.current?.callId);
+    setSecondaryCall(null);
+    secondaryCallRef.current = null;
+    setIsScreenSharing(false);
     setIsMuted(false);
     setIsSpeakerOn(true);
+    setAudioRouteState('earpiece');
     setIsVideoEnabled(true);
     setIsFrontCamera(true);
     setLocalStream(null);
@@ -181,9 +229,105 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [cleanupCall]
   );
 
+  // Attempt ICE Restart with backoff & max 3 retries
+  const attemptIceRestart = useCallback(
+    async (reason: string = 'connection_drop') => {
+      const current = activeCallRef.current;
+      const state = callStateRef.current;
+
+      // Only attempt recovery if call is currently CONNECTED or already in RECONNECTING
+      if (!current || (state !== 'CONNECTED' && state !== 'RECONNECTING')) {
+        console.log(`[ICE_RECOVERY] Skipping ICE restart (call not in active/reconnecting state: ${state})`);
+        return;
+      }
+
+      if (isRecoveringRef.current) {
+        console.log(`[ICE_RECOVERY] Already recovering ICE. Skipping duplicate attempt.`);
+        return;
+      }
+
+      if (recoveryAttemptRef.current >= 3) {
+        console.error(`[ICE_RECOVERY] ❌ Exhausted all 3 ICE recovery attempts. Declaring call failure.`);
+        if (recoveryTimerRef.current) {
+          clearTimeout(recoveryTimerRef.current);
+          recoveryTimerRef.current = null;
+        }
+        isRecoveringRef.current = false;
+        soundService.playCallEndTone();
+        setCallState('FAILED');
+        callStateRef.current = 'FAILED';
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket) activeSocket.emit('call:failed', { callId: current.callId });
+        resetToIdleAfterDelay(2500);
+        return;
+      }
+
+      recoveryAttemptRef.current += 1;
+      const attemptNum = recoveryAttemptRef.current;
+      isRecoveringRef.current = true;
+
+      console.log(`[ICE_RECOVERY] 🔄 Starting ICE restart attempt #${attemptNum}/3 (reason: ${reason}, callId: ${current.callId})...`);
+
+      // Switch UI to RECONNECTING state (preserves callDuration timer!)
+      setCallState('RECONNECTING');
+      callStateRef.current = 'RECONNECTING';
+
+      try {
+        const mediaService = getMediaService(current.callType);
+        const offer = await mediaService.restartIce();
+
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket && activeSocket.connected) {
+          activeSocket.emit('call:offer', {
+            callId: current.callId,
+            sdp: offer,
+            isIceRestart: true,
+            attempt: attemptNum,
+          });
+          console.log(`[ICE_RECOVERY] ⚡ Sent ICE restart offer to remote peer.`);
+        }
+
+        // Set recovery timeout for this attempt (7s)
+        if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = setTimeout(() => {
+          if (callStateRef.current === 'RECONNECTING') {
+            console.warn(`[ICE_RECOVERY] ⚠️ Attempt #${attemptNum} timed out.`);
+            isRecoveringRef.current = false;
+            // Schedule next attempt with backoff
+            const backoffMs = attemptNum === 1 ? 1500 : 3000;
+            recoveryTimerRef.current = setTimeout(() => {
+              attemptIceRestart('retry_backoff');
+            }, backoffMs);
+          }
+        }, 7000);
+      } catch (err: any) {
+        console.error(`[ICE_RECOVERY] Error during ICE restart attempt #${attemptNum}:`, err);
+        isRecoveringRef.current = false;
+        if (recoveryAttemptRef.current < 3) {
+          recoveryTimerRef.current = setTimeout(() => {
+            attemptIceRestart('retry_on_error');
+          }, 2000);
+        } else {
+          setCallState('FAILED');
+          callStateRef.current = 'FAILED';
+          resetToIdleAfterDelay(2500);
+        }
+      }
+    },
+    [getMediaService, resetToIdleAfterDelay, socket]
+  );
+
   // Transition to CONNECTED state (Strictly on genuine WebRTC connection)
   const markConnected = useCallback(
     (callId: string) => {
+      // Clear any pending recovery timer & flags
+      if (recoveryTimerRef.current) {
+        clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
+      isRecoveringRef.current = false;
+      recoveryAttemptRef.current = 0;
+
       if (callStateRef.current !== 'CONNECTED') {
         console.log('[WebRTC] 🎉 Transitioning to CONNECTED state (WebRTC transport established)!');
         callStateRef.current = 'CONNECTED';
@@ -191,7 +335,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         soundService.stopAll();
 
         // Enable Android hardware communication audio routing & loud speaker
-        enableCallAudioMode();
+        enableCallAudioMode().then(() => {
+          getNativeAudioRoutes().then((info) => {
+            if (info) {
+              setAvailableAudioRoutes(info.available);
+              setAudioRouteState(info.activeRoute);
+              setIsSpeakerOn(info.activeRoute === 'speaker');
+              const isVoice = activeCallRef.current?.callType === 'voice';
+              if (isVoice && info.activeRoute === 'earpiece') {
+                setNativeProximitySensorEnabled(true);
+              } else {
+                setNativeProximitySensorEnabled(false);
+              }
+            }
+          });
+        });
 
         // Notify socket server that WebRTC media stream is verified LIVE
         const activeSocket = socketRef.current || socket;
@@ -199,7 +357,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeSocket.emit('call:connected', { callId });
         }
 
-        // Start connected duration timer
+        // Start connected duration timer if not already running (preserves duration across reconnects!)
         if (!callDurationTimerRef.current) {
           setCallDuration(0);
           callDurationTimerRef.current = setInterval(() => {
@@ -247,19 +405,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log(`[WebRTC] Connection state: ${state}, ICE state: ${iceState}`);
           if (state === 'connected' || iceState === 'connected' || iceState === 'completed') {
             markConnected(callId);
+          } else if (state === 'disconnected' || iceState === 'disconnected') {
+            console.warn('[WebRTC] ⚠️ Connection temporarily disconnected. Initiating ICE recovery...');
+            attemptIceRestart('ice_disconnected');
           } else if (state === 'failed' || iceState === 'failed') {
-            console.error('[WebRTC] ❌ Call failed due to WebRTC state:', state, 'ICE:', iceState);
-            soundService.playCallEndTone();
-            setCallState('FAILED');
-            callStateRef.current = 'FAILED';
-            const activeSocket = socketRef.current || socket;
-            if (activeSocket) activeSocket.emit('call:failed', { callId });
-            resetToIdleAfterDelay(2500);
+            console.warn('[WebRTC] ⚠️ Connection failed. Initiating ICE recovery...');
+            attemptIceRestart('ice_failed');
           }
         }
       );
     },
-    [socket, markConnected, resetToIdleAfterDelay]
+    [socket, markConnected, attemptIceRestart]
   );
 
   // Start Outgoing Voice / Video Call
@@ -501,11 +657,34 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsMuted(nextMuted);
   };
 
-  // Toggle Speaker / Earpiece
+  // Switch Audio Route (Earpiece, Speaker, Bluetooth)
+  const setAudioRoute = async (route: AudioRouteType) => {
+    const res = await setNativeAudioRoute(route);
+    if (res) {
+      setAudioRouteState(res.activeRoute);
+      setAvailableAudioRoutes(res.available);
+      setIsSpeakerOn(res.activeRoute === 'speaker');
+      if (activeCallRef.current?.callType === 'voice' && callStateRef.current === 'CONNECTED') {
+        setNativeProximitySensorEnabled(res.activeRoute === 'earpiece');
+      } else {
+        setNativeProximitySensorEnabled(false);
+      }
+    } else {
+      setAudioRouteState(route);
+      setIsSpeakerOn(route === 'speaker');
+    }
+  };
+
+  // Toggle Speaker / Earpiece / Bluetooth
   const toggleSpeaker = async () => {
-    const nextSpeaker = !isSpeakerOn;
-    await toggleNativeSpeakerphone(nextSpeaker);
-    setIsSpeakerOn(nextSpeaker);
+    if (availableAudioRoutes.includes('bluetooth')) {
+      const nextRoute: AudioRouteType =
+        audioRoute === 'earpiece' ? 'speaker' : audioRoute === 'speaker' ? 'bluetooth' : 'earpiece';
+      await setAudioRoute(nextRoute);
+    } else {
+      const nextRoute: AudioRouteType = isSpeakerOn ? 'earpiece' : 'speaker';
+      await setAudioRoute(nextRoute);
+    }
   };
 
   // Toggle Local Camera Video
@@ -523,6 +702,84 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsFrontCamera(nextFront);
     }
   };
+
+  // Toggle Screen Sharing for Video Calls
+  const toggleScreenShare = async () => {
+    if (activeCallRef.current?.callType !== 'video') return;
+    if (isScreenSharing) {
+      await webrtcVideoService.stopScreenShare();
+      setIsScreenSharing(false);
+    } else {
+      const track = await webrtcVideoService.startScreenShare();
+      if (track) {
+        setIsScreenSharing(true);
+      }
+    }
+  };
+
+  // Decline Secondary Incoming Call (Call Waiting)
+  const declineSecondaryCall = useCallback(() => {
+    const sec = secondaryCallRef.current;
+    const activeSocket = socketRef.current || socket;
+    if (sec && activeSocket) {
+      activeSocket.emit('call:reject', { callId: sec.callId });
+    }
+    setSecondaryCall(null);
+    secondaryCallRef.current = null;
+  }, [socket]);
+
+  // Accept Secondary Incoming Call (End Current Call & Accept Waiting Call)
+  const acceptSecondaryCall = useCallback(async () => {
+    const sec = secondaryCallRef.current;
+    if (!sec) return;
+
+    console.log('[CallContext] Switching from primary call to secondary call:', sec.callId);
+
+    // 1. End current active call
+    const cur = activeCallRef.current;
+    const activeSocket = socketRef.current || socket;
+    if (cur && activeSocket) {
+      activeSocket.emit('call:end', { callId: cur.callId });
+    }
+
+    // Stop primary media & sound
+    webrtcVoiceService.cleanup();
+    webrtcVideoService.cleanup();
+    soundService.stopAll();
+
+    // 2. Clear secondary call and promote to active call
+    setSecondaryCall(null);
+    secondaryCallRef.current = null;
+
+    setActiveCall(sec);
+    activeCallRef.current = sec;
+    setCallState('CONNECTING');
+    callStateRef.current = 'CONNECTING';
+
+    try {
+      const isVideo = sec.callType === 'video';
+      await fetchAndSetIceServers();
+
+      if (isVideo) {
+        await webrtcVideoService.startLocalMedia({
+          audio: true,
+          video: true,
+          isFrontCamera: true,
+        });
+      } else {
+        await webrtcVoiceService.startLocalMicrophone();
+      }
+
+      setupWebRTC(sec.callId, sec.callType);
+
+      if (activeSocket && activeSocket.connected) {
+        activeSocket.emit('call:accept', { callId: sec.callId });
+      }
+    } catch (err) {
+      console.error('[CallContext] Failed accepting secondary call:', err);
+      rejectCall();
+    }
+  }, [socket, setupWebRTC, rejectCall]);
 
   // Attach local / remote video elements with stable callback references
   const attachLocalVideo = useCallback((el: HTMLVideoElement | null) => {
@@ -555,12 +812,37 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[Signaling] Incoming call received:', data.callId, 'type:', data.callType, 'from:', data.caller?.displayName);
 
       // Deduplicate if receiver is already handling this exact call
-      if (activeCallRef.current?.callId === data.callId) {
-        console.log('[Signaling] Deduplicating incoming call event for active callId:', data.callId);
+      if (activeCallRef.current?.callId === data.callId || secondaryCallRef.current?.callId === data.callId) {
+        console.log('[Signaling] Deduplicating incoming call event for active/waiting callId:', data.callId);
         return;
       }
 
-      // If user is genuinely in another call with someone else
+      // If user is currently in an active or reconnecting call, trigger Call Waiting
+      if (callStateRef.current === 'CONNECTED' || callStateRef.current === 'RECONNECTING') {
+        if (!secondaryCallRef.current) {
+          const secSession: CallSession = {
+            callId: data.callId,
+            conversationId: data.conversationId,
+            caller: data.caller,
+            receiver: { _id: user?._id || '', displayName: user?.displayName || '' },
+            isIncoming: true,
+            callType: data.callType || 'voice',
+            startedAt: new Date(),
+          };
+          setSecondaryCall(secSession);
+          secondaryCallRef.current = secSession;
+          soundService.playCallWaitingTone();
+          socket.emit('call:ringing', { callId: data.callId });
+          console.log('[Signaling] 📞 Call waiting activated for secondary callId:', data.callId);
+          return;
+        } else {
+          console.log('[Signaling] Already have a secondary call waiting. Emitting call:busy for callId:', data.callId);
+          socket.emit('call:busy', { callId: data.callId });
+          return;
+        }
+      }
+
+      // If user is busy with another call attempt (CALLING, RINGING, CONNECTING, etc.)
       if (callStateRef.current !== 'IDLE') {
         console.log('[Signaling] User busy with another call. Emitting call:busy for callId:', data.callId);
         socket.emit('call:busy', { callId: data.callId });
@@ -627,12 +909,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // 5. Receiver receives SDP Offer -> creates SDP Answer
-    const handleCallOffer = async (data: { callId: string; sdp: any }) => {
-      console.log('[Signaling] Received SDP Offer for call:', data.callId);
+    // 5. Receiver receives SDP Offer (Initial or ICE Restart) -> creates SDP Answer
+    const handleCallOffer = async (data: { callId: string; sdp: any; isIceRestart?: boolean }) => {
+      console.log('[Signaling] Received SDP Offer for call:', data.callId, 'isIceRestart:', data.isIceRestart);
       try {
         const callType = activeCallRef.current?.callType || 'voice';
         const mediaService = getMediaService(callType);
+
+        if (data.isIceRestart && callStateRef.current === 'CONNECTED') {
+          console.log('[Signaling] Peer requested ICE restart. Entering RECONNECTING state...');
+          setCallState('RECONNECTING');
+          callStateRef.current = 'RECONNECTING';
+        }
 
         await mediaService.handleOffer(data.sdp);
         const answer = await mediaService.createAnswer();
@@ -641,6 +929,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeSocket.emit('call:answer', {
             callId: data.callId,
             sdp: answer,
+            isIceRestart: data.isIceRestart,
           });
         }
       } catch (err) {
@@ -648,15 +937,26 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // 6. Caller receives SDP Answer
-    const handleCallAnswer = async (data: { callId: string; sdp: any }) => {
-      console.log('[Signaling] Received SDP Answer for call:', data.callId);
+    // 6. Caller receives SDP Answer (Initial or ICE Restart)
+    const handleCallAnswer = async (data: { callId: string; sdp: any; isIceRestart?: boolean }) => {
+      console.log('[Signaling] Received SDP Answer for call:', data.callId, 'isIceRestart:', data.isIceRestart);
       try {
         const callType = activeCallRef.current?.callType || 'voice';
         const mediaService = getMediaService(callType);
         await mediaService.handleAnswer(data.sdp);
+        if (data.isIceRestart) {
+          console.log('[ICE_RECOVERY] ✅ Remote peer accepted ICE restart answer. Awaiting ICE transport resumption...');
+        }
       } catch (err) {
         console.error('[CallContext] Handle answer error:', err);
+      }
+    };
+
+    // 6.1 Callee prompts Caller to initiate ICE restart
+    const handleIceRestartRequest = async (data: { callId: string }) => {
+      if (activeCallRef.current?.callId === data.callId && !activeCallRef.current?.isIncoming) {
+        console.log('[Signaling] Received call:ice_restart_request from callee. Initiating ICE restart...');
+        attemptIceRestart('callee_requested');
       }
     };
 
@@ -674,7 +974,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 9. Call Rejection
-    const handleCallRejected = () => {
+    const handleCallRejected = (data?: { callId?: string }) => {
+      if (data?.callId && secondaryCallRef.current?.callId === data.callId) {
+        console.log('[Signaling] Secondary waiting call was rejected:', data.callId);
+        setSecondaryCall(null);
+        secondaryCallRef.current = null;
+        return;
+      }
+
       console.log('[Signaling] Call was rejected by recipient');
       dismissCallNotification();
       soundService.playCallEndTone();
@@ -684,7 +991,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 10. Call Cancellation
-    const handleCallCancelled = () => {
+    const handleCallCancelled = (data?: { callId?: string }) => {
+      if (data?.callId && secondaryCallRef.current?.callId === data.callId) {
+        console.log('[Signaling] Secondary waiting call was cancelled by caller:', data.callId);
+        setSecondaryCall(null);
+        secondaryCallRef.current = null;
+        return;
+      }
+
       console.log('[Signaling] Call was cancelled by caller');
       dismissCallNotification();
       soundService.playCallEndTone();
@@ -694,7 +1008,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 11. Call Ended
-    const handleCallEnded = (data: { duration: number }) => {
+    const handleCallEnded = (data: { duration: number; callId?: string }) => {
+      if (data?.callId && secondaryCallRef.current?.callId === data.callId) {
+        console.log('[Signaling] Secondary waiting call was ended:', data.callId);
+        setSecondaryCall(null);
+        secondaryCallRef.current = null;
+        return;
+      }
+
       console.log('[Signaling] Call ended. Total duration:', data.duration);
       dismissCallNotification();
       soundService.playCallEndTone();
@@ -768,6 +1089,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('call:failed', handleCallFailed);
     socket.on('call:error', handleCallError);
     socket.on('call:push_status', handlePushStatus);
+    socket.on('call:ice_restart_request', handleIceRestartRequest);
 
     // Support Push Notification / Background Incoming Call Wakeup
     const handleCustomIncomingCall = (event: any) => {
@@ -892,8 +1214,99 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off('call:failed', handleCallFailed);
       socket.off('call:error', handleCallError);
       socket.off('call:push_status', handlePushStatus);
+      socket.off('call:ice_restart_request', handleIceRestartRequest);
     };
-  }, [socket, user, setupWebRTC, markConnected, resetToIdleAfterDelay, getMediaService]);
+  }, [socket, user, setupWebRTC, markConnected, resetToIdleAfterDelay, getMediaService, attemptIceRestart]);
+
+  // Network Handoff & Interface Change Listener
+  useEffect(() => {
+    const handleNetworkChange = (eventType: string) => {
+      console.log(`[NETWORK_HANDOFF] Network event detected (${eventType}). Scheduling evaluation...`);
+      if (callStateRef.current !== 'CONNECTED' && callStateRef.current !== 'RECONNECTING') {
+        return;
+      }
+
+      if (networkDebounceTimerRef.current) {
+        clearTimeout(networkDebounceTimerRef.current);
+      }
+
+      // Debounce with 1500ms stabilization window for routing table to settle
+      networkDebounceTimerRef.current = setTimeout(async () => {
+        if (callStateRef.current !== 'CONNECTED' && callStateRef.current !== 'RECONNECTING') {
+          return;
+        }
+
+        console.log('[NETWORK_HANDOFF] Evaluating WebRTC connection health post-network change...');
+        const currentType = activeCallRef.current?.callType || 'voice';
+
+        let stats: any;
+        if (currentType === 'video') {
+          stats = await webrtcVideoService.getVideoStats();
+        } else {
+          stats = await webrtcVoiceService.getAudioStats();
+        }
+
+        const isHealthy =
+          stats &&
+          (stats.iceState === 'connected' || stats.iceState === 'completed') &&
+          stats.connectionState === 'connected' &&
+          ((stats.packetsReceived && stats.packetsReceived > 0) || (stats.videoPacketsReceived && stats.videoPacketsReceived > 0));
+
+        if (isHealthy && callStateRef.current === 'CONNECTED') {
+          console.log('[NETWORK_HANDOFF] ✅ WebRTC connection remains healthy. No ICE restart required.');
+        } else {
+          console.warn('[NETWORK_HANDOFF] ⚠️ WebRTC connection requires recovery following network switch. Triggering ICE restart...');
+          attemptIceRestart('network_handoff');
+        }
+      }, 1500);
+    };
+
+    const onOnline = () => handleNetworkChange('online');
+    const onOffline = () => handleNetworkChange('offline');
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    const navConn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+    if (navConn && navConn.addEventListener) {
+      navConn.addEventListener('change', () => handleNetworkChange('interface_change'));
+    }
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      if (navConn && navConn.removeEventListener) {
+        navConn.removeEventListener('change', () => handleNetworkChange('interface_change'));
+      }
+    };
+  }, [attemptIceRestart]);
+
+  // Dynamic Bluetooth & Audio Route Change Listener
+  useEffect(() => {
+    getNativeAudioRoutes().then((info) => {
+      if (info) {
+        setAvailableAudioRoutes(info.available);
+        setAudioRouteState(info.activeRoute);
+        setIsSpeakerOn(info.activeRoute === 'speaker');
+      }
+    });
+
+    const listener = addNativeAudioRouteListener((info) => {
+      console.log('[CallContext] Native audio route changed:', info);
+      setAvailableAudioRoutes(info.available);
+      setAudioRouteState(info.activeRoute);
+      setIsSpeakerOn(info.activeRoute === 'speaker');
+
+      if (activeCallRef.current?.callType === 'voice' && callStateRef.current === 'CONNECTED') {
+        setNativeProximitySensorEnabled(info.activeRoute === 'earpiece');
+      } else {
+        setNativeProximitySensorEnabled(false);
+      }
+    });
+
+    return () => {
+      if (listener) listener.remove();
+    };
+  }, []);
 
   // Clean up on component unmount
   useEffect(() => {
@@ -901,6 +1314,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cleanupCall();
     };
   }, [cleanupCall]);
+
+  const networkQuality: NetworkQuality =
+    callState === 'RECONNECTING'
+      ? 'RECONNECTING'
+      : activeCall?.callType === 'video'
+      ? videoStats?.networkQuality || 'EXCELLENT'
+      : audioStats?.networkQuality || 'EXCELLENT';
 
   return (
     <CallContext.Provider
@@ -910,12 +1330,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callDuration,
         isMuted,
         isSpeakerOn,
+        audioRoute,
+        availableAudioRoutes,
+        setAudioRoute,
+        secondaryCall,
+        acceptSecondaryCall,
+        declineSecondaryCall,
+        isScreenSharing,
+        isScreenShareSupported: webrtcVideoService.isScreenShareSupported(),
+        toggleScreenShare,
         isVideoEnabled,
         isFrontCamera,
         localStream,
         remoteStream,
         audioStats,
         videoStats,
+        networkQuality,
         startCall,
         acceptCall,
         rejectCall,

@@ -209,6 +209,37 @@ class SoundService {
   }
 
   /**
+   * Play Call Waiting Beep (Two short subtle beeps during active call)
+   */
+  public playCallWaitingTone(): void {
+    try {
+      const ctx = this.getContext();
+      const now = ctx.currentTime;
+
+      [0, 0.15].forEach((offset) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now + offset);
+
+        gain.gain.setValueAtTime(0, now + offset);
+        gain.gain.linearRampToValueAtTime(0.06, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.08);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.09);
+      });
+      this.triggerVibration([50, 50, 50]);
+    } catch (err) {
+      console.warn('[SoundService] Call waiting tone error:', err);
+    }
+  }
+
+  /**
    * Trigger Haptic Vibration (Web Vibration API with fallback)
    */
   public triggerVibration(pattern: number | number[] = [80, 40, 80]): void {

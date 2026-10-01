@@ -30,6 +30,8 @@ class WebRTCGroupCallService {
   private isFrontCamera: boolean = true;
   private isMuted: boolean = false;
   private isVideoEnabled: boolean = true;
+  private isScreenSharing: boolean = false;
+  private screenStream: MediaStream | null = null;
   private callType: 'voice' | 'video' = 'voice';
 
   // Subscriptions
@@ -54,6 +56,18 @@ class WebRTCGroupCallService {
 
   public getIsVideoEnabled(): boolean {
     return this.isVideoEnabled;
+  }
+
+  public getIsScreenSharing(): boolean {
+    return this.isScreenSharing;
+  }
+
+  public isScreenShareSupported(): boolean {
+    return (
+      typeof navigator !== 'undefined' &&
+      !!navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getDisplayMedia === 'function'
+    );
   }
 
   public subscribePeersChange(cb: PeersChangeCallback): () => void {
@@ -214,10 +228,21 @@ class WebRTCGroupCallService {
       const peerState = this.peerStates.get(remoteUserId);
       if (peerState) {
         peerState.connectionState = state;
-        if (state === 'failed' || state === 'closed') {
-          // Keep state for UI until explicit remove or reconnect
-        }
         this.notifyPeersChange();
+      }
+      if (state === 'failed') {
+        console.warn(`[GroupRTC] Peer ${remoteUserId} connection failed. Attempting isolated ICE recovery...`);
+        this.restartIceForPeer(remoteUserId, onSignal).catch(() => {});
+      }
+    };
+
+    // ICE Connection State Change handler
+    pc.oniceconnectionstatechange = () => {
+      const iceState = pc.iceConnectionState;
+      console.log(`[GroupRTC] Peer ${remoteUserId} ICE state: ${iceState}`);
+      if (iceState === 'disconnected' || iceState === 'failed') {
+        console.warn(`[GroupRTC] Peer ${remoteUserId} ICE degraded (${iceState}). Attempting isolated ICE recovery...`);
+        this.restartIceForPeer(remoteUserId, onSignal).catch(() => {});
       }
     };
 
@@ -242,6 +267,43 @@ class WebRTCGroupCallService {
 
     this.notifyPeersChange();
     return pc;
+  }
+
+  /**
+   * 2.1 Restart ICE for a specific degraded or disconnected peer connection
+   * Non-destructive to other active peer streams in the mesh.
+   */
+  public async restartIceForPeer(
+    remoteUserId: string,
+    onSignal: (targetUserId: string, signal: any) => void
+  ): Promise<boolean> {
+    const pc = this.peerConnections.get(remoteUserId);
+    if (!pc) {
+      console.warn(`[GroupRTC] Cannot restart ICE: no PeerConnection for ${remoteUserId}`);
+      return false;
+    }
+
+    try {
+      console.log(`[GroupRTC] 🔄 Initiating isolated ICE restart for peer ${remoteUserId}...`);
+      const offer = await pc.createOffer({
+        iceRestart: true,
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: this.callType === 'video',
+      });
+      await pc.setLocalDescription(offer);
+
+      onSignal(remoteUserId, {
+        type: 'offer',
+        sdp: offer,
+        isIceRestart: true,
+      });
+
+      console.log(`[GroupRTC] ⚡ Sent ICE restart offer to peer ${remoteUserId}`);
+      return true;
+    } catch (err) {
+      console.error(`[GroupRTC] Failed to restart ICE for peer ${remoteUserId}:`, err);
+      return false;
+    }
   }
 
   /**
@@ -344,9 +406,9 @@ class WebRTCGroupCallService {
   /**
    * 5. Mute / Unmute Microphone
    */
-  public toggleMute(): boolean {
+  public toggleMute(forceMute?: boolean): boolean {
     if (!this.localStream) return this.isMuted;
-    this.isMuted = !this.isMuted;
+    this.isMuted = forceMute !== undefined ? forceMute : !this.isMuted;
     this.localStream.getAudioTracks().forEach((track) => {
       track.enabled = !this.isMuted;
     });
@@ -408,6 +470,116 @@ class WebRTCGroupCallService {
     } catch (err) {
       console.error('[GroupRTC] switchCamera error:', err);
       return this.isFrontCamera;
+    }
+  }
+
+  /**
+   * 8. Start Screen Sharing in Group Call Mesh
+   */
+  public async startScreenShare(): Promise<MediaStreamTrack | null> {
+    if (!this.isScreenShareSupported()) {
+      console.warn('[GroupRTC] Screen sharing is not supported in this environment');
+      return null;
+    }
+
+    if (this.isScreenSharing && this.screenStream) {
+      return this.screenStream.getVideoTracks()[0] || null;
+    }
+
+    console.log('[GroupRTC] 🖥️ Requesting screen share display stream...');
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+
+      const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) throw new Error('No screen video track acquired');
+
+      this.screenStream = displayStream;
+      this.isScreenSharing = true;
+
+      screenTrack.onended = () => {
+        console.log('[GroupRTC] 🖥️ Screen sharing ended by user (native UI)');
+        this.stopScreenShare();
+      };
+
+      // Replace video track in all active peer connections
+      for (const pc of this.peerConnections.values()) {
+        const senders = pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(screenTrack);
+        }
+      }
+
+      if (this.localStream) {
+        const oldTracks = this.localStream.getVideoTracks();
+        oldTracks.forEach((t) => this.localStream?.removeTrack(t));
+        this.localStream.addTrack(screenTrack);
+      }
+
+      this.notifyLocalStream();
+      return screenTrack;
+    } catch (err) {
+      console.warn('[GroupRTC] startScreenShare error:', err);
+      this.isScreenSharing = false;
+      this.screenStream = null;
+      return null;
+    }
+  }
+
+  /**
+   * 9. Stop Screen Sharing and restore camera feed in Group Call Mesh
+   */
+  public async stopScreenShare(): Promise<void> {
+    if (!this.isScreenSharing && !this.screenStream) return;
+    console.log('[GroupRTC] 🖥️ Stopping screen share and restoring camera feed...');
+
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((t) => t.stop());
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
+
+    try {
+      let cameraStream: MediaStream;
+      if (this.isVideoEnabled && this.callType === 'video') {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: this.isFrontCamera ? 'user' : 'environment',
+            width: { ideal: 640, max: 1280 },
+            height: { ideal: 480, max: 720 },
+          },
+        });
+      } else {
+        cameraStream = new MediaStream();
+      }
+
+      const cameraTrack = cameraStream.getVideoTracks()[0] || null;
+
+      for (const pc of this.peerConnections.values()) {
+        const senders = pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(cameraTrack);
+        }
+      }
+
+      if (this.localStream) {
+        const oldTracks = this.localStream.getVideoTracks();
+        oldTracks.forEach((t) => {
+          t.stop();
+          this.localStream?.removeTrack(t);
+        });
+        if (cameraTrack) {
+          this.localStream.addTrack(cameraTrack);
+        }
+      }
+
+      this.notifyLocalStream();
+    } catch (err) {
+      console.warn('[GroupRTC] Failed restoring camera after screen share:', err);
     }
   }
 
@@ -536,6 +708,12 @@ class WebRTCGroupCallService {
       this.localStream.getTracks().forEach((t) => t.stop());
       this.localStream = null;
     }
+
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((t) => t.stop());
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
 
     this.localAnalyser = null;
     this.peerAnalysers.clear();

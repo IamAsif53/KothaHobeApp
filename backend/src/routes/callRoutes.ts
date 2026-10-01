@@ -1,8 +1,11 @@
 import { Router } from 'express';
-import { getIceServers, getActiveCall, declineCall } from '../controllers/callController';
+import { getIceServers, getActiveCall, declineCall, getCallHistory } from '../controllers/callController';
 import { authenticateToken } from '../middleware/authMiddleware';
 
 const router = Router();
+
+// GET /api/calls/history
+router.get('/history', authenticateToken, getCallHistory);
 
 // GET /api/calls/active
 router.get('/active', authenticateToken, getActiveCall);
@@ -14,3 +17,4 @@ router.get('/ice-servers', authenticateToken, getIceServers);
 router.post('/decline', authenticateToken, declineCall);
 
 export default router;
+

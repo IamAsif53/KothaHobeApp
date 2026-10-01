@@ -13,16 +13,11 @@ import {
   MessageSquare,
   Users,
   BadgeAlert,
-  ChevronRight,
   ChevronLeft,
-  Check,
   AlertCircle,
-  Smartphone,
-  ExternalLink,
   ShieldCheck,
   Radio,
   Play,
-  Settings as SettingsIcon,
 } from 'lucide-react';
 import {
   getNotificationSettingsApi,
@@ -39,7 +34,7 @@ interface NotificationsAlertsModalProps {
   onClose: () => void;
 }
 
-type SubView = 'main' | 'channels' | 'sounds';
+type SubView = 'main' | 'sounds';
 
 export const NotificationsAlertsModal: React.FC<NotificationsAlertsModalProps> = ({ onClose }) => {
   const { themeConfig } = useTheme();
@@ -281,7 +276,6 @@ export const NotificationsAlertsModal: React.FC<NotificationsAlertsModalProps> =
             <div>
               <h2 className="text-base font-bold text-chat-textPrimary leading-tight">
                 {currentView === 'main' && 'Notifications & Alerts'}
-                {currentView === 'channels' && 'Android Channels'}
                 {currentView === 'sounds' && 'Sound & Tones'}
               </h2>
               <div className="text-[11px] text-chat-textMuted flex items-center gap-1.5 mt-0.5">
@@ -604,77 +598,7 @@ export const NotificationsAlertsModal: React.FC<NotificationsAlertsModalProps> =
                   </div>
                 </div>
               </div>
-
-              {/* SECTION 4: SYSTEM & CHANNELS LINK */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-bold tracking-wider text-chat-textMuted uppercase px-1">
-                  System Settings & Channels
-                </div>
-                <div className="bg-chat-surfaceSecondary border border-chat-border/70 rounded-2xl divide-y divide-chat-border/40 overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => setCurrentView('channels')}
-                    className="w-full flex items-center justify-between p-3.5 hover:bg-chat-surfaceTertiary/40 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-                        <Smartphone className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-chat-textPrimary">Android Channels & Priority</div>
-                        <div className="text-[11px] text-chat-textSecondary">
-                          High-importance channels for calls & messaging
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-chat-textMuted" />
-                  </button>
-                </div>
-              </div>
             </>
-          )}
-
-          {/* ================= VIEW 2: ANDROID CHANNELS & SYSTEM GUIDE ================= */}
-          {currentView === 'channels' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-chat-surfaceSecondary border border-chat-border/60 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center border border-sky-500/20">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-chat-textPrimary">Dedicated Notification Channels</div>
-                    <div className="text-[11px] text-chat-textSecondary">Managed via native Android NotificationManager</div>
-                  </div>
-                </div>
-                <div className="text-xs text-chat-textSecondary leading-relaxed space-y-2">
-                  <p>
-                    Kotha Hobe configures two high-priority system channels on Android 8.0+ to ensure you never miss calls or messages even in battery-saver mode:
-                  </p>
-                  <ul className="list-disc list-inside space-y-1 text-chat-textMuted pl-1">
-                    <li>
-                      <strong className="text-chat-textPrimary">Incoming Calls:</strong> Full-screen high-priority ringtone channel with custom vibration and Do Not Disturb bypass.
-                    </li>
-                    <li>
-                      <strong className="text-chat-textPrimary">Chat Messages:</strong> High-importance messaging style channel with inline quick replies and sender avatars.
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 space-y-2">
-                <div className="text-xs font-bold text-brand-400">Lock Screen Privacy</div>
-                <div className="text-[11px] text-chat-textSecondary leading-relaxed">
-                  When you toggle off <strong>Message Preview</strong>, Kotha Hobe masks notification content at the cloud push level so no sensitive message text is visible on your device lock screen.
-                </div>
-              </div>
-
-              <button
-                onClick={() => setCurrentView('main')}
-                className="w-full py-3 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-sm transition-colors shadow-md"
-              >
-                Back to Notifications
-              </button>
-            </div>
           )}
         </div>
       </div>

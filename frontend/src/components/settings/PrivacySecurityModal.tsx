@@ -50,20 +50,17 @@ type SubView =
   | 'sessions'
   | 'securityDetails';
 
-export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onClose }) => {
-  const { themeConfig } = useTheme();
-  const navigate = useNavigate();
+const PRIVACY_CACHE_KEY = 'kotha_hobe_privacy_settings_cache';
+const SESSIONS_CACHE_KEY = 'kotha_hobe_sessions_cache';
+const SECURITY_CACHE_KEY = 'kotha_hobe_security_cache';
+const BLOCKED_COUNT_KEY = 'kotha_hobe_blocked_count_cache';
 
-  // Navigation Subview Stack
-  const [currentView, setCurrentView] = useState<SubView>('main');
-
-  // Loading & Sync States
-  const [loading, setLoading] = useState<boolean>(true);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Settings & Sessions State
-  const [privacy, setPrivacy] = useState<IPrivacySettings>({
+const getCachedPrivacy = (): IPrivacySettings => {
+  try {
+    const cached = localStorage.getItem(PRIVACY_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return {
     readReceipts: true,
     onlinePresence: true,
     lastSeen: 'everyone',
@@ -71,12 +68,50 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     storyVisibility: 'connections',
     messageRequests: 'everyone',
     groupInvites: 'everyone',
-  });
+  };
+};
 
-  const [sessions, setSessions] = useState<IUserSession[]>([]);
+const getCachedSessions = (): IUserSession[] => {
+  try {
+    const cached = localStorage.getItem(SESSIONS_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return [];
+};
+
+const getCachedSecurity = (): IConnectionSecurity | null => {
+  try {
+    const cached = localStorage.getItem(SECURITY_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return null;
+};
+
+const getCachedBlockedCount = (): number => {
+  try {
+    const cached = localStorage.getItem(BLOCKED_COUNT_KEY);
+    if (cached) return parseInt(cached, 10) || 0;
+  } catch {}
+  return 0;
+};
+
+export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onClose }) => {
+  const { themeConfig } = useTheme();
+  const navigate = useNavigate();
+
+  // Navigation Subview Stack
+  const [currentView, setCurrentView] = useState<SubView>('main');
+
+  // Loading & Sync States (Instant render without blocking UI)
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Settings & Sessions State - Loaded instantaneously from cache for 0ms initial render
+  const [privacy, setPrivacy] = useState<IPrivacySettings>(getCachedPrivacy);
+  const [sessions, setSessions] = useState<IUserSession[]>(getCachedSessions);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
-  const [securityStatus, setSecurityStatus] = useState<IConnectionSecurity | null>(null);
-  const [blockedCount, setBlockedCount] = useState<number>(0);
+  const [securityStatus, setSecurityStatus] = useState<IConnectionSecurity | null>(getCachedSecurity);
+  const [blockedCount, setBlockedCount] = useState<number>(getCachedBlockedCount);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [confirmRevokeOthers, setConfirmRevokeOthers] = useState<boolean>(false);
   const [revokingOthers, setRevokingOthers] = useState<boolean>(false);
@@ -99,9 +134,8 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     return () => unregister();
   }, [currentView, onClose]);
 
-  // Load initial settings and sessions
+  // Load settings and sessions silently in background
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
       const [privRes, sessRes, secRes, blockRes] = await Promise.allSettled([
         getPrivacySettingsApi(),
@@ -112,23 +146,35 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
 
       if (privRes.status === 'fulfilled' && privRes.value.success) {
         setPrivacy(privRes.value.privacySettings);
+        try {
+          localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify(privRes.value.privacySettings));
+        } catch {}
       }
       if (sessRes.status === 'fulfilled' && sessRes.value.success) {
-        setSessions(sessRes.value.sessions || []);
+        const sessList = sessRes.value.sessions || [];
+        setSessions(sessList);
+        try {
+          localStorage.setItem(SESSIONS_CACHE_KEY, JSON.stringify(sessList));
+        } catch {}
         if (sessRes.value.currentSessionId) {
           setCurrentSessionId(sessRes.value.currentSessionId);
         }
       }
       if (secRes.status === 'fulfilled' && secRes.value.success) {
         setSecurityStatus(secRes.value.security);
+        try {
+          localStorage.setItem(SECURITY_CACHE_KEY, JSON.stringify(secRes.value.security));
+        } catch {}
       }
       if (blockRes.status === 'fulfilled' && blockRes.value.success) {
-        setBlockedCount(blockRes.value.blockedUsers?.length || 0);
+        const count = blockRes.value.blockedUsers?.length || 0;
+        setBlockedCount(count);
+        try {
+          localStorage.setItem(BLOCKED_COUNT_KEY, String(count));
+        } catch {}
       }
     } catch (err) {
-      console.warn('[Privacy] Failed to fetch data:', err);
-    } finally {
-      setLoading(false);
+      console.warn('[Privacy] Background data sync error:', err);
     }
   }, []);
 
@@ -140,15 +186,22 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
   const handleToggle = async (key: 'readReceipts' | 'onlinePresence' | 'typingIndicators') => {
     const previous = privacy[key];
     const updated = !previous;
+    const updatedPrivacy = { ...privacy, [key]: updated };
 
     // Optimistic UI update
-    setPrivacy((prev) => ({ ...prev, [key]: updated }));
+    setPrivacy(updatedPrivacy);
+    try {
+      localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify(updatedPrivacy));
+    } catch {}
     setSavingKey(key);
 
     try {
       const res = await updatePrivacySettingsApi({ [key]: updated });
       if (res.success && res.privacySettings) {
         setPrivacy(res.privacySettings);
+        try {
+          localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify(res.privacySettings));
+        } catch {}
         if (key === 'readReceipts') {
           showToast(updated ? 'Read receipts enabled' : 'Read receipts disabled');
         } else if (key === 'onlinePresence') {
@@ -162,6 +215,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     } catch (err: any) {
       // Rollback on failure
       setPrivacy((prev) => ({ ...prev, [key]: previous }));
+      try {
+        localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify({ ...privacy, [key]: previous }));
+      } catch {}
       showToast(err?.message || 'Failed to update setting. Please try again.');
     } finally {
       setSavingKey(null);
@@ -175,13 +231,20 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     label: string
   ) => {
     const previous = privacy[key];
-    setPrivacy((prev) => ({ ...prev, [key]: val }));
+    const updatedPrivacy = { ...privacy, [key]: val };
+    setPrivacy(updatedPrivacy);
+    try {
+      localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify(updatedPrivacy));
+    } catch {}
     setSavingKey(String(key));
 
     try {
       const res = await updatePrivacySettingsApi({ [key]: val });
       if (res.success && res.privacySettings) {
         setPrivacy(res.privacySettings);
+        try {
+          localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify(res.privacySettings));
+        } catch {}
         showToast(`Updated to: ${label}`);
         setCurrentView('main');
       } else {
@@ -189,6 +252,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
       }
     } catch (err: any) {
       setPrivacy((prev) => ({ ...prev, [key]: previous }));
+      try {
+        localStorage.setItem(PRIVACY_CACHE_KEY, JSON.stringify({ ...privacy, [key]: previous }));
+      } catch {}
       showToast(err?.message || 'Failed to update option');
     } finally {
       setSavingKey(null);
@@ -201,7 +267,13 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     try {
       const res = await revokeSessionApi(sessionId);
       if (res.success) {
-        setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
+        setSessions((prev) => {
+          const next = prev.filter((s) => s.sessionId !== sessionId);
+          try {
+            localStorage.setItem(SESSIONS_CACHE_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         showToast(`Signed out ${deviceName}`);
       } else {
         showToast(res.message || 'Failed to sign out device');
@@ -219,7 +291,13 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
     try {
       const res = await revokeOtherSessionsApi();
       if (res.success) {
-        setSessions((prev) => prev.filter((s) => s.isCurrent || s.sessionId === currentSessionId));
+        setSessions((prev) => {
+          const next = prev.filter((s) => s.isCurrent || s.sessionId === currentSessionId);
+          try {
+            localStorage.setItem(SESSIONS_CACHE_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         setConfirmRevokeOthers(false);
         showToast('All other devices have been signed out');
       } else {
@@ -341,29 +419,7 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
 
         {/* Modal Body / Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-          {loading ? (
-            /* Skeleton Loading State */
-            <div className="space-y-4 py-2">
-              <div className="h-4 w-28 bg-chat-surfaceSecondary rounded animate-pulse" />
-              <div className="space-y-2.5">
-                {[1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="h-16 rounded-2xl bg-chat-surfaceSecondary/60 border border-chat-border animate-pulse"
-                  />
-                ))}
-              </div>
-              <div className="h-4 w-32 bg-chat-surfaceSecondary rounded animate-pulse pt-2" />
-              <div className="space-y-2.5">
-                {[1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-16 rounded-2xl bg-chat-surfaceSecondary/60 border border-chat-border animate-pulse"
-                  />
-                ))}
-              </div>
-            </div>
-          ) : currentView === 'main' ? (
+          {currentView === 'main' && (
             /* ================= MAIN VIEW ================= */
             <>
               {/* SECTION 1: VISIBILITY & PRESENCE */}
@@ -612,7 +668,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 </div>
               </div>
             </>
-          ) : currentView === 'lastSeen' ? (
+          )}
+
+          {currentView === 'lastSeen' && (
             /* ================= SUB-VIEW: LAST SEEN ================= */
             <div className="space-y-4">
               <p className="text-xs text-chat-textSecondary leading-relaxed">
@@ -652,7 +710,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 })}
               </div>
             </div>
-          ) : currentView === 'storyPrivacy' ? (
+          )}
+
+          {currentView === 'storyPrivacy' && (
             /* ================= SUB-VIEW: STORY PRIVACY ================= */
             <div className="space-y-4">
               <p className="text-xs text-chat-textSecondary leading-relaxed">
@@ -694,7 +754,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 })}
               </div>
             </div>
-          ) : currentView === 'messageRequests' ? (
+          )}
+
+          {currentView === 'messageRequests' && (
             /* ================= SUB-VIEW: MESSAGE REQUESTS ================= */
             <div className="space-y-4">
               <p className="text-xs text-chat-textSecondary leading-relaxed">
@@ -735,7 +797,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 })}
               </div>
             </div>
-          ) : currentView === 'groupInvites' ? (
+          )}
+
+          {currentView === 'groupInvites' && (
             /* ================= SUB-VIEW: GROUP INVITES ================= */
             <div className="space-y-4">
               <p className="text-xs text-chat-textSecondary leading-relaxed">
@@ -776,7 +840,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 })}
               </div>
             </div>
-          ) : currentView === 'sessions' ? (
+          )}
+
+          {currentView === 'sessions' && (
             /* ================= SUB-VIEW: SESSIONS ================= */
             <div className="space-y-4">
               <p className="text-xs text-chat-textSecondary leading-relaxed">
@@ -919,7 +985,9 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {currentView === 'securityDetails' && (
             /* ================= SUB-VIEW: SECURITY DETAILS ================= */
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">

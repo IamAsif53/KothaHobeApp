@@ -32,7 +32,6 @@ import {
   Tag,
   ChevronRight,
   ShieldCheck,
-  ShieldAlert,
   Ban,
   Trash2,
   Share2,
@@ -316,11 +315,6 @@ export const ChatInfoPage: React.FC = () => {
     } finally {
       setIsActionLoading(false);
     }
-  };
-
-  // Handler: Report User
-  const handleReportUser = () => {
-    showToast('Report submitted. Our moderation team will review this user.');
   };
 
   // Handler: Share Contact
@@ -787,23 +781,6 @@ export const ChatInfoPage: React.FC = () => {
                     ? 'Allow messages and calls again'
                     : 'Prevent calls and messages from reaching you'}
                 </div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-chat-textMuted" />
-          </div>
-
-          {/* Report User */}
-          <div
-            onClick={handleReportUser}
-            className="flex items-center justify-between p-4 hover:bg-chat-panel cursor-pointer transition-colors text-chat-textMuted hover:text-chat-textPrimary"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-chat-panel text-chat-textMuted flex items-center justify-center border border-chat-border">
-                <ShieldAlert className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-chat-textPrimary">Report Contact</div>
-                <div className="text-xs text-chat-textMuted">Report spam or suspicious activity</div>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-chat-textMuted" />

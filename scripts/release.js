@@ -23,20 +23,12 @@ function main() {
   console.log('==================================================');
 
   const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
-  const oldVersionName = versionData.versionName;
-  const oldVersionCode = versionData.versionCode;
+  const newVersionName = versionData.versionName || '1.1.65';
+  const newVersionCode = versionData.versionCode || 110;
 
-  // Bump version code & name
-  const newVersionCode = oldVersionCode + 1;
-  const versionParts = oldVersionName.split('.').map(Number);
-  versionParts[2] = (versionParts[2] || 0) + 1;
-  const newVersionName = versionParts.join('.');
+  console.log(`Building release: v${newVersionName} (Code ${newVersionCode})`);
 
-  console.log(`Bumping version: ${oldVersionName} (Code ${oldVersionCode}) → ${newVersionName} (Code ${newVersionCode})`);
-
-  // Update version.json
-  versionData.versionName = newVersionName;
-  versionData.versionCode = newVersionCode;
+  // Ensure version.json is properly formatted
   fs.writeFileSync(versionPath, JSON.stringify(versionData, null, 2) + '\n');
 
   // 1. Build frontend
@@ -45,12 +37,12 @@ function main() {
   // 2. Sync Capacitor
   runCommand('npx cap sync android', path.join(rootDir, 'frontend'));
 
-  // 3. Build Android APK via Gradle
+  // 3. Build Android APKs via Gradle (Debug for OTA updates + Release)
   const gradlewCmd = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-  runCommand(`${gradlewCmd} assembleDebug`, path.join(rootDir, 'frontend', 'android'));
+  runCommand(`${gradlewCmd} assembleDebug assembleRelease`, path.join(rootDir, 'frontend', 'android'));
 
-  // 4. Calculate SHA-256 hash of generated APK
-  const apkPath = path.join(
+  // 4. Calculate SHA-256 hash of generated debug APK (used for OTA downloads)
+  const apkDebugPath = path.join(
     rootDir,
     'frontend',
     'android',
@@ -62,12 +54,29 @@ function main() {
     'app-debug.apk'
   );
 
-  if (!fs.existsSync(apkPath)) {
-    throw new Error(`APK file not found at: ${apkPath}`);
+  const apkReleasePath = path.join(
+    rootDir,
+    'frontend',
+    'android',
+    'app',
+    'build',
+    'outputs',
+    'apk',
+    'release',
+    'app-release.apk'
+  );
+
+  if (!fs.existsSync(apkDebugPath)) {
+    throw new Error(`Debug APK file not found at: ${apkDebugPath}`);
   }
 
-  const sha256 = computeSha256(apkPath);
-  console.log(`\n✅ Generated APK SHA-256 Checksum:\n${sha256}`);
+  const sha256 = computeSha256(apkDebugPath);
+  console.log(`\n✅ Generated APK SHA-256 Checksum (Debug):\n${sha256}`);
+
+  if (fs.existsSync(apkReleasePath)) {
+    const sha256Release = computeSha256(apkReleasePath);
+    console.log(`✅ Generated APK SHA-256 Checksum (Release):\n${sha256Release}`);
+  }
 
   // 5. Update update/latest.json and backend/public
   const manifestData = {
@@ -77,11 +86,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "🔍 Smart Unified Chat Search: Unified multi-category search across People, Groups, Messages, and Archived history with instant local and server search",
-      "⚡ Deep Message Jump & Pulsing Highlight: 1-tap navigation to matching messages with auto-scroll and accent glowing indicator",
-      "🕒 Recent Searches Management: Fast search history memory with 1-tap re-run, individual delete, and clear all",
-      "🎨 Safe-Area Header Clearance: Aligned Privacy & Security and Notifications modal headers below device status bar and camera cutouts",
-      "🏷️ Unicode & Bengali Full Search: Seamless Bengali and English matching across names, usernames (@handle), group descriptions, and message text"
+      "⚡ Realtime Sync & 0ms Instant Message Delivery: Resolved Socket.IO event parsing so incoming messages and media updates appear instantly in the chat list without polling or page reloads",
+      "📄 Rebuilt File Download UX: Live SVG circular progress indicator showing real byte-level progress directly on document cards with one-tap opening and cancellation",
+      "💾 Persistent Local File Cache: Verified local file persistence across app restarts with direct native OS default application opening (PDF, Office, etc.) without repeated downloads or intrusive toasts",
+      "🏷️ Canonical Message Previews: Fixed 'Started conversation' placeholder regression for pure media/document/voice messages",
+      "👁️ 0ms Read / Seen Latency: Realtime instant read receipts with monotonic status protection preventing status regression"
     ],
     mandatory: false
   };
@@ -94,19 +103,19 @@ function main() {
   const backendPublicUpdate = path.join(rootDir, 'backend', 'public', 'update');
   fs.mkdirSync(backendPublicReleases, { recursive: true });
   fs.mkdirSync(backendPublicUpdate, { recursive: true });
-  fs.copyFileSync(apkPath, path.join(backendPublicReleases, 'app-debug.apk'));
+  fs.copyFileSync(apkDebugPath, path.join(backendPublicReleases, 'app-debug.apk'));
+  if (fs.existsSync(apkReleasePath)) {
+    fs.copyFileSync(apkReleasePath, path.join(backendPublicReleases, 'app-release.apk'));
+  }
   fs.writeFileSync(path.join(backendPublicUpdate, 'latest.json'), JSON.stringify(manifestData, null, 2) + '\n');
-  console.log(`✅ Copied APK & manifest to backend/public for Render static hosting.`);
+  console.log(`✅ Copied APKs & manifest to backend/public for Render static hosting.`);
+
+  // Build backend to ensure dist is up to date
+  runCommand('npm run build', path.join(rootDir, 'backend'));
 
   console.log('\n==================================================');
   console.log('🎉 Release Build Complete!');
   console.log('==================================================');
-  console.log('Next steps to publish to GitHub:');
-  console.log(`1. git add .`);
-  console.log(`2. git commit -m "Release v${newVersionName}"`);
-  console.log(`3. git tag v${newVersionName}`);
-  console.log(`4. git push origin main --tags`);
-  console.log(`5. Create GitHub Release "v${newVersionName}" and attach file:\n   ${apkPath}`);
 }
 
 main();

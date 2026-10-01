@@ -2,7 +2,7 @@
   "versionCode": 110,
   "versionName": "1.1.65",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "e9d6bc7c2d1352f7c4b09da30ddf73b11a94145e7629a78b8d3202a0cbb6de16",
+  "sha256": "81a00ff561f1c6f0e4f8117048f0d0c19d1e8a7c218466ad6b9184b6e7024476",
   "releaseNotes": [
     "Release v1.1.65 (Build 110)",
     "⚡ Realtime Sync & 0ms Instant Message Delivery: Resolved Socket.IO event parsing so incoming messages and media updates appear instantly in the chat list without polling or page reloads",

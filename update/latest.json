@@ -1,10 +1,11 @@
 {
-  "versionCode": 108,
-  "versionName": "1.1.63",
+  "versionCode": 109,
+  "versionName": "1.1.64",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a37ed0ca70c18eee0395a0ebc561abe953122184027c13688d8531ea63e63329",
+  "sha256": "91d8aee57d37392cba24531c70a4cda08018112d22bc96a66defbcec55a891cd",
   "releaseNotes": [
-    "Release v1.1.63 (Build 108)",
+    "Release v1.1.64 (Build 109)",
+    "📦 Scalable Multi-Provider Media Storage: Support for MongoDB GridFS and Cloudflare R2 / AWS S3 object storage with auto-migration and streaming endpoints",
     "🔍 Smart Unified Chat Search: Unified multi-category search across People, Groups, Messages, and Archived history with instant local and server search",
     "⚡ Deep Message Jump & Pulsing Highlight: 1-tap navigation to matching messages with auto-scroll and accent glowing indicator",
     "🕒 Recent Searches Management: Fast search history memory with 1-tap re-run, individual delete, and clear all",

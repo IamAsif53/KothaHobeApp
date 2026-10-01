@@ -24,6 +24,7 @@ import {
   downloadDocumentToDevice,
   saveImageToDevice,
 } from '../services/nativeMediaService';
+import { fileCacheService } from '../services/localFileCacheService';
 import {
   ArrowLeft,
   Search,
@@ -1010,26 +1011,32 @@ export const ChatRoomPage: React.FC = () => {
     const fileName = msg.attachment.fileName || 'document.pdf';
     const mimeType = msg.attachment.mimeType || 'application/pdf';
 
-    showToast(`Opening ${fileName}...`);
-    const res = await openDocumentInNativeApp(msg.attachment.url, fileName, mimeType);
+    const res = await fileCacheService.openFile({
+      fileUrl: msg.attachment.url,
+      fileName,
+      mimeType,
+      messageId: msg._id,
+    });
     if (!res.success) {
       if (res.error === 'NO_APP') {
         setActiveDocModal(msg);
-      } else {
-        showToast(res.error || 'Could not open document');
       }
     }
   }, []);
 
-  // 3. Native Document Download
+  // 3. Native Document Download with Live Progress
   const handleDownloadDocument = useCallback(async (msg: IMessage) => {
     if (!msg.attachment?.url) return;
     const fileName = msg.attachment.fileName || 'document.pdf';
     const mimeType = msg.attachment.mimeType || 'application/pdf';
 
-    showToast(`Downloading ${fileName}...`);
-    const res = await downloadDocumentToDevice(msg.attachment.url, fileName, mimeType);
-    showToast(res.message);
+    await fileCacheService.downloadFile({
+      fileUrl: msg.attachment.url,
+      fileName,
+      mimeType,
+      totalBytes: msg.attachment.size,
+      messageId: msg._id,
+    });
   }, []);
 
   // React to Message

@@ -659,12 +659,19 @@ export function setupSocketIO(io: SocketIOServer): void {
           );
 
           // Only send blue tick receipt to sender if current user allows read receipts
-          if (sendReceipts && otherParticipantId) {
-            io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+          if (sendReceipts) {
+            io.to(`conv:${conversationId}`).emit('message:read', {
               conversationId,
               readBy: userId,
               readAt: now,
             });
+            if (otherParticipantId) {
+              io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
+                conversationId,
+                readBy: userId,
+                readAt: now,
+              });
+            }
           }
           io.to(`user:${userId}`).emit('message:read', {
             conversationId,

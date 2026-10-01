@@ -1,15 +1,15 @@
 {
-  "versionCode": 108,
-  "versionName": "1.1.63",
+  "versionCode": 110,
+  "versionName": "1.1.65",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "a37ed0ca70c18eee0395a0ebc561abe953122184027c13688d8531ea63e63329",
+  "sha256": "e9d6bc7c2d1352f7c4b09da30ddf73b11a94145e7629a78b8d3202a0cbb6de16",
   "releaseNotes": [
-    "Release v1.1.63 (Build 108)",
-    "🔍 Smart Unified Chat Search: Unified multi-category search across People, Groups, Messages, and Archived history with instant local and server search",
-    "⚡ Deep Message Jump & Pulsing Highlight: 1-tap navigation to matching messages with auto-scroll and accent glowing indicator",
-    "🕒 Recent Searches Management: Fast search history memory with 1-tap re-run, individual delete, and clear all",
-    "🎨 Safe-Area Header Clearance: Aligned Privacy & Security and Notifications modal headers below device status bar and camera cutouts",
-    "🏷️ Unicode & Bengali Full Search: Seamless Bengali and English matching across names, usernames (@handle), group descriptions, and message text"
+    "Release v1.1.65 (Build 110)",
+    "⚡ Realtime Sync & 0ms Instant Message Delivery: Resolved Socket.IO event parsing so incoming messages and media updates appear instantly in the chat list without polling or page reloads",
+    "📄 Rebuilt File Download UX: Live SVG circular progress indicator showing real byte-level progress directly on document cards with one-tap opening and cancellation",
+    "💾 Persistent Local File Cache: Verified local file persistence across app restarts with direct native OS default application opening (PDF, Office, etc.) without repeated downloads or intrusive toasts",
+    "🏷️ Canonical Message Previews: Fixed 'Started conversation' placeholder regression for pure media/document/voice messages",
+    "👁️ 0ms Read / Seen Latency: Realtime instant read receipts with monotonic status protection preventing status regression"
   ],
   "mandatory": false
 }

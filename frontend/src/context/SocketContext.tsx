@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { setNativeActiveConversation, clearNativeActiveConversation } from '../services/callNotificationService';
 import { soundService } from '../services/soundService';
+import { formatConversationPreview } from '../utils/messagePreviewFormatter';
 
 interface OutboxItem {
   conversationId: string;
@@ -423,7 +424,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
-                  text: latestMsg.text,
+                  text: formatConversationPreview(latestMsg, list[idx].isGroup),
                   senderId: latestMsg.senderId,
                   createdAt: latestMsg.createdAt,
                   status: isActive ? 'read' : latestMsg.status || 'sent',
@@ -483,7 +484,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
-                  text: sentMsg.text,
+                  text: formatConversationPreview(sentMsg, list[idx].isGroup),
                   senderId: sentMsg.senderId,
                   createdAt: sentMsg.createdAt,
                   status: sentMsg.status || 'sent',
@@ -527,7 +528,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               list[idx] = {
                 ...list[idx],
                 lastMessage: {
-                  text: newMsg.text,
+                  text: formatConversationPreview(newMsg, list[idx].isGroup),
                   senderId: newMsg.senderId,
                   createdAt: newMsg.createdAt,
                   status: (isActive || isFromMe) ? 'read' : newMsg.status || 'sent',

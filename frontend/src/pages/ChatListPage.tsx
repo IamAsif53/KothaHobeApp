@@ -23,6 +23,7 @@ import { useSocket } from '../context/SocketContext';
 import { Avatar } from '../components/common/Avatar';
 import { ConversationSkeleton } from '../components/common/Skeleton';
 import { formatChatListDate, formatMessageTime } from '../utils/dateUtils';
+import { formatConversationPreview } from '../utils/messagePreviewFormatter';
 import { useTheme } from '../context/ThemeContext';
 import { CreateGroupModal } from '../components/chat/CreateGroupModal';
 import { GroupInviteCard } from '../components/chat/GroupInviteCard';
@@ -308,27 +309,32 @@ export const ChatListPage: React.FC = () => {
     if (!socket) return;
 
     const handleNewMessageData = (data: any) => {
-      if (!data || !data.message) return;
-      const msg = data.message;
+      const msg = data?.message || data;
+      if (!msg || !msg.conversationId) return;
       const convId = msg.conversationId;
       const currentUserId = currentUser?._id?.toString();
-      const isMine = msg.senderId === currentUserId || msg.senderId?._id === currentUserId;
+      const isMine =
+        msg.senderId === currentUserId ||
+        msg.senderId?._id === currentUserId ||
+        (typeof msg.senderId === 'object' && msg.senderId?._id?.toString() === currentUserId);
 
       setConversations((prev) => {
         const existingIdx = prev.findIndex((c) => c._id === convId);
         if (existingIdx !== -1) {
           const conv = prev[existingIdx];
           const unreadIncrement = isMine ? 0 : 1;
+          const previewText = formatConversationPreview(msg, conv.isGroup);
+
           const updated: IConversation = {
             ...conv,
             lastMessage: {
-              text: msg.text || (msg.attachment?.fileName ? `[File] ${msg.attachment.fileName}` : 'Attachment'),
+              text: previewText,
               senderId: msg.senderId,
               createdAt: msg.createdAt,
-              status: isMine ? 'sent' : 'delivered',
+              status: isMine ? (msg.status || 'sent') : 'delivered',
             },
             lastMessageAt: msg.createdAt,
-            unreadCount: (conv.unreadCount || 0) + unreadIncrement,
+            unreadCount: isMine ? 0 : (conv.unreadCount || 0) + unreadIncrement,
           };
           const rest = prev.filter((_, idx) => idx !== existingIdx);
           const next = [updated, ...rest];
@@ -377,6 +383,23 @@ export const ChatListPage: React.FC = () => {
       });
     };
 
+    const handleMessageEdited = (data: { messageId: string; conversationId: string; text: string }) => {
+      if (!data?.conversationId) return;
+      setConversations((prev) => {
+        const next = prev.map((c) => {
+          if (c._id === data.conversationId && c.lastMessage) {
+            return {
+              ...c,
+              lastMessage: { ...c.lastMessage, text: data.text },
+            };
+          }
+          return c;
+        });
+        localStorage.setItem('kotha_hobe_cached_conversations', JSON.stringify(next));
+        return next;
+      });
+    };
+
     const handleGroupDeleted = ({ groupId, conversationId }: { groupId?: string; conversationId?: string }) => {
       const targetId = groupId || conversationId;
       if (!targetId) return;
@@ -388,9 +411,10 @@ export const ChatListPage: React.FC = () => {
     };
 
     const handleWindowNewMessage = (e: Event) => {
-      const customEvent = e as CustomEvent<{ message: any }>;
-      if (customEvent.detail?.message) {
-        handleNewMessageData(customEvent.detail);
+      const customEvent = e as CustomEvent<any>;
+      const payload = customEvent.detail;
+      if (payload) {
+        handleNewMessageData(payload);
       }
     };
 
@@ -399,21 +423,27 @@ export const ChatListPage: React.FC = () => {
     };
 
     window.addEventListener('kothahobe:message_new', handleWindowNewMessage);
+    window.addEventListener('kothahobe:message_sent', handleWindowNewMessage);
     window.addEventListener('kothahobe:message_sync', handleWindowSync);
 
     socket.on('message:new', handleNewMessageData);
+    socket.on('message:sent', handleNewMessageData);
     socket.on('message:read', handleMessageRead);
     socket.on('message:delivered', handleMessageDelivered);
+    socket.on('message:edited', handleMessageEdited);
     socket.on('conversation:update', () => loadConversations(true));
     socket.on('group:deleted', handleGroupDeleted);
     socket.on('conversation:deleted', handleGroupDeleted);
 
     return () => {
       window.removeEventListener('kothahobe:message_new', handleWindowNewMessage);
+      window.removeEventListener('kothahobe:message_sent', handleWindowNewMessage);
       window.removeEventListener('kothahobe:message_sync', handleWindowSync);
       socket.off('message:new', handleNewMessageData);
+      socket.off('message:sent', handleNewMessageData);
       socket.off('message:read', handleMessageRead);
       socket.off('message:delivered', handleMessageDelivered);
+      socket.off('message:edited', handleMessageEdited);
       socket.off('conversation:update');
       socket.off('group:deleted', handleGroupDeleted);
       socket.off('conversation:deleted', handleGroupDeleted);
@@ -1298,7 +1328,7 @@ export const ChatListPage: React.FC = () => {
                         <div className="flex justify-between items-center">
                           <p className="text-xs text-chat-textSecondary truncate pr-2">
                             {renderStatusCheck(conv.lastMessage?.status)}
-                            {conv.lastMessage?.text || (isGroup ? 'Group created' : 'Started conversation')}
+                            {formatConversationPreview(conv.lastMessage, isGroup)}
                           </p>
 
                           {(conv.unreadCount ?? 0) > 0 && (

@@ -656,6 +656,11 @@ export const markConversationAsRead = async (
       );
 
       if (io) {
+        io.to(`conv:${conversationId}`).emit('message:read', {
+          conversationId,
+          readBy: userId,
+          readAt: now,
+        });
         if (otherParticipantId) {
           io.to(`user:${otherParticipantId.toString()}`).emit('message:read', {
             conversationId,

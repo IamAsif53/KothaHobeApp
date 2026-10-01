@@ -26,6 +26,8 @@ import { EmojiBurstEffect } from '../emoji/EmojiBurstEffect';
 import { getCustomEmojiById, isCustomEmojiId } from '../../data/customEmojiCatalog';
 import { LinkPreviewCard } from './LinkPreviewCard';
 import { openExternalUrl } from '../../services/nativeMediaService';
+import { FileDownloadProgress } from './FileDownloadProgress';
+import { fileCacheService } from '../../services/localFileCacheService';
 
 export type MessagePositionInGroup = 'single' | 'first' | 'middle' | 'last';
 
@@ -687,17 +689,41 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Document Attachment */}
+        {/* Document Attachment with Live Circular Download Progress */}
         {message.type === 'document' && message.attachment && (
           <div
-            onClick={() => onOpenDocument ? onOpenDocument(message) : onDownloadDocument && onDownloadDocument(message)}
-            className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors cursor-pointer mb-1 border ${
+            onClick={() => {
+              const status = fileCacheService.getDownloadStatus(
+                message._id || message.attachment!.url,
+                message.attachment!.fileName
+              ).status;
+              if (status === 'DOWNLOADED') {
+                if (onOpenDocument) onOpenDocument(message);
+                else {
+                  fileCacheService.openFile({
+                    fileUrl: message.attachment!.url,
+                    fileName: message.attachment!.fileName || 'document.pdf',
+                    mimeType: message.attachment!.mimeType,
+                    messageId: message._id,
+                  });
+                }
+              } else {
+                fileCacheService.downloadFile({
+                  fileUrl: message.attachment!.url,
+                  fileName: message.attachment!.fileName || 'document.pdf',
+                  mimeType: message.attachment!.mimeType,
+                  totalBytes: message.attachment!.size,
+                  messageId: message._id,
+                });
+              }
+            }}
+            className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all cursor-pointer mb-1 border select-none group ${
               isMe
                 ? 'bg-black/8 dark:bg-black/20 hover:bg-black/12 border-black/10'
                 : 'bg-chat-surfaceSecondary hover:bg-chat-surfaceTertiary border-chat-border/60'
             }`}
           >
-            <div className="p-2.5 rounded-xl bg-brand-500/15 text-brand-600 dark:text-brand-400 flex-shrink-0">
+            <div className="p-2.5 rounded-xl bg-brand-500/15 text-brand-600 dark:text-brand-400 flex-shrink-0 group-hover:scale-105 transition-transform">
               <FileText className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div className="min-w-0 flex-1">
@@ -708,16 +734,25 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
                 {formatFileSize(message.attachment.size)}
               </div>
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownloadDocument && onDownloadDocument(message);
+            <FileDownloadProgress
+              fileUrl={message.attachment.url}
+              fileName={message.attachment.fileName || 'document.pdf'}
+              mimeType={message.attachment.mimeType}
+              fileSize={message.attachment.size}
+              messageId={message._id}
+              isMe={isMe}
+              onOpen={() => {
+                if (onOpenDocument) onOpenDocument(message);
+                else {
+                  fileCacheService.openFile({
+                    fileUrl: message.attachment!.url,
+                    fileName: message.attachment!.fileName || 'document.pdf',
+                    mimeType: message.attachment!.mimeType,
+                    messageId: message._id,
+                  });
+                }
               }}
-              className="p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-chat-surfaceSecondary text-chat-textSecondary hover:text-chat-textPrimary transition-colors flex-shrink-0"
-              title="Download file"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+            />
           </div>
         )}
 

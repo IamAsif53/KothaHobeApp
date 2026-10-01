@@ -242,7 +242,7 @@ export const ChatRoomPage: React.FC = () => {
     }
   };
 
-  // Synchronize Scroll on initial render and upward pagination
+  // Synchronize Scroll on initial render and upward pagination with zero jitter
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || messages.length === 0) return;
@@ -256,8 +256,8 @@ export const ChatRoomPage: React.FC = () => {
       return;
     }
 
-    // 2. Initial mount bottom pin
-    if (!initialScrollDoneRef.current) {
+    // 2. Initial mount or user still near bottom: always pin synchronously to the bottom
+    if (!initialScrollDoneRef.current || isNearBottomRef.current) {
       container.scrollTop = container.scrollHeight;
       initialScrollDoneRef.current = true;
       lastMessageIdRef.current = messages[messages.length - 1]?._id || messages[messages.length - 1]?.clientMessageId || null;
@@ -271,8 +271,7 @@ export const ChatRoomPage: React.FC = () => {
 
     if (isNewBottomMessage) {
       const lastMsg = messages[messages.length - 1];
-      const isSentByMe = lastMsg && lastMsg.senderId === user?._id;
-      // Always scroll to bottom if sent by me, or if user is currently near bottom
+      const isSentByMe = lastMsg && (lastMsg.senderId === user?._id || (lastMsg.senderId as any)?._id === user?._id);
       if (isSentByMe || isNearBottomRef.current) {
         container.scrollTop = container.scrollHeight;
       }
@@ -622,9 +621,35 @@ export const ChatRoomPage: React.FC = () => {
       });
     };
 
-    // 5. Read Receipt
-    const handleMessageRead = ({ messageId, readAt }: { messageId: string; readAt: string }) => {
-      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, status: 'read', readAt } : m)));
+    // 5. Read Receipt (0ms Live Real-time Seen Indicator)
+    const handleMessageRead = (data: { conversationId?: string; readBy?: string; readAt?: string; messageId?: string }) => {
+      if (!data) return;
+      if (data.conversationId === conversationId || (!data.conversationId && data.messageId)) {
+        const targetReadAt = data.readAt || new Date().toISOString();
+        const currentUserIdStr = user?._id?.toString();
+
+        setMessages((prev) => {
+          let hasChanges = false;
+          const updated = prev.map((m) => {
+            if (data.messageId && m._id === data.messageId) {
+              hasChanges = true;
+              return { ...m, status: 'read' as const, readAt: targetReadAt };
+            }
+            const senderIdStr = m.senderId?.toString() || (m.senderId as any)?._id?.toString();
+            if (senderIdStr === currentUserIdStr && m.status !== 'read') {
+              hasChanges = true;
+              return { ...m, status: 'read' as const, readAt: targetReadAt };
+            }
+            return m;
+          });
+
+          if (hasChanges) {
+            persistMessages(updated);
+            return updated;
+          }
+          return prev;
+        });
+      }
     };
 
     // 6. Delivered Receipt
@@ -772,7 +797,15 @@ export const ChatRoomPage: React.FC = () => {
     socket.on('group:typing:update', handleGroupTypingUpdate);
     socket.on('user:online', handleUserOnline);
     socket.on('user:offline', handleUserOffline);
-    socket.on('group:nickname_updated', handleNicknameUpdated);
+    const handleWindowMessageRead = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      if (customEvent.detail) {
+        handleMessageRead(customEvent.detail);
+      }
+    };
+
+    window.addEventListener('kothahobe:message_read', handleWindowMessageRead);
+    window.addEventListener('kothahobe:conversation_read', handleWindowMessageRead);
 
     return () => {
       socket.off('message:new', handleNewMessage);
@@ -792,6 +825,8 @@ export const ChatRoomPage: React.FC = () => {
       window.removeEventListener('kothahobe:message_saved', handleSavedEvent);
       window.removeEventListener('kothahobe:message_sent', handleWindowMessageSent);
       window.removeEventListener('kothahobe:message_failed', handleWindowMessageFailed);
+      window.removeEventListener('kothahobe:message_read', handleWindowMessageRead);
+      window.removeEventListener('kothahobe:conversation_read', handleWindowMessageRead);
     };
   }, [socket, conversationId, recipient, user, persistMessages, scrollToBottom]);
 

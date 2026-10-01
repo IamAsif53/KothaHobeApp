@@ -607,53 +607,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         else if (newMsg.type === 'document') previewText = `📄 ${newMsg.attachment?.fileName || 'Document'}`;
         else if (newMsg.type === 'custom_emoji') previewText = '✨ Animated Emoji';
 
-        const maskedText = previewPref
-          ? (previewText || 'Sent a message')
-          : (isGroup ? 'New group message' : 'New message');
-
-        // 4. Dispatch In-App Interactive Notification Banner Event (when inside the app)
-        window.dispatchEvent(
-          new CustomEvent('kothahobe:inapp_notification', {
-            detail: {
-              conversationId: newMsg.conversationId,
-              senderId: newMsg.senderId,
-              senderName: previewPref ? senderName : 'Kotha Hobe',
-              senderAvatar: previewPref ? senderAvatar : undefined,
-              messageText: maskedText,
-              isGroup,
-              groupName: previewPref ? groupName : undefined,
-              messageType: newMsg.type,
-              createdAt: newMsg.createdAt,
-            },
-          })
-        );
       } catch (err) {
         console.warn('[Notifications] Trigger notice:', err);
-      }
-    });
-
-    newSocket.on('group:join_requested', (data: any) => {
-      try {
-        const groupName = data.groupName || 'Group';
-        const senderName = data.user?.displayName || data.user?.username || data.inviterName || 'Someone';
-        const senderAvatar = data.user?.avatarUrl || '';
-        window.dispatchEvent(
-          new CustomEvent('kothahobe:inapp_notification', {
-            detail: {
-              conversationId: data.conversationId,
-              senderId: data.user?._id || '',
-              senderName: `${senderName} requested to join`,
-              senderAvatar,
-              messageText: `Approval required in ${groupName}`,
-              isGroup: true,
-              groupName,
-              messageType: 'text',
-              createdAt: new Date().toISOString(),
-            },
-          })
-        );
-      } catch (err) {
-        console.warn('[Socket] group:join_requested notice:', err);
       }
     });
 

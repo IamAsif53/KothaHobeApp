@@ -86,11 +86,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "⚡ Realtime Sync & 0ms Instant Message Delivery: Resolved Socket.IO event parsing so incoming messages and media updates appear instantly in the chat list without polling or page reloads",
-      "📄 Rebuilt File Download UX: Live SVG circular progress indicator showing real byte-level progress directly on document cards with one-tap opening and cancellation",
-      "💾 Persistent Local File Cache: Verified local file persistence across app restarts with direct native OS default application opening (PDF, Office, etc.) without repeated downloads or intrusive toasts",
-      "🏷️ Canonical Message Previews: Fixed 'Started conversation' placeholder regression for pure media/document/voice messages",
-      "👁️ 0ms Read / Seen Latency: Realtime instant read receipts with monotonic status protection preventing status regression"
+      "👁️ 0ms Live Seen Receipt Sync: Realtime read receipts update instantly on the sender's screen as soon as recipient opens the chat room",
+      "✓ True Outgoing-Only Status Indicators: Fixed recipient preview so incoming messages are never falsely marked with sent/seen checks",
+      "⚡ Zero-Jitter Instant Chat Landing: Chat rooms instantly load and pin to the latest message with 0ms visual latency and zero fluctuation",
+      "🔕 Streamlined Notifications: Removed redundant in-app banner popups when active in app; rely cleanly on FCM push when backgrounded",
+      "📄 High-Performance File & Media UX: Live circular progress indicators with instant native file opening from persistent local cache"
     ],
     mandatory: false
   };

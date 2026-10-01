@@ -1277,6 +1277,13 @@ export const ChatListPage: React.FC = () => {
                   : conv.recipient?.displayName || conv.recipient?.username || 'User';
                 const avatarUrl = isGroup ? conv.groupMeta?.avatarUrl : conv.recipient?.avatarUrl;
 
+                const senderIdRaw: any = conv.lastMessage?.senderId;
+                const senderIdStr = typeof senderIdRaw === 'object' && senderIdRaw !== null
+                  ? (senderIdRaw._id?.toString() || '')
+                  : (senderIdRaw?.toString() || '');
+                const currentUserIdStr = currentUser?._id?.toString() || '';
+                const isLastFromMe = Boolean(senderIdStr && currentUserIdStr && senderIdStr === currentUserIdStr);
+
                 return (
                   <div
                     key={conv._id}
@@ -1327,7 +1334,7 @@ export const ChatListPage: React.FC = () => {
 
                         <div className="flex justify-between items-center">
                           <p className="text-xs text-chat-textSecondary truncate pr-2">
-                            {renderStatusCheck(conv.lastMessage?.status)}
+                            {isLastFromMe && renderStatusCheck(conv.lastMessage?.status)}
                             {formatConversationPreview(conv.lastMessage, isGroup)}
                           </p>
 

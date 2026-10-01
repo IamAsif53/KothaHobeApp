@@ -293,8 +293,8 @@ export const PrivacySecurityModal: React.FC<PrivacySecurityModalProps> = ({ onCl
           </div>
         )}
 
-        {/* Sticky Header */}
-        <div className="px-5 py-4 border-b border-chat-divider flex items-center justify-between flex-shrink-0">
+        {/* Sticky Header with Safe-Area Clearance */}
+        <div className="px-5 pt-8 pb-3.5 sm:py-4 border-b border-chat-divider flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             {currentView !== 'main' ? (
               <button

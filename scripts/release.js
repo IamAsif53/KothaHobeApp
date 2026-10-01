@@ -77,11 +77,11 @@ function main() {
     sha256: sha256,
     releaseNotes: [
       `Release v${newVersionName} (Build ${newVersionCode})`,
-      "✨ Smooth Upward Message Scrolling: Eliminated jump/glitch when sliding up to earlier messages with synchronous scroll anchoring",
-      "📌 Smart Bottom Scroll Pinning: Prevents forced auto-scroll to bottom while user is actively reading older message history",
-      "🎨 Light Theme Redesign (Soft Neutral): Clean #F5F7F6 surface, mint outgoing bubbles, high contrast typography & WCAG AA sender colors",
-      "🖼️ Intrinsic Media Sizing: Tight image bubbles without bloated empty padding, floating frosted timestamp & read receipts",
-      "⚡ Message Delivery & Outbox: Instant purge for stuck messages, automatic 4.5s HTTP fallback & one-tap Retry CTA"
+      "🔍 Smart Unified Chat Search: Unified multi-category search across People, Groups, Messages, and Archived history with instant local and server search",
+      "⚡ Deep Message Jump & Pulsing Highlight: 1-tap navigation to matching messages with auto-scroll and accent glowing indicator",
+      "🕒 Recent Searches Management: Fast search history memory with 1-tap re-run, individual delete, and clear all",
+      "🎨 Safe-Area Header Clearance: Aligned Privacy & Security and Notifications modal headers below device status bar and camera cutouts",
+      "🏷️ Unicode & Bengali Full Search: Seamless Bengali and English matching across names, usernames (@handle), group descriptions, and message text"
     ],
     mandatory: false
   };

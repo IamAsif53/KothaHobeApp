@@ -262,8 +262,8 @@ export const NotificationsAlertsModal: React.FC<NotificationsAlertsModalProps> =
         style={{ backgroundColor: themeConfig.panel }}
         className="w-full max-w-lg h-[92vh] sm:h-auto sm:max-h-[88vh] rounded-t-3xl sm:rounded-3xl border border-chat-border shadow-2xl flex flex-col overflow-hidden animate-slide-up"
       >
-        {/* Sticky Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-chat-divider/80 bg-chat-surfacePrimary/50 backdrop-blur-md shrink-0">
+        {/* Sticky Header with Safe-Area Clearance */}
+        <div className="flex items-center justify-between px-5 pt-8 pb-3.5 sm:py-4 border-b border-chat-divider/80 bg-chat-surfacePrimary/50 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-3">
             {currentView !== 'main' ? (
               <button

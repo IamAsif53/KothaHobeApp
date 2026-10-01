@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getMessages,
+  getMessageContext,
   markMessageDelivered,
   sendDirectReply,
   markConversationAsRead,
@@ -22,6 +23,7 @@ router.get('/media/:filename', streamMedia);
 router.use(authenticateToken);
 
 router.get('/:conversationId/messages', getMessages);
+router.get('/:conversationId/context/:messageId', getMessageContext);
 router.post('/upload', uploadMiddleware.single('file'), uploadMedia);
 router.post('/send', createMessage);
 router.delete('/:messageId', deleteMessage);

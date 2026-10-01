@@ -166,6 +166,7 @@ import devRoutes from './routes/devRoutes';
 import callRoutes from './routes/callRoutes';
 import groupRoutes from './routes/groupRoutes';
 import storyRoutes from './routes/storyRoutes';
+import searchRoutes from './routes/searchRoutes';
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -175,6 +176,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/stories', storyRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/dev', devRoutes);
 
 // 404 handler

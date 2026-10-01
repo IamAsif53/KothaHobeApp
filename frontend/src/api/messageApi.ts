@@ -199,5 +199,19 @@ export async function deleteMessageRestApi(
   });
 }
 
+export interface MessageContextResponse {
+  success: boolean;
+  messages: IMessage[];
+  targetMessageId: string;
+}
+
+export async function fetchMessageContextApi(
+  conversationId: string,
+  messageId: string
+): Promise<MessageContextResponse> {
+  return apiFetch<MessageContextResponse>(`/messages/${conversationId}/context/${messageId}`);
+}
+
+
 
 

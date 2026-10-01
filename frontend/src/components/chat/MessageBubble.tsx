@@ -37,6 +37,7 @@ interface MessageBubbleProps {
   currentUserId?: string;
   positionInGroup?: MessagePositionInGroup;
   isSelected?: boolean;
+  isHighlighted?: boolean;
   onRetry?: (message: IMessage) => void;
   onOpenMedia?: (message: IMessage) => void;
   onOpenDocument?: (message: IMessage) => void;
@@ -80,6 +81,7 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   currentUserId,
   positionInGroup = 'single',
   isSelected = false,
+  isHighlighted = false,
   onRetry,
   onOpenMedia,
   onOpenDocument,
@@ -365,8 +367,12 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
   if (isCustomEmojiMessage && customEmojiId) {
     return (
       <div
-        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none ${
+        id={`msg-${message._id}`}
+        data-message-id={message._id}
+        className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none transition-all duration-300 ${
           isSelected ? 'scale-[1.02]' : ''
+        } ${
+          isHighlighted ? 'ring-2 ring-brand-500/80 bg-brand-500/10 rounded-2xl p-1 animate-pulse' : ''
         }`}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -530,8 +536,12 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none ${
+      id={`msg-${message._id}`}
+      data-message-id={message._id}
+      className={`relative flex flex-col ${isMe ? 'items-end' : 'items-start'} ${getVerticalSpacingClass()} px-3 group select-none transition-all duration-300 ${
         isSelected ? 'scale-[1.01]' : ''
+      } ${
+        isHighlighted ? 'ring-2 ring-brand-500/90 bg-brand-500/10 rounded-2xl p-1 animate-pulse' : ''
       }`}
       onContextMenu={(e) => {
         e.preventDefault();

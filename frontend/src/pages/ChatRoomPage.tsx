@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { fetchMessagesApi, uploadMediaApi, searchInConversationApi, editMessageApi, deleteMessageRestApi } from '../api/messageApi';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { fetchMessagesApi, fetchMessageContextApi, uploadMediaApi, searchInConversationApi, editMessageApi, deleteMessageRestApi } from '../api/messageApi';
 import { fetchConversations, fetchConversationDetailsApi } from '../api/conversationApi';
 import { IMessage, IUser, IReplyTo, IAttachment, IConversation } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -175,6 +175,12 @@ export const ChatRoomPage: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Deep-linking / Highlight Message Jump Support
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const targetHighlightId = searchParams.get('highlightMessageId') || (location.state as any)?.highlightMessageId || null;
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(targetHighlightId);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -281,6 +287,40 @@ export const ChatRoomPage: React.FC = () => {
       setActiveConversationId(null);
     };
   }, [conversationId, setActiveConversationId]);
+
+  // Deep-link context fetch if target message is not in initial local cached list
+  useEffect(() => {
+    if (!conversationId || !targetHighlightId) return;
+    const exists = messages.some(
+      (m) => m._id === targetHighlightId || m.clientMessageId === targetHighlightId
+    );
+    if (!exists) {
+      fetchMessageContextApi(conversationId, targetHighlightId)
+        .then((res) => {
+          if (res.success && Array.isArray(res.messages) && res.messages.length > 0) {
+            setMessages(res.messages);
+            persistMessages(res.messages);
+          }
+        })
+        .catch((err) => console.warn('[ChatRoom] fetchMessageContext error:', err));
+    }
+  }, [conversationId, targetHighlightId, persistMessages]);
+
+  // Scroll to target highlighted message smoothly
+  useEffect(() => {
+    if (!activeHighlightId) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`msg-${activeHighlightId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const fadeTimer = setTimeout(() => {
+          setActiveHighlightId(null);
+        }, 3000);
+        return () => clearTimeout(fadeTimer);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [activeHighlightId, messages]);
 
   // Load conversation details & initial messages (Local-first background sync)
   useEffect(() => {
@@ -1684,6 +1724,7 @@ export const ChatRoomPage: React.FC = () => {
                   isMe={isMine}
                   isGroup={isGroup}
                   positionInGroup={positionInGroup}
+                  isHighlighted={Boolean(activeHighlightId && (msg._id === activeHighlightId || msg.clientMessageId === activeHighlightId))}
                   senderDisplayName={getSenderName(msg)}
                   currentUserId={user?._id}
                   onOpenMedia={handleOpenMedia}

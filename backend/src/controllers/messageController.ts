@@ -1232,4 +1232,90 @@ export const getLinkPreview = async (
   }
 };
 
+/**
+ * Retrieve message context window around a specific messageId for deep linking
+ * GET /api/messages/:conversationId/context/:messageId
+ */
+export const getMessageContext = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { conversationId, messageId } = req.params;
+    if (!conversationId || !messageId) {
+      res.status(400).json({ success: false, message: 'conversationId and messageId are required' });
+      return;
+    }
+
+    // Verify conversation membership
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      $or: [
+        { participants: req.user._id },
+        { 'groupMeta.members.user': req.user._id },
+        { 'groupMeta.creator': req.user._id },
+      ],
+    });
+
+    if (!conversation) {
+      res.status(403).json({ success: false, message: 'Access denied to this conversation' });
+      return;
+    }
+
+    const targetMsg = await Message.findOne({
+      _id: messageId,
+      conversationId,
+      deletedFor: { $ne: req.user._id },
+    });
+
+    if (!targetMsg) {
+      res.status(404).json({ success: false, message: 'Target message not found' });
+      return;
+    }
+
+    // Fetch 25 messages before and including target
+    const messagesBefore = await Message.find({
+      conversationId,
+      deletedFor: { $ne: req.user._id },
+      createdAt: { $lte: targetMsg.createdAt },
+    })
+      .sort({ createdAt: -1 })
+      .limit(25);
+
+    // Fetch 25 messages after target
+    const messagesAfter = await Message.find({
+      conversationId,
+      deletedFor: { $ne: req.user._id },
+      createdAt: { $gt: targetMsg.createdAt },
+    })
+      .sort({ createdAt: 1 })
+      .limit(25);
+
+    const combined = [...messagesBefore.reverse(), ...messagesAfter];
+    // Deduplicate by _id
+    const map = new Map<string, any>();
+    for (const m of combined) {
+      map.set(m._id.toString(), m);
+    }
+    const chronologicalMessages = Array.from(map.values()).sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    res.status(200).json({
+      success: true,
+      messages: chronologicalMessages,
+      targetMessageId: messageId,
+    });
+  } catch (error) {
+    console.error('[MessageController] getMessageContext error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve message context' });
+  }
+};
+
+
 

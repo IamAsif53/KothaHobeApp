@@ -56,30 +56,30 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-none animate-fade-in">
-      <div className="bg-chat-panel border border-chat-border rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 flex flex-col">
+      <div className="bg-chat-panel border border-chat-border rounded-3xl w-full max-w-sm p-5 sm:p-6 shadow-2xl space-y-4 flex flex-col max-h-[88vh] overflow-hidden">
         {/* Header Icon */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center text-brand-500">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center text-brand-500 shrink-0">
             <Sparkles className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-chat-textPrimary leading-tight">New Update Available</h2>
+              <h2 className="text-base sm:text-lg font-bold text-chat-textPrimary leading-tight">New Update Available</h2>
               {manifest.mandatory && (
                 <span className="text-[10px] bg-amber-500/20 text-amber-500 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                   Required
                 </span>
               )}
             </div>
-            <p className="text-xs text-chat-textMuted font-mono">
+            <p className="text-xs text-chat-textMuted font-mono mt-0.5">
               v{currentVersionName} → <span className="text-brand-500 font-bold">v{manifest.versionName}</span>
             </p>
           </div>
         </div>
 
-        {/* What's New List */}
+        {/* What's New List (Scrollable) */}
         {manifest.releaseNotes && manifest.releaseNotes.length > 0 && (
-          <div className="bg-chat-card border border-chat-border rounded-2xl p-4 space-y-2">
+          <div className="bg-chat-card border border-chat-border rounded-2xl p-3.5 space-y-2 overflow-y-auto max-h-44 flex-1">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-chat-textMuted">
               What's New
             </h3>

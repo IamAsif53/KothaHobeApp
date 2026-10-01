@@ -85,18 +85,9 @@ function main() {
     downloadUrl: `https://kotha-hobe-api.onrender.com/releases/app-debug.apk`,
     sha256: sha256,
     releaseNotes: [
-      `Release v${newVersionName} (Build ${newVersionCode})`,
-      "📷 View Once Media: Send protected photos and videos that can only be viewed once with server-side atomic open, no preloading, no downloads/forwards, and Android FLAG_SECURE screenshot protection",
-      "🔄 Front/Back Camera Switching: Seamless camera flip button in 1-to-1 and group video calls with track replacement across all peer connections",
-      "🔊 Echo Elimination & Audio Modes: Full hardware Acoustic Echo Cancellation (AEC) in MODE_IN_COMMUNICATION to eliminate voice feedback/echo",
-      "📞 Dedicated Calls Tab: Standalone bottom navigation tab with complete call history, filters (All / Missed), duration, and one-tap redial",
-      "🔄 WebRTC Network Resilience & ICE Restart: Seamless auto-recovery when switching between Wi-Fi and mobile data",
-      "📊 Live Network Quality Indicator: Real-time RTT and packet loss indicator (Good/Fair/Poor) with adaptive video bitrate & audio-first fallback",
-      "🎧 Dynamic Audio Routing & Proximity: Automatic Bluetooth headset detection/switching and proximity sensor ear detection",
-      "👥 Group Call Moderation & Host Controls: Remote mute, participant removal, raise/lower hand, and host transfer",
-      "📌 Participant Pinning & Video Layout: Pin active speakers; toggle between Fit (contain) and Fill (cover) video aspect ratio",
-      "💬 In-Call Text Chat & Screen Sharing: Send live messages inside active calls and share screen on supported devices",
-      "📲 Call Waiting UX: Secondary incoming call notifications with Accept & Hold / Decline options"
+      "📷 View Once Media with screenshot protection",
+      "🔄 Front / Back camera flip for video calls",
+      "🔊 Acoustic Echo Cancellation (AEC) communication mode"
     ],
     mandatory: false
   };

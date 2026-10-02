@@ -17,7 +17,9 @@ import {
   Bluetooth,
   MonitorUp,
   MessageSquare,
+  ChevronDown,
 } from 'lucide-react';
+import { modalStack } from '../../utils/modalStack';
 
 const NetworkQualityIndicator: React.FC<{ quality: NetworkQuality; isConnected: boolean; isReconnecting: boolean }> = ({
   quality,
@@ -95,6 +97,8 @@ export const CallScreen: React.FC = () => {
     switchCamera,
     attachLocalVideo,
     attachRemoteVideo,
+    isMinimized,
+    minimizeCall,
   } = useCall();
 
   const handleEndOrCancel = () => {
@@ -132,7 +136,28 @@ export const CallScreen: React.FC = () => {
     }
   }, [isVideo, remoteStream, attachRemoteVideo]);
 
-  if (callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
+  // Register with modalStack for hardware / browser / escape back minimization
+  useEffect(() => {
+    const isCallActive =
+      callState !== 'IDLE' &&
+      !(callState === 'RINGING' && activeCall?.isIncoming) &&
+      !isMinimized;
+
+    if (isCallActive) {
+      const unregister = modalStack.register('active_call_screen', () => {
+        if (isChatOpen) {
+          setIsChatOpen(false);
+        } else {
+          minimizeCall();
+        }
+      });
+      return () => {
+        unregister();
+      };
+    }
+  }, [callState, activeCall, isMinimized, isChatOpen, minimizeCall]);
+
+  if (isMinimized || callState === 'IDLE' || (callState === 'RINGING' && activeCall?.isIncoming)) {
     return null;
   }
 
@@ -286,24 +311,39 @@ export const CallScreen: React.FC = () => {
       )}
 
       {/* 2. Top Header Overlay */}
-      <div className="relative z-10 pt-12 pb-6 px-6 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex flex-col items-center text-center">
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
-          <div
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider shadow-sm backdrop-blur-md ${
-              isVideo
-                ? 'bg-brand-500/20 border-brand-500/30 text-brand-300'
-                : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
-            }`}
+      <div className="relative z-10 pt-10 pb-6 px-4 bg-gradient-to-b from-black/85 via-black/45 to-transparent flex flex-col items-center text-center">
+        {/* Top Control Bar with Minimize Button */}
+        <div className="w-full flex items-center justify-between mb-2 max-w-lg">
+          <button
+            type="button"
+            onClick={minimizeCall}
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white backdrop-blur-md transition-all shadow-md"
+            title="Minimize Call"
+            aria-label="Minimize Call"
           >
-            {isVideo ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
-            <span>{isVideo ? 'Kotha Hobe Video Call' : 'Kotha Hobe Voice Call'}</span>
+            <ChevronDown className="w-6 h-6 stroke-[2.2]" />
+          </button>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <div
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider shadow-sm backdrop-blur-md ${
+                isVideo
+                  ? 'bg-brand-500/20 border-brand-500/30 text-brand-300'
+                  : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+              }`}
+            >
+              {isVideo ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+              <span>{isVideo ? 'Video Call' : 'Voice Call'}</span>
+            </div>
+
+            <NetworkQualityIndicator
+              quality={networkQuality}
+              isConnected={isConnected}
+              isReconnecting={isReconnecting}
+            />
           </div>
 
-          <NetworkQualityIndicator
-            quality={networkQuality}
-            isConnected={isConnected}
-            isReconnecting={isReconnecting}
-          />
+          <div className="w-10" />
         </div>
 
         <h2 className="text-2xl font-bold text-white tracking-tight drop-shadow-md">{displayName}</h2>

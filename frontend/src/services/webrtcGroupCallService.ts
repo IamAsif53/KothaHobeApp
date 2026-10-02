@@ -19,6 +19,7 @@ class WebRTCGroupCallService {
   private localStream: MediaStream | null = null;
   private peerConnections = new Map<string, RTCPeerConnection>();
   private peerStates = new Map<string, RemotePeerState>();
+  private peerAudioElements = new Map<string, HTMLAudioElement>();
   private pendingCandidates = new Map<string, RTCIceCandidateInit[]>();
 
   // Audio Context & Analysers for Active Speaker Detection
@@ -226,6 +227,7 @@ class WebRTCGroupCallService {
 
         if (event.track.kind === 'audio') {
           this.setupPeerAudioAnalyser(remoteUserId, peerState.stream);
+          this.attachPeerAudio(remoteUserId, peerState.stream);
         }
 
         this.notifyPeersChange();
@@ -423,6 +425,7 @@ class WebRTCGroupCallService {
       this.peerStates.delete(userId);
     }
 
+    this.detachPeerAudio(userId);
     this.pendingCandidates.delete(userId);
     this.notifyPeersChange();
     console.log(`[GroupRTC] Removed peer ${userId}`);
@@ -780,6 +783,58 @@ class WebRTCGroupCallService {
   }
 
   /**
+   * 7b. Dedicated background audio playback per remote peer
+   */
+  public attachPeerAudio(userId: string, stream: MediaStream): void {
+    try {
+      let audio = this.peerAudioElements.get(userId);
+      if (!audio) {
+        audio = document.getElementById(`kothahobe-group-audio-${userId}`) as HTMLAudioElement;
+      }
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = `kothahobe-group-audio-${userId}`;
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        (audio as any).playsInline = true;
+        audio.style.position = 'fixed';
+        audio.style.top = '-9999px';
+        audio.style.left = '-9999px';
+        audio.style.width = '1px';
+        audio.style.height = '1px';
+        audio.style.opacity = '0';
+        document.body.appendChild(audio);
+      }
+      audio.srcObject = stream;
+      audio.muted = false;
+      audio.volume = 1.0;
+      this.peerAudioElements.set(userId, audio);
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn(`[GroupRTC] Peer ${userId} audio play note:`, err);
+        });
+      }
+    } catch (err) {
+      console.warn(`[GroupRTC] Error attaching peer audio for ${userId}:`, err);
+    }
+  }
+
+  public detachPeerAudio(userId: string): void {
+    const audio = this.peerAudioElements.get(userId);
+    if (audio) {
+      try {
+        audio.pause();
+        audio.srcObject = null;
+        if (audio.parentNode) {
+          audio.parentNode.removeChild(audio);
+        }
+      } catch (e) {}
+      this.peerAudioElements.delete(userId);
+    }
+  }
+
+  /**
    * 8. Complete Teardown and Cleanup
    */
   public cleanup(): void {
@@ -824,6 +879,11 @@ class WebRTCGroupCallService {
       } catch (e) {}
       this.audioCtx = null;
     }
+
+    for (const userId of Array.from(this.peerAudioElements.keys())) {
+      this.detachPeerAudio(userId);
+    }
+    this.peerAudioElements.clear();
 
     this.pendingCandidates.clear();
     this.notifyLocalStream(false, 0);

@@ -21,8 +21,10 @@ import {
   Minimize2,
   UserX,
   Volume1,
+  ChevronDown,
 } from 'lucide-react';
 import { Avatar } from '../common/Avatar';
+import { modalStack } from '../../utils/modalStack';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -80,18 +82,6 @@ const RemotePeerTile: React.FC<{
           : 'border-slate-800'
       }`}
     >
-      {/* Audio Playback Element */}
-      <audio
-        ref={(el) => {
-          if (el && peerState.stream && el.srcObject !== peerState.stream) {
-            el.srcObject = peerState.stream;
-            el.play().catch(() => {});
-          }
-        }}
-        autoPlay
-        playsInline
-      />
-
       {/* Video Element */}
       <video
         ref={videoRef}
@@ -230,6 +220,8 @@ export const GroupCallScreen: React.FC = () => {
     toggleScreenShare,
     kickParticipant,
     requestMuteParticipant,
+    isGroupCallMinimized,
+    minimizeGroupCall,
   } = useGroupCall();
 
   const { user } = useAuth();
@@ -247,7 +239,19 @@ export const GroupCallScreen: React.FC = () => {
     }
   }, [localStream, isVideoEnabled, isFrontCamera]);
 
-  if (!isGroupCallActive || !groupCallSession) {
+  // Register with modalStack for hardware / browser / escape back minimization
+  useEffect(() => {
+    if (isGroupCallActive && !isGroupCallMinimized) {
+      const unregister = modalStack.register('group_call_screen', () => {
+        minimizeGroupCall();
+      });
+      return () => {
+        unregister();
+      };
+    }
+  }, [isGroupCallActive, isGroupCallMinimized, minimizeGroupCall]);
+
+  if (!isGroupCallActive || !groupCallSession || isGroupCallMinimized) {
     return null;
   }
 
@@ -280,7 +284,16 @@ export const GroupCallScreen: React.FC = () => {
     <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col justify-between overflow-hidden select-none safe-top safe-bottom">
       {/* Top Header Bar */}
       <div className="px-4 py-3 bg-gradient-to-b from-black/90 to-transparent flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={minimizeGroupCall}
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white backdrop-blur-md transition-all shadow-md mr-0.5"
+            title="Minimize Call"
+            aria-label="Minimize Call"
+          >
+            <ChevronDown className="w-5 h-5" />
+          </button>
           <div className="w-10 h-10 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center font-bold text-emerald-400 overflow-hidden">
             {groupCallSession.groupAvatar ? (
               <img

@@ -3,12 +3,13 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocat
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { CallProvider } from './context/CallContext';
-import { GroupCallProvider } from './context/GroupCallContext';
+import { CallProvider, useCall } from './context/CallContext';
+import { GroupCallProvider, useGroupCall } from './context/GroupCallContext';
 import { CallScreen } from './components/call/CallScreen';
 import { IncomingCallModal } from './components/call/IncomingCallModal';
 import { GroupCallScreen } from './components/call/GroupCallScreen';
 import { IncomingGroupCallModal } from './components/call/IncomingGroupCallModal';
+import { FloatingCallBubble } from './components/call/FloatingCallBubble';
 import { BottomNav } from './components/common/BottomNav';
 import { UpdateModal } from './components/common/UpdateModal';
 import {
@@ -68,6 +69,26 @@ export const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const lastBackPressRef = useRef<number>(0);
+
+  // Active call states for hardware/gesture back minimization
+  const { callState, isMinimized, minimizeCall } = useCall();
+  const { isGroupCallActive, isGroupCallMinimized, minimizeGroupCall } = useGroupCall();
+
+  const callStateRef = useRef(callState);
+  const isMinimizedRef = useRef(isMinimized);
+  const minimizeCallRef = useRef(minimizeCall);
+  const isGroupCallActiveRef = useRef(isGroupCallActive);
+  const isGroupCallMinimizedRef = useRef(isGroupCallMinimized);
+  const minimizeGroupCallRef = useRef(minimizeGroupCall);
+
+  useEffect(() => {
+    callStateRef.current = callState;
+    isMinimizedRef.current = isMinimized;
+    minimizeCallRef.current = minimizeCall;
+    isGroupCallActiveRef.current = isGroupCallActive;
+    isGroupCallMinimizedRef.current = isGroupCallMinimized;
+    minimizeGroupCallRef.current = minimizeGroupCall;
+  }, [callState, isMinimized, minimizeCall, isGroupCallActive, isGroupCallMinimized, minimizeGroupCall]);
 
   // Native Device Push & Local Notification Click Navigation
   useEffect(() => {
@@ -216,6 +237,22 @@ export const AppContent: React.FC = () => {
 
     const setupBackButton = async () => {
       listenerHandle = await CapApp.addListener('backButton', () => {
+        // 0. If active 1-to-1 call is full screen, minimize it rather than ending call or navigating
+        if (
+          callStateRef.current !== 'IDLE' &&
+          ['CONNECTED', 'RECONNECTING', 'CALLING', 'CONNECTING', 'ACCEPTED'].includes(callStateRef.current) &&
+          !isMinimizedRef.current
+        ) {
+          minimizeCallRef.current();
+          return;
+        }
+
+        // 0b. If active group call is full screen, minimize it
+        if (isGroupCallActiveRef.current && !isGroupCallMinimizedRef.current) {
+          minimizeGroupCallRef.current();
+          return;
+        }
+
         // 1. If any modal is currently open, dismiss it first
         if (modalStack.hasOpenModal()) {
           modalStack.popTop();
@@ -434,6 +471,9 @@ export const AppContent: React.FC = () => {
       {/* Global Multi-Party WebRTC Group Voice & Video Calling UI Modals */}
       <GroupCallScreen />
       <IncomingGroupCallModal />
+
+      {/* Global Floating Active In-Call UI (when minimized) */}
+      <FloatingCallBubble />
 
       {/* In-App Update Modal */}
       {updateManifest && (

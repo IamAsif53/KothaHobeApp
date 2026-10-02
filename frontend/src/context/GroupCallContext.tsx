@@ -61,6 +61,9 @@ interface GroupCallContextType {
   toggleScreenShare: () => Promise<void>;
   kickParticipant: (targetUserId: string) => void;
   requestMuteParticipant: (targetUserId: string) => void;
+  isGroupCallMinimized: boolean;
+  minimizeGroupCall: () => void;
+  restoreGroupCall: () => void;
 }
 
 const GroupCallContext = createContext<GroupCallContextType | undefined>(undefined);
@@ -87,6 +90,15 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [callDuration, setCallDuration] = useState<number>(0);
+  const [isGroupCallMinimized, setIsGroupCallMinimized] = useState<boolean>(false);
+
+  const minimizeGroupCall = useCallback(() => {
+    setIsGroupCallMinimized(true);
+  }, []);
+
+  const restoreGroupCall = useCallback(() => {
+    setIsGroupCallMinimized(false);
+  }, []);
 
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<any>(socket);
@@ -143,6 +155,7 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     webrtcGroupCallService.cleanup();
     setIsGroupCallActive(false);
     setGroupCallSession(null);
+    setIsGroupCallMinimized(false);
     setIsMuted(false);
     setIsVideoEnabled(true);
     setIsScreenSharing(false);
@@ -606,6 +619,9 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         toggleScreenShare,
         kickParticipant,
         requestMuteParticipant,
+        isGroupCallMinimized,
+        minimizeGroupCall,
+        restoreGroupCall,
       }}
     >
       {children}

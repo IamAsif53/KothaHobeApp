@@ -93,6 +93,9 @@ interface CallContextType {
   permissionAlert: string | null;
   clearPermissionAlert: () => void;
   recipientPushStatus: { success?: boolean; message?: string; attempted?: number; successCount?: number; failureCount?: number } | null;
+  isMinimized: boolean;
+  minimizeCall: () => void;
+  restoreCall: () => void;
 }
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
@@ -121,6 +124,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [videoStats, setVideoStats] = useState<VideoStats | null>(null);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
   const [recipientPushStatus, setRecipientPushStatus] = useState<any>(null);
+  const [isMinimized, setIsMinimized] = useState<boolean>(false);
+  const isMinimizedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isMinimizedRef.current = isMinimized;
+  }, [isMinimized]);
+
+  const minimizeCall = useCallback(() => {
+    if (callStateRef.current !== 'IDLE') {
+      setIsMinimized(true);
+    }
+  }, []);
+
+  const restoreCall = useCallback(() => {
+    setIsMinimized(false);
+  }, []);
 
   const callDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -212,19 +231,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRemoteStream(null);
     setAudioStats(null);
     setVideoStats(null);
+    setIsMinimized(false);
   }, []);
 
   // Reset to IDLE after showing transient state (e.g. Call Ended, User Busy)
   const resetToIdleAfterDelay = useCallback(
     (delayMs = 2000) => {
+      // If currently minimized, reset quickly to dismiss floating indicator immediately
+      const effectiveDelay = isMinimizedRef.current ? 0 : delayMs;
       setTimeout(() => {
         setCallState('IDLE');
         callStateRef.current = 'IDLE';
         setActiveCall(null);
         activeCallRef.current = null;
         setCallDuration(0);
+        setIsMinimized(false);
         cleanupCall();
-      }, delayMs);
+      }, effectiveDelay);
     },
     [cleanupCall]
   );
@@ -491,6 +514,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     enableCallAudioMode();
+    setIsMinimized(false);
 
     const tempCallId = 'call_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
@@ -557,6 +581,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     console.log('[CallContext] acceptCall executing for callId:', current.callId, 'type:', current.callType);
     soundService.stopAll();
+    setIsMinimized(false);
     setCallState('CONNECTING');
     callStateRef.current = 'CONNECTING';
 
@@ -1427,6 +1452,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permissionAlert,
         clearPermissionAlert: () => setPermissionAlert(null),
         recipientPushStatus,
+        isMinimized,
+        minimizeCall,
+        restoreCall,
       }}
     >
       {children}

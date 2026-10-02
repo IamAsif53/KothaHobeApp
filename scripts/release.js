@@ -85,9 +85,10 @@ function main() {
     downloadUrl: `https://kotha-hobe-api.onrender.com/releases/app-debug.apk`,
     sha256: sha256,
     releaseNotes: [
-      "🔄 Call reconnecting status auto-clears on network restoration",
-      "📶 Seamless WiFi to Mobile Data handover for 1-on-1 & Group calls",
-      "🎙️ WebRTC active audio transport watchdog"
+      "📞 Minimizable active call & floating in-call UI",
+      "✨ Seamless multitasking across Chats, Groups & Settings during calls",
+      "👆 Draggable floating call window with edge-snapping physics",
+      "🎥 Live video preview in floating window for video calls"
     ],
     mandatory: false
   };

@@ -1,12 +1,13 @@
 {
-  "versionCode": 118,
-  "versionName": "1.1.73",
+  "versionCode": 119,
+  "versionName": "1.1.74",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "b9d1ce74805e74192a5944c9095642e660ce16fc57cee7dbea07536373528de4",
+  "sha256": "88b61149f9b9ceab103b00cbdfa546b64a022f852efa91c5c69f6fc87e8f5231",
   "releaseNotes": [
-    "🔄 Call reconnecting status auto-clears on network restoration",
-    "📶 Seamless WiFi to Mobile Data handover for 1-on-1 & Group calls",
-    "🎙️ WebRTC active audio transport watchdog"
+    "📞 Minimizable active call & floating in-call UI",
+    "✨ Seamless multitasking across Chats, Groups & Settings during calls",
+    "👆 Draggable floating call window with edge-snapping physics",
+    "🎥 Live video preview in floating window for video calls"
   ],
   "mandatory": false
 }

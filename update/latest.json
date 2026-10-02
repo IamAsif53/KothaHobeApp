@@ -1,12 +1,12 @@
 {
-  "versionCode": 117,
-  "versionName": "1.1.72",
+  "versionCode": 118,
+  "versionName": "1.1.73",
   "downloadUrl": "https://kotha-hobe-api.onrender.com/releases/app-debug.apk",
-  "sha256": "6631405fb51600a1d2dedd351a8a6566512136788d7464775d6466012fef49f1",
+  "sha256": "b9d1ce74805e74192a5944c9095642e660ce16fc57cee7dbea07536373528de4",
   "releaseNotes": [
-    "📷 View Once Media with screenshot protection",
-    "🔄 Front / Back camera flip for video calls",
-    "🔊 Acoustic Echo Cancellation (AEC) communication mode"
+    "🔄 Call reconnecting status auto-clears on network restoration",
+    "📶 Seamless WiFi to Mobile Data handover for 1-on-1 & Group calls",
+    "🎙️ WebRTC active audio transport watchdog"
   ],
   "mandatory": false
 }

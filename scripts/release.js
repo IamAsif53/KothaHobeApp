@@ -85,9 +85,9 @@ function main() {
     downloadUrl: `https://kotha-hobe-api.onrender.com/releases/app-debug.apk`,
     sha256: sha256,
     releaseNotes: [
-      "📷 View Once Media with screenshot protection",
-      "🔄 Front / Back camera flip for video calls",
-      "🔊 Acoustic Echo Cancellation (AEC) communication mode"
+      "🔄 Call reconnecting status auto-clears on network restoration",
+      "📶 Seamless WiFi to Mobile Data handover for 1-on-1 & Group calls",
+      "🎙️ WebRTC active audio transport watchdog"
     ],
     mandatory: false
   };

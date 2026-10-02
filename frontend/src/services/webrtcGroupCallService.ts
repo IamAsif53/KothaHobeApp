@@ -46,6 +46,10 @@ class WebRTCGroupCallService {
     return this.peerStates;
   }
 
+  public getPeerConnection(userId: string): RTCPeerConnection | undefined {
+    return this.peerConnections.get(userId);
+  }
+
   public getIsFrontCamera(): boolean {
     return this.isFrontCamera;
   }
@@ -247,9 +251,17 @@ class WebRTCGroupCallService {
     pc.oniceconnectionstatechange = () => {
       const iceState = pc.iceConnectionState;
       console.log(`[GroupRTC] Peer ${remoteUserId} ICE state: ${iceState}`);
-      if (iceState === 'disconnected' || iceState === 'failed') {
-        console.warn(`[GroupRTC] Peer ${remoteUserId} ICE degraded (${iceState}). Attempting isolated ICE recovery...`);
-        this.restartIceForPeer(remoteUserId, onSignal).catch(() => {});
+      const peerState = this.peerStates.get(remoteUserId);
+      if (peerState) {
+        if (iceState === 'connected' || iceState === 'completed' || pc.connectionState === 'connected') {
+          peerState.connectionState = 'connected';
+          this.notifyPeersChange();
+        } else if (iceState === 'disconnected' || iceState === 'failed') {
+          peerState.connectionState = iceState;
+          this.notifyPeersChange();
+          console.warn(`[GroupRTC] Peer ${remoteUserId} ICE degraded (${iceState}). Attempting isolated ICE recovery...`);
+          this.restartIceForPeer(remoteUserId, onSignal).catch(() => {});
+        }
       }
     };
 
@@ -358,6 +370,12 @@ class WebRTCGroupCallService {
             await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
           }
           this.pendingCandidates.delete(senderId);
+
+          const peerState = this.peerStates.get(senderId);
+          if (peerState && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) {
+            peerState.connectionState = 'connected';
+            this.notifyPeersChange();
+          }
         }
       } else if (signal.type === 'ice-candidate') {
         if (signal.candidate) {

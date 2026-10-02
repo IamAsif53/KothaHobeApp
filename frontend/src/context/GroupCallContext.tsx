@@ -539,7 +539,15 @@ export const GroupCallProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const peerStates = webrtcGroupCallService.getPeerStates();
         for (const [peerId, state] of peerStates.entries()) {
-          if (state.connectionState === 'disconnected' || state.connectionState === 'failed') {
+          const pc = webrtcGroupCallService.getPeerConnection(peerId);
+          const isTransportConnected = pc && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed');
+
+          if (isTransportConnected) {
+            if (state.connectionState !== 'connected') {
+              console.log(`[GroupCall] Peer ${peerId} transport verified connected post-network switch.`);
+              state.connectionState = 'connected';
+            }
+          } else if (state.connectionState === 'disconnected' || state.connectionState === 'failed') {
             console.log(`[GroupCall] Peer ${peerId} disconnected. Triggering isolated ICE restart...`);
             webrtcGroupCallService.restartIceForPeer(peerId, (targetUserId, signal) => {
               socketRef.current.emit('group_call:signal', {

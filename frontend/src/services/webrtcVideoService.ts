@@ -96,6 +96,10 @@ class WebRTCVideoService {
   private onLocalStreamChangeCallback: ((stream: MediaStream | null) => void) | null = null;
   private onRemoteStreamChangeCallback: ((stream: MediaStream | null) => void) | null = null;
 
+  public getPeerConnection(): RTCPeerConnection | null {
+    return this.pc;
+  }
+
   public getLocalStream(): MediaStream | null {
     return this.localStream;
   }
@@ -1057,6 +1061,10 @@ class WebRTCVideoService {
         instantQuality = 'GOOD';
       } else {
         instantQuality = 'EXCELLENT';
+      }
+
+      if (stats.connectionState === 'connected' && (stats.iceState === 'connected' || stats.iceState === 'completed')) {
+        this.qualityHistory = this.qualityHistory.filter((q) => q !== 'RECONNECTING');
       }
 
       this.qualityHistory.push(instantQuality);

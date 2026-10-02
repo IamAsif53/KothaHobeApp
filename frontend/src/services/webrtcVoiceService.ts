@@ -91,6 +91,10 @@ class WebRTCVoiceService {
     prflx: 0,
   };
 
+  public getPeerConnection(): RTCPeerConnection | null {
+    return this.pc;
+  }
+
   // Diagnostic callbacks
   private onIceCandidateCallback: ((candidate: RTCIceCandidateInit, traceId: string) => void) | null = null;
   private onRemoteTrackCallback: ((track: MediaStreamTrack, stream: MediaStream) => void) | null = null;
@@ -675,6 +679,10 @@ class WebRTCVoiceService {
         instantQuality = 'GOOD';
       } else {
         instantQuality = 'EXCELLENT';
+      }
+
+      if (stats.connectionState === 'connected' && (stats.iceState === 'connected' || stats.iceState === 'completed')) {
+        this.qualityHistory = this.qualityHistory.filter((q) => q !== 'RECONNECTING');
       }
 
       this.qualityHistory.push(instantQuality);

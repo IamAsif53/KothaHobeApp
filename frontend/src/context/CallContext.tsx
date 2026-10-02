@@ -229,6 +229,58 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [cleanupCall]
   );
 
+  // Transition to CONNECTED state (Strictly on genuine WebRTC connection)
+  const markConnected = useCallback(
+    (callId: string) => {
+      // Clear any pending recovery timer & flags
+      if (recoveryTimerRef.current) {
+        clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
+      isRecoveringRef.current = false;
+      recoveryAttemptRef.current = 0;
+
+      if (callStateRef.current !== 'CONNECTED') {
+        console.log('[WebRTC] 🎉 Transitioning to CONNECTED state (WebRTC transport established)!');
+        callStateRef.current = 'CONNECTED';
+        setCallState('CONNECTED');
+        soundService.stopAll();
+
+        // Enable Android hardware communication audio routing & loud speaker
+        enableCallAudioMode().then(() => {
+          getNativeAudioRoutes().then((info) => {
+            if (info) {
+              setAvailableAudioRoutes(info.available);
+              setAudioRouteState(info.activeRoute);
+              setIsSpeakerOn(info.activeRoute === 'speaker');
+              const isVoice = activeCallRef.current?.callType === 'voice';
+              if (isVoice && info.activeRoute === 'earpiece') {
+                setNativeProximitySensorEnabled(true);
+              } else {
+                setNativeProximitySensorEnabled(false);
+              }
+            }
+          });
+        });
+
+        // Notify socket server that WebRTC media stream is verified LIVE
+        const activeSocket = socketRef.current || socket;
+        if (activeSocket) {
+          activeSocket.emit('call:connected', { callId });
+        }
+
+        // Start connected duration timer if not already running (preserves duration across reconnects!)
+        if (!callDurationTimerRef.current) {
+          setCallDuration(0);
+          callDurationTimerRef.current = setInterval(() => {
+            setCallDuration((prev) => prev + 1);
+          }, 1000);
+        }
+      }
+    },
+    [socket]
+  );
+
   // Attempt ICE Restart with backoff & max 3 retries
   const attemptIceRestart = useCallback(
     async (reason: string = 'connection_drop') => {
@@ -291,6 +343,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
         recoveryTimerRef.current = setTimeout(() => {
           if (callStateRef.current === 'RECONNECTING') {
+            const pc = mediaService.getPeerConnection();
+            if (
+              pc &&
+              (pc.connectionState === 'connected' ||
+                pc.iceConnectionState === 'connected' ||
+                pc.iceConnectionState === 'completed')
+            ) {
+              console.log('[ICE_RECOVERY] ⚡ Transport verified connected at recovery timeout check. Restoring CONNECTED.');
+              markConnected(current.callId);
+              return;
+            }
+
             console.warn(`[ICE_RECOVERY] ⚠️ Attempt #${attemptNum} timed out.`);
             isRecoveringRef.current = false;
             // Schedule next attempt with backoff
@@ -314,59 +378,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     },
-    [getMediaService, resetToIdleAfterDelay, socket]
-  );
-
-  // Transition to CONNECTED state (Strictly on genuine WebRTC connection)
-  const markConnected = useCallback(
-    (callId: string) => {
-      // Clear any pending recovery timer & flags
-      if (recoveryTimerRef.current) {
-        clearTimeout(recoveryTimerRef.current);
-        recoveryTimerRef.current = null;
-      }
-      isRecoveringRef.current = false;
-      recoveryAttemptRef.current = 0;
-
-      if (callStateRef.current !== 'CONNECTED') {
-        console.log('[WebRTC] 🎉 Transitioning to CONNECTED state (WebRTC transport established)!');
-        callStateRef.current = 'CONNECTED';
-        setCallState('CONNECTED');
-        soundService.stopAll();
-
-        // Enable Android hardware communication audio routing & loud speaker
-        enableCallAudioMode().then(() => {
-          getNativeAudioRoutes().then((info) => {
-            if (info) {
-              setAvailableAudioRoutes(info.available);
-              setAudioRouteState(info.activeRoute);
-              setIsSpeakerOn(info.activeRoute === 'speaker');
-              const isVoice = activeCallRef.current?.callType === 'voice';
-              if (isVoice && info.activeRoute === 'earpiece') {
-                setNativeProximitySensorEnabled(true);
-              } else {
-                setNativeProximitySensorEnabled(false);
-              }
-            }
-          });
-        });
-
-        // Notify socket server that WebRTC media stream is verified LIVE
-        const activeSocket = socketRef.current || socket;
-        if (activeSocket) {
-          activeSocket.emit('call:connected', { callId });
-        }
-
-        // Start connected duration timer if not already running (preserves duration across reconnects!)
-        if (!callDurationTimerRef.current) {
-          setCallDuration(0);
-          callDurationTimerRef.current = setInterval(() => {
-            setCallDuration((prev) => prev + 1);
-          }, 1000);
-        }
-      }
-    },
-    [socket]
+    [getMediaService, resetToIdleAfterDelay, socket, markConnected]
   );
 
   // Setup WebRTC Engine with Callbacks & 1-second live diagnostics polling
@@ -374,15 +386,38 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (callId: string, callType: 'voice' | 'video' = 'voice') => {
       const mediaService = callType === 'video' ? webrtcVideoService : webrtcVoiceService;
 
-      // Start 1-second continuous diagnostics stats polling
+      // Start 1-second continuous diagnostics stats polling with Auto-Recovery Watchdog
       if (!statsIntervalRef.current) {
         statsIntervalRef.current = setInterval(async () => {
+          let currentStats: any;
           if (callType === 'video') {
             const vStats = await webrtcVideoService.getVideoStats();
             setVideoStats(vStats);
+            currentStats = vStats;
           } else {
             const aStats = await webrtcVoiceService.getAudioStats();
             setAudioStats(aStats);
+            currentStats = aStats;
+          }
+
+          // Active Reconnection Auto-Recovery Watchdog:
+          // If the call UI is in RECONNECTING state, but the underlying WebRTC transport is confirmed
+          // connected/completed (or audio/video packets/bytes are actively flowing), immediately
+          // transition out of RECONNECTING back to normal CONNECTED call state!
+          if (callStateRef.current === 'RECONNECTING' && currentStats) {
+            const isTransportConnected =
+              currentStats.connectionState === 'connected' ||
+              currentStats.iceState === 'connected' ||
+              currentStats.iceState === 'completed';
+            const isMediaFlowing =
+              (currentStats.packetsReceived && currentStats.packetsReceived > 0) ||
+              (currentStats.bytesReceived && currentStats.bytesReceived > 0) ||
+              (currentStats.videoPacketsReceived && currentStats.videoPacketsReceived > 0);
+
+            if (isTransportConnected || isMediaFlowing) {
+              console.log('[WebRTC Watchdog] ⚡ Call re-established and media active! Transitioning RECONNECTING -> CONNECTED');
+              markConnected(callId);
+            }
           }
         }, 1000);
       }
@@ -935,6 +970,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isIceRestart: data.isIceRestart,
           });
         }
+
+        if (data.isIceRestart) {
+          const pc = mediaService.getPeerConnection();
+          if (
+            pc &&
+            (pc.connectionState === 'connected' ||
+              pc.iceConnectionState === 'connected' ||
+              pc.iceConnectionState === 'completed')
+          ) {
+            console.log('[ICE_RECOVERY] ⚡ Transport confirmed connected upon ICE restart offer/answer.');
+            markConnected(data.callId);
+          }
+        }
       } catch (err) {
         console.error('[CallContext] Handle offer / create answer error:', err);
       }
@@ -949,6 +997,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await mediaService.handleAnswer(data.sdp);
         if (data.isIceRestart) {
           console.log('[ICE_RECOVERY] ✅ Remote peer accepted ICE restart answer. Awaiting ICE transport resumption...');
+          const pc = mediaService.getPeerConnection();
+          if (
+            pc &&
+            (pc.connectionState === 'connected' ||
+              pc.iceConnectionState === 'connected' ||
+              pc.iceConnectionState === 'completed')
+          ) {
+            console.log('[ICE_RECOVERY] ⚡ Transport confirmed connected upon ICE restart answer.');
+            markConnected(data.callId);
+          }
         }
       } catch (err) {
         console.error('[CallContext] Handle answer error:', err);
@@ -1255,8 +1313,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           stats.connectionState === 'connected' &&
           ((stats.packetsReceived && stats.packetsReceived > 0) || (stats.videoPacketsReceived && stats.videoPacketsReceived > 0));
 
-        if (isHealthy && callStateRef.current === 'CONNECTED') {
-          console.log('[NETWORK_HANDOFF] ✅ WebRTC connection remains healthy. No ICE restart required.');
+        if (isHealthy) {
+          console.log('[NETWORK_HANDOFF] ✅ WebRTC connection remains healthy post-network change.');
+          if (callStateRef.current === 'RECONNECTING') {
+            console.log('[NETWORK_HANDOFF] ⚡ Restoring CONNECTED state from RECONNECTING...');
+            markConnected(activeCallRef.current?.callId || '');
+          }
         } else {
           console.warn('[NETWORK_HANDOFF] ⚠️ WebRTC connection requires recovery following network switch. Triggering ICE restart...');
           attemptIceRestart('network_handoff');
@@ -1281,7 +1343,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         navConn.removeEventListener('change', () => handleNetworkChange('interface_change'));
       }
     };
-  }, [attemptIceRestart]);
+  }, [attemptIceRestart, markConnected]);
 
   // Dynamic Bluetooth & Audio Route Change Listener
   useEffect(() => {
